@@ -2,6 +2,8 @@
 
 RailDesign is a fork of ThinkRail's agent workbench with an OpenAI Agents SDK execution kernel.
 It keeps the project/worktree navigation, Monaco editor, file tree, Diff, terminal, themes and localization.
+Markdown previews include a collapsible heading outline that follows the current section. Choose its
+left or right position in Appearance settings.
 The development build connects agent tasks to selected worktrees, with file edits, bounded commands,
 streaming output, tool approval and Stop. Sessions save conversation history, input queues and pending
 approvals or questions. Steering reaches the next eligible model call; follow-ups wait for normal task
