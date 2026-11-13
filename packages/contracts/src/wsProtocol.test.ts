@@ -30,6 +30,7 @@ import {
 	EXTENSION_CATALOG_PROTOCOL_VERSION,
 	EXTENSION_SETTINGS_PROTOCOL_VERSION,
 	FONTS_PROTOCOL_VERSION,
+	FS_MUTATIONS_PROTOCOL_VERSION,
 	HOST_ENVIRONMENT_PROTOCOL_VERSION,
 	HOST_UPDATE_RUN_PROTOCOL_VERSION,
 	isBackgroundCommandCompletionMessage,
@@ -274,6 +275,13 @@ test("user-selectable fonts are pinned to v102", () => {
 	expect(WS_METHODS.fontsInstalled).toBe("fonts.installed");
 	expect(WS_METHODS.fontsReveal).toBe("fonts.reveal");
 	expect(WS_CHANNELS.fontsChanged).toBe("fonts.changed");
+});
+
+test("Files tree copy and delete are pinned to v121", () => {
+	expect(FS_MUTATIONS_PROTOCOL_VERSION).toBe(121);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(FS_MUTATIONS_PROTOCOL_VERSION);
+	expect(WS_METHODS.fsCopy).toBe("fs.copy");
+	expect(WS_METHODS.fsDelete).toBe("fs.delete");
 });
 
 test("background workspace creation is pinned to v104", () => {

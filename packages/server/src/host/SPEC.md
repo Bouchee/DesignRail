@@ -173,6 +173,10 @@ concurrency; idle-settled rows are paced at 30 minutes, user-parked rows are lef
 maintenance failures are logged and cannot become unhandled promises.
 
 Host composes review sends with agent sessions and serializes review/change operations per workspace.
+Files tree `fs.copy` (on the destination workspace) and `fs.delete` use the same change lock as
+`change.revert`/`change.undo`. The agent stays live; filesystem per-step identity checks and Changes CAS
+guard concurrent writes. Successful copy/delete explicitly invalidates every written path or a deleted
+folder as an unlisted subtree through `watch.notifyWorkspacePathsChanged`, including watcher-ignored paths.
 SDK Todo/Spec Graph tools use their existing stores. Resource routes read owned command logs and child
 transcripts; historical message text grants no access. History
 scope labels/readers are injected by host, as are search readers and filesystem preflight checks.

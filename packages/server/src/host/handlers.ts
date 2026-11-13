@@ -84,7 +84,7 @@ import { listAvailableEditors, openEditor, revealInFileManager } from "../editor
 import { hostEnvironmentStatus, updateHostEnvironment } from "../environment";
 import { listExtensionCatalog } from "../extensions";
 import { fontsDir, listInstalledFonts, readUserFonts } from "../fonts";
-import { readDir, readFile } from "../fs";
+import { copyWorktreeEntry, deleteWorktreeEntry, readDir, readFile } from "../fs";
 import {
 	commitsAheadOf,
 	countPushDivergence,
@@ -179,7 +179,7 @@ import {
 	updateTodo,
 } from "../todos";
 import { forgetWorkspaceTurns, listTurns } from "../turns";
-import { ensureWatch, stopWatch } from "../watch";
+import { ensureWatch, notifyWorkspacePathsChanged, stopWatch } from "../watch";
 import {
 	assertNotChatsContainer,
 	assertNotChatWorkspace,
@@ -755,6 +755,22 @@ const handlers: WsHandlers = {
 			p.path,
 			p.maxBytes === undefined ? {} : { maxBytes: p.maxBytes },
 		);
+	},
+	"fs.copy": (p) => {
+		void ensureWatch(p.destinationWorkspaceId);
+		return withChangeLock(p.destinationWorkspaceId, async () => {
+			const { path, written } = await copyWorktreeEntry(p);
+			notifyWorkspacePathsChanged(p.destinationWorkspaceId, written);
+			return { path };
+		});
+	},
+	"fs.delete": (p) => {
+		void ensureWatch(p.workspaceId);
+		return withChangeLock(p.workspaceId, async () => {
+			const { path, directory } = await deleteWorktreeEntry(p.workspaceId, p.path);
+			notifyWorkspacePathsChanged(p.workspaceId, [path], { subtrees: directory });
+			return { ok: true } as const;
+		});
 	},
 	"spec.graph": (p) => {
 		void ensureWatch(p.workspaceId);

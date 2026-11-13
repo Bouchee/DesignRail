@@ -6,6 +6,8 @@ Markdown previews include a collapsible heading outline that follows the current
 left or right position in Appearance settings.
 Reorder open projects by dragging their names, using the project menu, or pressing Alt+Shift+Up/Down.
 The order is shared across windows.
+Copy and paste files or folders across workspaces from the file tree, or move deleted entries to the
+system trash. File-tree menus and file or Diff tabs also offer Copy path.
 The development build connects agent tasks to selected worktrees, with file edits, bounded commands,
 streaming output, tool approval and Stop. Sessions save conversation history, input queues and pending
 approvals or questions. Steering reaches the next eligible model call; follow-ups wait for normal task
