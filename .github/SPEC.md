@@ -31,6 +31,10 @@ pipeline.
 Workflow Bun setup reads the root `package.json` `packageManager` pin through `bun-version-file`.
 Desktop's packaged runtime remains Electrobun-owned (see [[module-desktop]]).
 
+The maintained workflows use checkout v7, setup-node v7, cache v6 and upload-artifact v7. Their existing
+Node 22 build target and Bun version pin remain in place. Pi-package release and website deployment
+workflows stay retired; upgrading an action does not restore those workflows.
+
 PR and merge-queue gates cover dependency/boundary/seam/spec-surface conformance, lint/typecheck, unit and
 no-agent browser tests. Linux and Windows run native CLI artifact smoke; Linux also runs browser tests
 against the compiled binary. Desktop coverage builds the Linux target, runs native-window and shared
