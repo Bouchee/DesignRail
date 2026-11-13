@@ -123,6 +123,7 @@ import {
 	inspectCloneDestination,
 	inspectProjectPath,
 	listProjects,
+	moveProject,
 	openProject,
 	renameProject,
 	setProjectGroupEnabled,
@@ -507,7 +508,11 @@ const handlers: WsHandlers = {
 		repositoryProject(params.id);
 		return renameProject(params.id, params.name);
 	},
-
+	"project.move": (params) => {
+		repositoryProject(params.id);
+		repositoryProject(params.targetId);
+		return moveProject(params.id, params.targetId, params.placement);
+	},
 	"project.setTrust": async (p) => {
 		const input = z
 			.object({ id: z.string(), trusted: z.boolean(), resources: z.boolean().optional() })

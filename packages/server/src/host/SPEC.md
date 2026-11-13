@@ -155,6 +155,10 @@ client reap cancels only that client's MCP login. Shutdown awaits cleanup before
 
 ## Workspace, terminal, review and settings composition
 
+`project.move` validates both repository identities before updating host-owned project order. The Chats
+container is refused at either end. Every changed rank publishes a full `project.updated` snapshot;
+clients derive the rail from pushes and never apply replayable move responses.
+
 The host retains project/worktree creation/opening/switching, Git/PR operations, file reads, Diff,
 terminal tabs, settings, history/search and prompt-template CRUD. Projectless chats are refused at
 repository-only doors before Git work. A chat being deleted or pending retry cannot attach a session

@@ -46,6 +46,7 @@ import {
 	OTHER_AGENT_SKILLS_PROTOCOL_VERSION,
 	PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION,
 	PLAN_SUMMARY_GENERATION_PROTOCOL_VERSION,
+	PROJECT_ORDER_PROTOCOL_VERSION,
 	PROJECT_RENAME_PROTOCOL_VERSION,
 	PROJECT_TEMPLATE_PREVIEW_PROTOCOL_VERSION,
 	PROJECT_TRUST_PROTOCOL_VERSION,
@@ -325,6 +326,12 @@ test("find in files is pinned to v112", () => {
 	expect(TEXT_SEARCH_PROTOCOL_VERSION).toBe(112);
 	expect(WS_METHODS.searchText).toBe("search.text");
 	expect(WS_CHANNELS.searchTextResults).toBe("search.textResults");
+});
+
+test("project order is pinned to v120", () => {
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(120);
+	expect(PROJECT_ORDER_PROTOCOL_VERSION).toBe(120);
+	expect(WS_METHODS.projectMove).toBe("project.move");
 });
 
 test("the question panel height setting is pinned to v114", () => {
@@ -650,6 +657,6 @@ test("v118 retires Pi package management and old account RPCs without retiring M
 });
 
 test("v119 restores host-authoritative TODO notifications with stable input IDs", () => {
-	expect(PROTOCOL_VERSION).toBe(119);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(119);
 	expect(WS_METHODS.sessionNudge).toBe("session.nudge");
 });

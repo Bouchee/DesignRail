@@ -46,7 +46,7 @@ import {
 	setExtUiPublisher,
 } from "../agent";
 import { sessionDirFor, writeFixtureSession } from "../history/testFixtures";
-import { saveWorkspaces } from "../persistence";
+import { saveProjects, saveWorkspaces } from "../persistence";
 import { addComment, getReviewSnapshot } from "../reviews";
 import { resetConfigCache } from "../settings";
 import { stopAllWatches } from "../watch";
@@ -120,9 +120,25 @@ afterEach(() => {
 	else process.env.PI_CODING_AGENT_DIR = savedTestAgentDir;
 });
 
+test("project.move rejects malformed placement without changing persisted order", async () => {
+	saveProjects([
+		{ id: "a", name: "A", path: repo, slug: "a", lastOpened: 2 },
+		{ id: "b", name: "B", path: join(dataDir, "other"), slug: "b", lastOpened: 1 },
+	]);
+	const registry = join(dataDir, "projects.json");
+	const before = readFileSync(registry, "utf8");
+	for (const placement of [undefined, null, "middle", 0, {}]) {
+		await expect(
+			handleRequest("project.move", { id: "b", targetId: "a", placement }, CTX),
+		).rejects.toThrow("Invalid project placement");
+		expect(readFileSync(registry, "utf8")).toBe(before);
+	}
+});
+
 test("the current workspace and SDK methods are registered, and retired engine methods are unavailable", async () => {
 	for (const method of [
 		"project.open",
+		"project.move",
 		"workspace.create",
 		"session.create",
 		"session.prompt",
