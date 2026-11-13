@@ -194,6 +194,11 @@ separate from layout/keyboard/historical transcript claims.
 
 Native wheel probes target the actual transcript viewport again after clicking a floating Latest
 button; a pointer left at a removed overlay is not evidence of a gesture delivered to the scroller.
+A restored-tab reading probe first verifies the saved visible row and its offset, within the existing
+2 px tolerance, before sending its wheel input. An active tab can still be at the transient zero origin
+while its reading anchor materializes; a latest-directed wheel there correctly rearms following.
+Separate held-frame coverage sends real scrolling during pending restoration and verifies the reader's
+new row and offset survive frame release, so waiting for restoration never replaces the user-wins check.
 A probe that interrupts a Latest return clicks and interrupts in one task, moving from the current
 position: resetting `scrollTop` without a scroll event can make the hook's observed delta zero when the
 return's first frame happened to cover exactly the probe's step, so no detach is seen.

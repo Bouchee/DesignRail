@@ -219,6 +219,31 @@ async function switchAwayAndBack(page: Page): Promise<void> {
 	await expect(chatTabs(page).first()).toHaveAttribute("data-active", "true");
 }
 
+type HeldFrames = Window & { releaseHeldFrames?: () => void };
+
+async function holdAnimationFrames(page: Page): Promise<() => Promise<void>> {
+	await page.evaluate(() => {
+		const request = window.requestAnimationFrame.bind(window);
+		const cancel = window.cancelAnimationFrame.bind(window);
+		const held = new Map<number, FrameRequestCallback>();
+		const released = new Map<number, number>();
+		let nextHeld = -1;
+		window.requestAnimationFrame = (callback) => {
+			held.set(nextHeld, callback);
+			return nextHeld--;
+		};
+		window.cancelAnimationFrame = (id) => {
+			if (!held.delete(id)) cancel(released.get(id) ?? id);
+		};
+		(window as HeldFrames).releaseHeldFrames = () => {
+			window.requestAnimationFrame = request;
+			for (const [id, callback] of held) released.set(id, request(callback));
+			held.clear();
+		};
+	});
+	return () => page.evaluate(() => (window as HeldFrames).releaseHeldFrames?.());
+}
+
 async function openTallChat(
 	page: Page,
 	order: MessageOrder,
@@ -767,7 +792,7 @@ for (const testCase of orderCases) {
 	}) => {
 		const wire = await interceptAppWire(page);
 		const { session, chatScroll } = await openTallChat(page, testCase.order);
-		type HeldFrames = Window & { releaseHeldFrames?: () => void };
+		let releaseFrames: (() => Promise<void>) | undefined;
 		try {
 			const replay = textStreamReplay(
 				session.id,
@@ -787,30 +812,12 @@ for (const testCase of orderCases) {
 
 			await page.getByTestId("new-chat").first().click();
 			await expect(chatTabs(page).first()).toHaveAttribute("data-active", "false");
-			await page.evaluate(() => {
-				const request = window.requestAnimationFrame.bind(window);
-				const cancel = window.cancelAnimationFrame.bind(window);
-				const held = new Map<number, FrameRequestCallback>();
-				const released = new Map<number, number>();
-				let nextHeld = -1;
-				window.requestAnimationFrame = (callback) => {
-					held.set(nextHeld, callback);
-					return nextHeld--;
-				};
-				window.cancelAnimationFrame = (id) => {
-					if (!held.delete(id)) cancel(released.get(id) ?? id);
-				};
-				(window as HeldFrames).releaseHeldFrames = () => {
-					window.requestAnimationFrame = request;
-					for (const [id, callback] of held) released.set(id, request(callback));
-					held.clear();
-				};
-			});
+			releaseFrames = await holdAnimationFrames(page);
 			await chatTabs(page).first().getByRole("tab").click();
 			await expect(chatScroll).toHaveAttribute("data-follow-state", "detached");
 			await playStreamReplay(wire(), { ...replay, steps: replay.steps.slice(opening.length) }, 0);
 			await expect(chatScroll).toHaveAttribute("data-streaming", "false");
-			await page.evaluate(() => (window as HeldFrames).releaseHeldFrames?.());
+			await releaseFrames();
 
 			await expect(chatScroll).toHaveAttribute("data-follow-state", "detached");
 			await waitForScrollStability(chatScroll);
@@ -818,9 +825,7 @@ for (const testCase of orderCases) {
 			expect(restored.id).toBe(reading.id);
 			expect(Math.abs(restored.top - reading.top)).toBeLessThanOrEqual(2);
 		} finally {
-			await page
-				.evaluate(() => (window as HeldFrames).releaseHeldFrames?.())
-				.catch(() => undefined);
+			await releaseFrames?.().catch(() => undefined);
 			rmSync(session.path, { force: true });
 		}
 	});
@@ -838,6 +843,12 @@ for (const testCase of orderCases) {
 			const reading = await readTopVisibleRow(chatScroll);
 
 			await switchAwayAndBack(page);
+			await expect(chatScroll).toHaveAttribute("data-follow-state", "detached");
+			await expect(async () => {
+				const restored = await readTopVisibleRow(chatScroll);
+				expect(restored.id).toBe(reading.id);
+				expect(Math.abs(restored.top - reading.top)).toBeLessThanOrEqual(2);
+			}).toPass({ timeout: 5_000 });
 			await moveMouseToChatViewport(page, chatScroll);
 			await page.mouse.wheel(0, -testCase.historyWheel);
 
@@ -867,6 +878,48 @@ for (const testCase of orderCases) {
 		}
 	});
 }
+
+test("native scrolling takes over while a reading position is still materializing", async ({
+	page,
+}) => {
+	const { session, chatScroll } = await openTallChat(page, "newest-first");
+	let releaseFrames: (() => Promise<void>) | undefined;
+	try {
+		await moveIntoStableHistory(page, chatScroll, "newest-first", 900);
+		for (let step = 0; step < 3; step += 1) {
+			await page.mouse.wheel(0, 900);
+			await waitForScrollStability(chatScroll);
+		}
+		const reading = await readTopVisibleRow(chatScroll);
+		await page.getByTestId("new-chat").first().click();
+		await expect(chatTabs(page).first()).toHaveAttribute("data-active", "false");
+		releaseFrames = await holdAnimationFrames(page);
+		await chatTabs(page).first().getByRole("tab").click();
+		await expect(chatScroll).toHaveAttribute("data-follow-state", "detached");
+		expect((await readChatScrollGeometry(chatScroll)).scrollTop).toBe(0);
+		await expect(async () => {
+			expect((await readTopVisibleRow(chatScroll)).id).not.toBe(reading.id);
+		}).toPass({ timeout: 5_000 });
+		await moveMouseToChatViewport(page, chatScroll);
+		await page.mouse.wheel(0, 120);
+		await expect
+			.poll(async () => (await readChatScrollGeometry(chatScroll)).scrollTop)
+			.toBeGreaterThan(0);
+		await expect(async () => {
+			expect((await readTopVisibleRow(chatScroll)).id).not.toBe(reading.id);
+		}).toPass({ timeout: 5_000 });
+		const moved = await readTopVisibleRow(chatScroll);
+		await releaseFrames();
+		await waitForScrollStability(chatScroll);
+		await expect(chatScroll).toHaveAttribute("data-follow-state", "detached");
+		const settled = await readTopVisibleRow(chatScroll);
+		expect(settled.id).toBe(moved.id);
+		expect(Math.abs(settled.top - moved.top)).toBeLessThanOrEqual(2);
+	} finally {
+		await releaseFrames?.().catch(() => undefined);
+		rmSync(session.path, { force: true });
+	}
+});
 
 test("scrolling up through variable-height history never jumps visible content", async ({
 	page,
