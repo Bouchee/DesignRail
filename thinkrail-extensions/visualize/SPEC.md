@@ -25,6 +25,9 @@ The result retains validated parameters in details and readable Markdown in cont
 
 The server uses the catalog-pinned Mermaid parser and linkedom.
 The browser uses that same Mermaid version with lazy rendering and a defensive fallback.
+It renders at natural size by disabling `useMaxWidth` on diagram kinds in Mermaid's pinned default
+configuration; CSS caps the SVG to its available width. Strict security, theme handling and render
+limits remain in force.
 Syntax parsing does not prove SVG layout success.
 
 ## Mermaid state
@@ -37,6 +40,9 @@ Tests cover strict syntax rejection, required DOM behavior, global restoration a
 ## Web entry
 
 The web descriptor exports its tool renderers and the shared `MermaidView` component.
+Its primary renderer starts expanded and opts into `width: "content"`, so diagrams and comparisons
+can grow beyond the prose column within the chat pane. File previews have no intrinsic width and
+keep their fixed frame in the column.
 It uses public extension, UI, resource-renderer and locale interfaces.
 It does not import server code or SDK execution.
 The server and web halves share only the tool name and pure argument shape.

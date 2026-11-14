@@ -24,6 +24,7 @@ import {
 	isRetriedAttempt,
 	isValidTemplateName,
 	isWindowsDeviceName,
+	LINE_WIDTH_COLUMNS,
 	normalizeFontSettings,
 	QUESTION_PANEL_HEIGHT_PERCENT,
 	REQUEST_IMAGE_BASE64_BUDGET,
@@ -126,10 +127,11 @@ describe("config defaults", () => {
 		expect(DEFAULT_CONFIG).toHaveProperty("composerGrowthLimit", "half-chat");
 	});
 
-	test("chat and file lines default to 120-symbol pane-bounded measures", () => {
+	test("chat lines default to 80 and file lines to 120 with pane bounds", () => {
+		expect(LINE_WIDTH_COLUMNS).toEqual({ min: 40, max: 240, default: { chat: 80, file: 120 } });
 		expect(DEFAULT_CONFIG).toMatchObject({
-			chatLineWidth: 120,
-			fileLineWidth: 120,
+			chatLineWidth: LINE_WIDTH_COLUMNS.default.chat,
+			fileLineWidth: LINE_WIDTH_COLUMNS.default.file,
 			chatLineWidthBounded: true,
 			fileLineWidthBounded: true,
 		});

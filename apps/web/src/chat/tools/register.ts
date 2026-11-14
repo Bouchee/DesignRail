@@ -1,6 +1,6 @@
 import { strArg } from "@thinkrail/extension-api/web";
 import { projectRelativePath } from "@/lib";
-import { registerToolRenderer } from "../toolRegistry";
+import { DefaultToolRenderer, registerToolRenderer } from "../toolRegistry";
 import { BashCard } from "./BashCard";
 import { EditCard } from "./EditCard";
 import { ReadCard } from "./ReadCard";
@@ -13,16 +13,23 @@ import "./subagent/register";
 import "./web/register";
 import { WriteCard } from "./WriteCard";
 
-registerToolRenderer("bash", BashCard, { summary: ({ args }) => strArg(args, "command") });
+registerToolRenderer("bash", BashCard, {
+	summary: ({ args }) => strArg(args, "command"),
+	width: "content",
+});
 registerToolRenderer("read", ReadCard, {
 	summary: ({ args, workspaceRoot }) => projectRelativePath(strArg(args, "path"), workspaceRoot),
+	width: "content",
 });
 registerToolRenderer("edit", EditCard, {
 	summary: ({ args, workspaceRoot }) => projectRelativePath(strArg(args, "path"), workspaceRoot),
+	width: "content",
 });
 registerToolRenderer("write", WriteCard, {
 	summary: ({ args, workspaceRoot }) => projectRelativePath(strArg(args, "path"), workspaceRoot),
+	width: "content",
 });
+registerToolRenderer("apply_patch", DefaultToolRenderer, { width: "content" });
 
 for (const toolName of [
 	"spec_search",

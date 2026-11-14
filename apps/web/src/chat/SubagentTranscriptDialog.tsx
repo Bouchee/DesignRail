@@ -93,7 +93,8 @@ export function SubagentTranscriptPane(scope: TranscriptScope) {
 				<div
 					data-testid="subagent-transcript"
 					data-live={live || undefined}
-					className="relative flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto"
+					data-line-width-bounded="true"
+					className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-8 overflow-y-auto [container-type:inline-size]"
 				>
 					{error ? (
 						<span role="alert" className="text-feedback-error tr-text-ui">
@@ -107,7 +108,7 @@ export function SubagentTranscriptPane(scope: TranscriptScope) {
 						</span>
 					) : (
 						rows.map((row) => (
-							<div key={row.id}>
+							<div key={row.id} className="[--chat-transcript-width:100cqw]">
 								<ChatTurnView
 									row={row}
 									agentResponded={messageActions.agentRespondedByUserId.get(row.id) ?? false}
