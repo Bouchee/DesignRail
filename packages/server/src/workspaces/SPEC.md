@@ -51,7 +51,7 @@ registered under the chats root is neither offered by `listExistingWorktrees` no
   through `gitAsync`, the same request-path-read rule `git/SPEC.md` states for `gitStatus`/`listCommits`:
   this is the Existing-Worktree dialog's populate call, so a slow/large registry must not freeze the host's
   event loop; each listed path is resolved, since git prints `C:/…` on Windows and the row's path becomes the
-  stored `worktreePath` (architecture Decision 22); drop the project folder, prunable registrations, and every
+  stored `worktreePath`; drop the project folder, prunable registrations, and every
   path already represented in ThinkRail — in-flight creation paths included; branch-backed rows are
   `available`, detached-HEAD ones `detached`),
   `openExistingWorktree(projectId, path)`
@@ -369,6 +369,30 @@ registered under the chats root is neither offered by `listExistingWorktrees` no
   `O_EXCL` refuses to follow a symlink, but Windows' exclusive create (`CREATE_NEW`) follows the reparse
   point and would write outside the checkout. Seeding fills the gap, never overwrites (pinned by
   regression tests, the symlink one wherever the host may create symlinks).
+- **`resolveWorkspacePath(path)`** (**async**; the wire's `workspace.resolvePath`, v122) — the one answer to
+  "which open workspace holds this absolute path" for any client holding a path from outside the app's own
+  trees: desktop `raildesign://` deep links now, terminal path links next, and they reuse it rather than
+  match roots themselves. Stored roots keep their `path.resolve` spelling, so a
+  link spelled `/private/tmp/…` for a root stored as `/tmp/…`, or a real path a tool reports for a project
+  opened through a symlinked folder, never matches as a string; the match is made on real paths instead.
+  The target is `realpath`ed — when it does not exist, its nearest existing ancestor is and the rest is
+  re-appended, so a missing file still names its workspace and the client reports the failed read — and so
+  is each candidate root, once per call, all through `fs/promises`, so many workspaces never block the event
+  loop; a root that fails `realpath` is skipped. Candidates are the records of every open project
+  (`listProjects`: repository projects only; closed projects, Chats and `deletionPending` workspaces excluded),
+  plus the folder of an open repository project whose Default was never ensured, which `listWorkspaces`
+  ensures only when it wins. Containment is a path prefix on the real root (never a same-prefix sibling);
+  spellings that differ only in case match only when the root's file system folds case — realpath need not
+  canonicalize case — probed by `stat`ing a case-swapped spelling of the root's deepest lettered component
+  and comparing device and inode. The longest real root wins (a nested project or a worktree inside another
+  folder over its parent); an exact tie keeps the first in open-project order. The answer is
+  `{ workspaceId, projectId, relativePath }` with a POSIX `relativePath` under the real root, or `null` for a
+  non-absolute path, any `..` segment (never followed), a path into `.git`, a root itself, or no containing
+  open workspace. Windows UNC targets are resolved only after their lexical server/share matches an
+  already-open candidate's stored or resolved root; foreign shares never receive target filesystem I/O.
+  Device namespaces and control characters are refused before path resolution. It reads no file and grants nothing: opening stays `fs.readFile`'s containment check.
+  After asynchronous filesystem reads, the winning project/workspace identity and liveness are checked
+  again before ensuring a Default and returning a match; closing or deleting the scope overtakes the read.
 - **Lifecycle events:** every membership mutation — `createWorkspace` (`created`), `renameWorkspace`
   (`updated`, the agent's `set_title` included since it goes through it), `forgetWorkspace`
   (`removed`) — emits a `WorkspaceLifecycleEvent` through an **injected publisher** (`setWorkspacePublisher`,
@@ -387,7 +411,7 @@ registered under the chats root is neither offered by `listExistingWorktrees` no
   `setWorkspaceCreationHandoff`, `CreationHandoff`,
   `setWorkspaceCreationPublisher`, `WorkspaceCreationEvent`, `creationOwnsPath`, `listExistingWorktrees`,
   `openExistingWorktree`,
-  `listWorkspaces`, `listWorkspaceRecords`, `listAllWorkspaceRecords`, `forgetWorkspace`,
+  `listWorkspaces`, `listWorkspaceRecords`, `listAllWorkspaceRecords`, `resolveWorkspacePath`, `forgetWorkspace`,
   `reclaimWorktree`, `removeWorkspace`,
   `workspaceDiffStats`, `workspaceDiffKey`, `getWorkspace`, `renameWorkspace`, `syncWorkspaceBranch`, `branchMoveOwed`,
   `completeInitialTerminalReservation`, `ensureWorkspaceScratchDir`, `setWorkspacePublisher`,

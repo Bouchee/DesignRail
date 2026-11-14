@@ -1726,6 +1726,8 @@
 	"shell.connection.connected": "已连接",
 	"shell.connection.connecting": "正在连接…",
 	"shell.connection.disconnected": "未连接",
+	"shell.deepLink.notInProject": "{{path}} 不在已打开的项目中",
+	"shell.deepLink.openFailed": "无法打开 {{path}}",
 	"shell.location.branch.basedOn": "基于",
 	"shell.location.branch.caption": "分支",
 	"shell.location.branch.clipboardFailed": "无法写入剪贴板。",

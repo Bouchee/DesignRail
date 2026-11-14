@@ -86,6 +86,36 @@ export interface NativeNotificationBridge {
 	isWindowFocused?: () => boolean;
 }
 
+export const NATIVE_OPEN_FILE_LIMITS = { fileLength: 4096, position: 2_000_000 } as const;
+
+export interface NativeOpenFileRequest {
+	file: string;
+	line: number;
+	column?: number;
+}
+
+export function isNativeOpenFileRequest(value: unknown): value is NativeOpenFileRequest {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const { file, line, column } = value as Record<string, unknown>;
+	const position = (at: unknown) =>
+		typeof at === "number" &&
+		Number.isSafeInteger(at) &&
+		at > 0 &&
+		at <= NATIVE_OPEN_FILE_LIMITS.position;
+	return (
+		typeof file === "string" &&
+		file.length > 0 &&
+		file.length <= NATIVE_OPEN_FILE_LIMITS.fileLength &&
+		!/\p{Cc}/u.test(file) &&
+		position(line) &&
+		(column === undefined || position(column))
+	);
+}
+
+export interface NativeDeepLinkBridge {
+	subscribe(listener: (request: NativeOpenFileRequest) => void): () => void;
+}
+
 export type NativeQuitHint = "hidden" | "armed" | "release" | "quitting";
 
 export type NativeCommand = "close-item" | "open-settings";

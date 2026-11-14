@@ -30,10 +30,12 @@ import type {
 	WorkspaceCreation,
 	WorkspaceCreationRemoved,
 	WorkspaceFsChangedPayload,
+	WorkspacePathMatch,
 	WorkspaceWatchReadyResult,
 } from "@thinkrail/contracts";
 import {
 	BRANCH_STATUS_PROTOCOL_VERSION,
+	INITIAL_TERMINAL_TAB_KEY,
 	WORKSPACE_SETTLE_PROTOCOL_VERSION,
 } from "@thinkrail/contracts";
 import {
@@ -50,11 +52,13 @@ import { sessionDirFor, writeFixtureSession } from "../history/testFixtures";
 import { saveProjects, saveWorkspaces } from "../persistence";
 import { addComment, getReviewSnapshot } from "../reviews";
 import { resetConfigCache } from "../settings";
+import { listTerminals } from "../terminal";
 import { setTrashImplementationForTests } from "../trash";
 import { setWatchPublisher, stopAllWatches } from "../watch";
 import {
 	awaitWorkspaceCreation,
 	getWorkspace,
+	listWorkspaceRecords,
 	setWorkspaceCreationHandoff,
 	setWorkspaceCreationPublisher,
 	setWorkspaceReview,
@@ -1141,6 +1145,34 @@ test("a review send that names its chat lands every file's drafts there as one p
 		disposeAllSessions();
 		cleanup();
 	}
+});
+
+test("a path resolved into a Default it had to ensure gets the Default's first terminal", async () => {
+	const match = (await handleRequest(
+		"workspace.resolvePath",
+		{ path: join(repo, "README.md") },
+		CTX,
+	)) as WorkspacePathMatch;
+	expect(match).toMatchObject({ projectId: "p1", relativePath: "README.md" });
+	expect(getWorkspace(match.workspaceId)).toMatchObject({ kind: "default" });
+	expect(getWorkspace(match.workspaceId).initialTerminalPending).toBeUndefined();
+	expect(listTerminals(match.workspaceId)).toEqual([
+		{ tabKey: INITIAL_TERMINAL_TAB_KEY, title: "Terminal 1" },
+	]);
+});
+
+test("malformed workspace path requests cannot ensure a Default or provision a terminal", async () => {
+	for (const path of [
+		null,
+		7,
+		{},
+		"relative.txt",
+		`${repo}/../escape.txt`,
+		`${repo}/.GIT/config`,
+	]) {
+		expect(await handleRequest("workspace.resolvePath", { path }, CTX)).toBeNull();
+	}
+	expect(listWorkspaceRecords("p1")).toEqual([]);
 });
 
 test("workspace mutation handlers reject the Default before any side effect", async () => {

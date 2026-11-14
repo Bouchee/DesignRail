@@ -76,6 +76,7 @@ import {
 	USER_THEMES_PROTOCOL_VERSION,
 	WINDOWS_SHELL_SETTINGS_PROTOCOL_VERSION,
 	WORKSPACE_CREATION_PROTOCOL_VERSION,
+	WORKSPACE_PATH_RESOLVE_PROTOCOL_VERSION,
 	WORKSPACE_READ_STATE_PROTOCOL_VERSION,
 	WORKSPACE_SETTLE_PROTOCOL_VERSION,
 	WS_CHANNELS,
@@ -340,6 +341,12 @@ test("project order is pinned to v120", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(120);
 	expect(PROJECT_ORDER_PROTOCOL_VERSION).toBe(120);
 	expect(WS_METHODS.projectMove).toBe("project.move");
+});
+
+test("workspace path resolution is pinned to v122", () => {
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(WORKSPACE_PATH_RESOLVE_PROTOCOL_VERSION);
+	expect(WORKSPACE_PATH_RESOLVE_PROTOCOL_VERSION).toBe(122);
+	expect(WS_METHODS.workspaceResolvePath).toBe("workspace.resolvePath");
 });
 
 test("the question panel height setting is pinned to v114", () => {

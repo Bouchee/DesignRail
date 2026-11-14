@@ -73,6 +73,7 @@ import type {
 	UserFontsSnapshot,
 	UserThemesSnapshot,
 	Workspace,
+	WorkspacePathMatch,
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
 import type {
@@ -127,11 +128,12 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 121;
+export const PROTOCOL_VERSION = 122;
 export const DURABLE_SESSION_PROTOCOL_VERSION = 116;
 export const SDK_SESSION_PROTOCOL_VERSION = 115;
 export const PROJECT_ORDER_PROTOCOL_VERSION = 120;
 export const FS_MUTATIONS_PROTOCOL_VERSION = 121;
+export const WORKSPACE_PATH_RESOLVE_PROTOCOL_VERSION = 122;
 export const QUESTION_PANEL_PROTOCOL_VERSION = 114;
 export const SPEC_SECTIONS_PROTOCOL_VERSION = 113;
 export const TEXT_SEARCH_PROTOCOL_VERSION = 112;
@@ -392,6 +394,7 @@ export const WS_METHODS = {
 	workspaceRename: "workspace.rename",
 	workspaceListExisting: "workspace.listExisting",
 	workspaceOpenExisting: "workspace.openExisting",
+	workspaceResolvePath: "workspace.resolvePath",
 	workspaceList: "workspace.list",
 	workspaceOpenReview: "workspace.openReview",
 	workspaceBranchStatus: "workspace.branchStatus",
@@ -918,6 +921,7 @@ export interface WsMethodMap {
 		params: { projectId: string; path: string };
 		result: Workspace;
 	};
+	"workspace.resolvePath": { params: { path: string }; result: WorkspacePathMatch | null };
 	"workspace.list": {
 		params: { projectId: string; includeDiffStats?: boolean };
 		result: Workspace[];

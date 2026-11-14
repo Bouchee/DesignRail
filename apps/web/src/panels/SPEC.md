@@ -2304,6 +2304,10 @@ own section. The kebab menu (`plan-menu`, a
   renderer, so the rendered spec scrolls to its heading). An open that finds a read of the same file in flight joins it —
   `openReadTab` hands every caller that read's completion — so each caller reveals after the tab is
   installed, in call order, and the latest hit wins.
+  **`workspaceForPath.resolveWorkspaceFile(path)`** asks the current host's `workspace.resolvePath`
+  (v122) which open repository workspace contains an absolute path. Only the host can match real paths,
+  including symlinked roots and `/tmp` aliases. It answers `WorkspacePathMatch` (`workspaceId`, `projectId`,
+  POSIX `relativePath`) or `null`; the caller owns entering the workspace and opening the file.
 
   `MarkdownPreview` retains the document typography, frontmatter stripping, alerts, Mermaid rendering,
   source-line stamps, review commenting, and bounded reading measure described above. These are renderer

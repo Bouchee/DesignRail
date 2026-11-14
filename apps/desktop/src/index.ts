@@ -2,7 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { NativeCommand, NativeQuitHint, NativeWindowState } from "@thinkrail/contracts";
+import type {
+	NativeCommand,
+	NativeOpenFileRequest,
+	NativeQuitHint,
+	NativeWindowState,
+} from "@thinkrail/contracts";
 import { resolveShellEnv } from "@thinkrail/shared/shellEnv";
 import { channel, version } from "@thinkrail/shared/version";
 import Electrobun, {
@@ -19,6 +24,7 @@ import {
 	readMenuAction,
 	readMenuLabels,
 } from "./applicationMenu";
+import { deliverDeepLinkWhenReady } from "./deepLinkBootstrap";
 import { desktopError } from "./errorReporting";
 import { installExternalNavigation, windowNavigationRules } from "./externalNavigation";
 import { createKeyStateReader } from "./keyState";
@@ -556,12 +562,19 @@ async function start(): Promise<void> {
 		command: (command) => rpc.send.nativeCommand({ command }),
 	};
 
+	const revealDeepLink = (request: NativeOpenFileRequest) => {
+		if (mainWindow.isMinimized()) mainWindow.unminimize();
+		mainWindow.show();
+		mainWindow.activate();
+		rpc.send.openFile(request);
+	};
 	let ready = false;
 	mainWindow.webview.on("dom-ready", () => {
 		if (ready) return;
 		ready = true;
 		releaseStartupSplash?.();
 		startupSplash = undefined;
+		if (!neutral) deliverDeepLinkWhenReady(revealDeepLink);
 		updateController.start();
 		const readyPath = process.env.THINKRAIL_DESKTOP_READY_FILE;
 		if (readyPath) {

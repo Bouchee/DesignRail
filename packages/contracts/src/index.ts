@@ -101,6 +101,7 @@ export {
 	prepareContent,
 } from "./match";
 export type * from "./nativeClient";
+export { isNativeOpenFileRequest, NATIVE_OPEN_FILE_LIMITS } from "./nativeClient";
 export type { QuitConfirmationDependencies } from "./quitConfirmation";
 export { createQuitConfirmation, QUIT_CONFIRMATION } from "./quitConfirmation";
 export type { SearchFieldSource } from "./searchFields";

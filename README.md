@@ -66,6 +66,10 @@ The CLI is `raildesign`; `--no-open` starts the same host without opening a brow
 CLI and desktop entries share one execution path. The host, its Git commands and agent tools act on the
 same selected worktree; the displayed Diff comes from the actual files.
 
+On macOS, desktop file links use `raildesign://open?file=%2Fpath%2Fto%2Ffile.ts&line=12&column=3`.
+Encode the absolute file path in `file`; it must belong to an open project or workspace. Line and
+column numbers start at one.
+
 ## Identity and local data
 
 RailDesign's application identifier is `io.github.bouchee.raildesign`. Its default state directory is

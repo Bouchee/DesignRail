@@ -2067,6 +2067,8 @@
 	"shell.connection.connected": "Подключено",
 	"shell.connection.connecting": "Подключение…",
 	"shell.connection.disconnected": "Нет подключения",
+	"shell.deepLink.notInProject": "{{path}} не входит в открытые проекты",
+	"shell.deepLink.openFailed": "Не удалось открыть {{path}}",
 	"shell.location.branch.basedOn": "Основана на",
 	"shell.location.branch.caption": "Ветка",
 	"shell.location.branch.clipboardFailed": "Не удалось скопировать в буфер обмена.",

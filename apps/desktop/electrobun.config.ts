@@ -3,12 +3,13 @@ import type { ElectrobunConfig } from "electrobun";
 
 // Hutch reads `build.bun.version` like the other toolchain versions, but ElectrobunConfig does not type
 // it, so the literal is kept out of the excess-property check. It must match the root packageManager pin.
-const bun = { entrypoint: "src/index.ts", version: "1.4.4" };
+const bun = { entrypoint: "src/entry.ts", version: "1.4.4" };
 const MICROPHONE_USAGE = "RailDesign uses the microphone only while you dictate with voice input.";
 
 export default {
 	app: {
 		name: "RailDesign",
+		urlSchemes: ["raildesign"],
 		identifier: "io.github.bouchee.raildesign",
 		version,
 	},
