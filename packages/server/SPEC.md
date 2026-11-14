@@ -76,6 +76,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `reviews` | draft review comments on files/diffs: store + anchoring + context-package render | [reviews/SPEC.md](src/reviews/SPEC.md) |
 | `watch` | per-worktree fs watcher → debounced `workspace.fsChanged` invalidation push | [watch/SPEC.md](src/watch/SPEC.md) |
 | `terminal` | workspace-scoped `bun-pty` terminals | [terminal/SPEC.md](src/terminal/SPEC.md) |
+| `images` | structural image-reference projection, bounded cache and HTTP serving without disk reads | [images/SPEC.md](src/images/SPEC.md) |
 | `agent` | SDK Agent/Runner sessions, application records, tools and one-shot completions | [agent/SPEC.md](src/agent/SPEC.md) |
 | `extensions` | the server registry of ThinkRail extensions (`@thinkrail/ext-*/server`): ordered descriptors + public specifiers, inline flattening, owner-scoped skill resolution | [extensions/SPEC.md](src/extensions/SPEC.md) |
 | `auth` | redacted status for configured SDK endpoints | [auth/SPEC.md](src/auth/SPEC.md) |
@@ -93,7 +94,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 - `host` composes project/workspace/Git/PR/filesystem/editor/terminal services; agent/auth/assist;
   settings/environment; history/search/templates; themes/fonts/locales/speech; watch/reviews/turns;
   and the retained pure Spec Graph/Todo/extension metadata services.
-- `agent` -> `fs`, `subprocess`, `persistence`, `trash`, `log`. Tools validate their assigned worktree;
+- `agent` -> `images`, `fs`, `subprocess`, `persistence`, `trash`, `log`. Tools validate their assigned worktree;
   commands use bounded execution; transcript deletion uses recoverable trash. Agent never imports host,
   auth or settings. The host injects session publishers and resolves session-to-project ownership.
 - `auth` -> `agent` for redacted configured-endpoint status. `assist` -> `agent` for the same SDK
@@ -138,3 +139,6 @@ process-free default terminal and clears a workspace creation marker only after 
 Stage 2 owns full session recovery, queues and summaries. Stage 3 owns advanced tools. Stage 4 owns
 complete legacy package removal and release-artifact acceptance; the presence of retained pure service
 code does not establish those later gates.
+
+The host composes the `images` route and injects the agent's live image source. `images` depends only on
+contracts and crypto, never on agent, host, persistence or filesystem reads.

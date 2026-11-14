@@ -33,6 +33,8 @@ import {
 	FS_MUTATIONS_PROTOCOL_VERSION,
 	HOST_ENVIRONMENT_PROTOCOL_VERSION,
 	HOST_UPDATE_RUN_PROTOCOL_VERSION,
+	IMAGE_REFS_PROTOCOL_VERSION,
+	IMAGES_ROUTE,
 	isBackgroundCommandCompletionMessage,
 	isCacheWarmingMode,
 	isCustomEndpointId,
@@ -674,4 +676,10 @@ test("v118 retires Pi package management and old account RPCs without retiring M
 test("v119 restores host-authoritative TODO notifications with stable input IDs", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(119);
 	expect(WS_METHODS.sessionNudge).toBe("session.nudge");
+});
+
+test("HTTP image references join the wire at v123 without changing earlier feature pins", () => {
+	expect(IMAGE_REFS_PROTOCOL_VERSION).toBe(123);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(IMAGE_REFS_PROTOCOL_VERSION);
+	expect(IMAGES_ROUTE).toBe("/images/");
 });

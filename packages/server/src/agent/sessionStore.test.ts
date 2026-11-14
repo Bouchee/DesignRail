@@ -478,3 +478,31 @@ test("successful summary receipts retain detached SDK usage once across replay",
 	});
 	expect(readFileSync(sessionRecordPath("safe-session-id"), "utf8")).toBe(before);
 });
+
+test("persisted canonical transcript images require bytes and never accept a wire reference", () => {
+	const store = new PersistentSession(record());
+	store.update((value) => {
+		value.messages = [
+			{
+				role: "user",
+				timestamp: 1,
+				content: [{ type: "image", mimeType: "image/png", data: "aG9zdA==" }],
+			},
+		];
+	});
+	const saved = readFileSync(sessionRecordPath("safe-session-id"), "utf8");
+	expect(() =>
+		store.update((value) => {
+			value.messages = [
+				{
+					role: "user",
+					timestamp: 1,
+					content: [
+						{ type: "image", mimeType: "image/png", ref: `/images/session/${"a".repeat(64)}` },
+					],
+				},
+			];
+		}),
+	).toThrow();
+	expect(readFileSync(sessionRecordPath("safe-session-id"), "utf8")).toBe(saved);
+});

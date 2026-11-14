@@ -1,5 +1,5 @@
-import { realpathSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
 	defaultWorkspaceRow,
 	enterDefaultWorkspace,
@@ -15,6 +15,28 @@ const IMAGE_DATA =
 	"iVBORw0KGgoAAAANSUhEUgAAAKAAAABaBAMAAADN6EBhAAAALVBMVEURExgcJx1KfzF52UaN/0952kZKfzEcJx09Zyw9ZyxrvUAuSiUuSiVqvUBGeC8W2BlUAAAA4UlEQVRYw2NgGAWjYLAARmUXioFrOpKBLS7UABPg5nFSxTwXD7iBJdQx0EUAZmAKlQxUgBkYQiUDDWAGgjirKUsnPFeAZjggGehHacrjQzPwAsVpeQmqgQcoNnALqoGU5zaWUQOHhoHkZjmHUQNHDRzMBo4WDqMGDrECdtTAUQOHjoGjhcOogUO0BTtq4KiBg9/A0cJhmBu4gWIDj6AauIBiA6/QeOzL5Q5l5nEvQTbQhErjhwEwA1WoZGACzEARKhlYADOQgzrmeSKCdApVDGxAGMieSrlxzoqjMxajgFwAAJtSvgebw8WoAAAAAElFTkSuQmCC";
 
 const repoCwd = () => realpathSync(E2E_FIXTURE_REPO);
+const IMAGE_REF_URL = /\/images\/[A-Za-z0-9._-]+\/[0-9a-f]{64}$/;
+
+function receivedFrames(page: Page): string[] {
+	const frames: string[] = [];
+	page.on("websocket", (socket) => {
+		socket.on("framereceived", ({ payload }) => {
+			if (typeof payload === "string") frames.push(payload);
+		});
+	});
+	return frames;
+}
+
+async function expectDecoded(image: Locator): Promise<void> {
+	await expect
+		.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth))
+		.toBeGreaterThan(0);
+}
+
+function expectReferences(frames: string[]): void {
+	expect(frames.some((frame) => frame.includes('"ref":"/images/'))).toBe(true);
+	expect(frames.join("\n")).not.toContain(IMAGE_DATA);
+}
 
 function imageResultMessages(): Parameters<typeof seedWorkspaceSession>[1]["messages"] {
 	const toolCallId = "image-read";
@@ -41,7 +63,47 @@ function imageResultMessages(): Parameters<typeof seedWorkspaceSession>[1]["mess
 	];
 }
 
+test("a reopened chat's attachment loads its image by URL", async ({ page }) => {
+	const frames = receivedFrames(page);
+	await openFixtureProject(page);
+	const chat = seedWorkspaceSession(repoCwd(), {
+		name: "image attachment",
+		messages: [{ role: "user", text: "look at this", timestamp: BASE_TS }],
+	});
+	const record: unknown = JSON.parse(readFileSync(chat.path, "utf8"));
+	if (
+		!record ||
+		typeof record !== "object" ||
+		!("messages" in record) ||
+		!Array.isArray(record.messages)
+	)
+		throw new Error("Expected a fresh SDK session fixture");
+	record.messages.push({
+		id: `${chat.id}-attachment`,
+		role: "user",
+		content: [
+			{ type: "text", text: "what does this mockup show?" },
+			{ type: "image", data: IMAGE_DATA, mimeType: "image/png" },
+		],
+		timestamp: BASE_TS + 1_000,
+	});
+	writeFileSync(chat.path, JSON.stringify(record));
+
+	await expect(defaultWorkspaceRow(page)).toBeVisible();
+	await enterDefaultWorkspace(page);
+	const chip = page.getByTestId("chat-attachment-chip");
+	await expect(chip).toHaveCount(1);
+	await chip.click();
+	const dialog = page.getByTestId("chat-attachment-dialog");
+	await expect(dialog).toBeVisible();
+	const image = dialog.getByRole("img");
+	await expect(image).toHaveAttribute("src", IMAGE_REF_URL);
+	await expectDecoded(image);
+	expectReferences(frames);
+});
+
 test("an image tool result previews inline and opens full screen", async ({ page }) => {
+	const frames = receivedFrames(page);
 	await openFixtureProject(page);
 	seedWorkspaceSession(repoCwd(), {
 		name: "image result",
@@ -58,7 +120,11 @@ test("an image tool result previews inline and opens full screen", async ({ page
 	const step = await expandActivityStep(page, "read");
 	const thumbnail = step.getByTestId("tool-result-image-thumbnail");
 	await expect(thumbnail).toBeVisible();
-	await expect(thumbnail).toHaveAttribute("src", `data:image/png;base64,${IMAGE_DATA}`);
+	await expect(thumbnail).toHaveAttribute("src", IMAGE_REF_URL);
+	await expect(thumbnail).toHaveAttribute("width", "160");
+	await expect(thumbnail).toHaveAttribute("height", "90");
+	await expectDecoded(thumbnail);
+	expectReferences(frames);
 
 	const fullScreen = step.getByTestId("tool-result-image-fullscreen");
 	await expect(fullScreen).toHaveAccessibleName(`View ${IMAGE_PATH} full screen`);
@@ -66,11 +132,41 @@ test("an image tool result previews inline and opens full screen", async ({ page
 
 	const dialog = page.getByTestId("tool-result-image-dialog");
 	await expect(dialog).toBeVisible();
-	await expect(dialog.getByRole("img", { name: IMAGE_PATH })).toHaveAttribute(
-		"src",
-		`data:image/png;base64,${IMAGE_DATA}`,
-	);
+	const fullImage = dialog.getByRole("img", { name: IMAGE_PATH });
+	await expect(fullImage).toHaveAttribute("src", IMAGE_REF_URL);
+	await expectDecoded(fullImage);
 	await page.keyboard.press("Escape");
 	await expect(dialog).toBeHidden();
 	await expect(fullScreen).toBeFocused();
+});
+
+test("an image that cannot load shows the unavailable tile, and Retry recovers it", async ({
+	page,
+}) => {
+	await openFixtureProject(page);
+	seedWorkspaceSession(repoCwd(), {
+		name: "image retry",
+		messages: [
+			{ role: "user", text: "read the mockup image", timestamp: BASE_TS },
+			...imageResultMessages(),
+		],
+	});
+	await page.route("**/images/**", (route) => route.fulfill({ status: 404, body: "not found" }));
+
+	await expect(defaultWorkspaceRow(page)).toBeVisible();
+	await enterDefaultWorkspace(page);
+	const step = await expandActivityStep(page, "read");
+	const tile = step.getByTestId("chat-image-unavailable");
+	await expect(tile).toBeVisible();
+	await expect(tile).toContainText(IMAGE_PATH);
+	const tileBox = await tile.boundingBox();
+	expect(tileBox?.width).toBeGreaterThanOrEqual(160);
+	expect(tileBox?.height).toBeGreaterThanOrEqual(90);
+
+	await page.unroute("**/images/**");
+	const retry = step.getByTestId("chat-image-retry");
+	await expect(retry).toHaveAccessibleName(`Retry loading ${IMAGE_PATH}`);
+	await retry.click();
+	await expect(tile).toBeHidden();
+	await expectDecoded(step.getByTestId("tool-result-image-thumbnail"));
 });

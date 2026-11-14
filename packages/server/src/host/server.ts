@@ -15,6 +15,7 @@ import type {
 import {
 	CONTINUATION_PROTOCOL_VERSION,
 	FONTS_PROTOCOL_VERSION,
+	IMAGES_ROUTE,
 	LOCALES_PROTOCOL_VERSION,
 	MCP_PROTOCOL_VERSION,
 	PROTOCOL_VERSION,
@@ -41,6 +42,7 @@ import {
 	isProjectSkillPath,
 	mayHoldProjectSkills,
 	resolveProviderAuthorization,
+	sessionImageSource,
 	setAgentTitleHost,
 	setContinueToolHost,
 	setExtUiPublisher,
@@ -65,6 +67,7 @@ import {
 import { forgetOpenBranchReview } from "../branch-review";
 import { watchUserFonts } from "../fonts";
 import { ignoredPaths } from "../git";
+import { forgetImageSession, resetImages, serveImage, setImageSource } from "../images";
 import { watchLocalLocales } from "../locales";
 import { logger } from "../log";
 import { dataDir, loadWorkspaces } from "../persistence";
@@ -323,6 +326,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 		})),
 	);
 
+	setImageSource(sessionImageSource);
 	const sockets = new Map<string, Bun.ServerWebSocket<SocketData>>();
 	const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	const requestReplays = new RequestReplayCache<string>();
@@ -396,6 +400,11 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 				}
 				if (url.pathname === "/health") {
 					return new Response("ok");
+				}
+				if (url.pathname.startsWith(IMAGES_ROUTE)) {
+					return req.method === "GET" || req.method === "HEAD"
+						? serveImage(url.pathname)
+						: new Response("method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
 				}
 				if (url.pathname.startsWith(FILES_PREFIX)) {
 					return serveWorktreeFile(url.pathname, url.searchParams.get("maxBytes"));
@@ -877,6 +886,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 	});
 
 	setSessionDeletedPublisher((payload: SessionDeletedPayload) => {
+		forgetImageSession(payload.sessionId);
 		for (const socket of sockets.values()) socket.data.held?.forgetSession(payload.sessionId);
 		publishScoped(WS_CHANNELS.sessionDeleted, payload, { workspaceId: payload.workspaceId });
 	});
@@ -1021,6 +1031,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 }
 
 function restoreSeamDefaults(): void {
+	resetImages();
 	setSkillPathClassifier(null);
 	setSessionResourceCleanup(undefined);
 	setAgentTitleHost(undefined);

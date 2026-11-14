@@ -41,6 +41,11 @@ The key is stored outside AppConfig and never included in settings broadcasts.
 
 ## HTTP contracts
 
+- `/images/<sessionId>/<sha>` GET/HEAD serves projected chat images through `images`, with no-store,
+  nosniff, sandbox CSP and a raster MIME allowlist. The agent source must confirm the owning chat is
+  attached and live on every cache hit or miss; no route-driven session or disk attachment is allowed.
+  Session deletion forgets cached images and host stop resets the source/cache. Other methods get 405.
+  Child transcripts use parent-owned references after the existing parent/child ownership check.
 - `/health` returns `ok`. Static assets are rooted at `staticDir`; unresolved SPA routes receive
   `index.html`. The transport host is an input, defaulting to same-origin/localhost.
 - `/files/<workspaceId>/<relpath>` resolves through filesystem containment, streams current worktree

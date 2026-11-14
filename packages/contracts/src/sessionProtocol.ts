@@ -194,7 +194,7 @@ export type SessionEvent =
 			message: WireAgentMessage;
 			assistantMessageEvent: AssistantMessageEvent;
 	  }
-	| { type: "turn_end"; message: WireAgentMessage; toolResults: ToolResultMessage[] }
+	| { type: "turn_end"; message: WireAgentMessage; toolResults: WireToolResultMessage[] }
 	| {
 			type: "tool_execution_start";
 			toolCallId: string;
@@ -427,11 +427,32 @@ export interface ToolResponseDetails {
 	response: unknown;
 }
 
+export interface RefImage {
+	type: "image";
+	mimeType: string;
+	ref: string;
+	width?: number;
+	height?: number;
+}
+
+export type WireImage = RefImage | ImageContent;
+export type WireUserMessage = Omit<UserMessage, "content"> & {
+	content: string | (TextContent | WireImage)[];
+};
+export type WireToolResultMessage = Omit<ToolResultMessage, "content"> & {
+	content: (TextContent | WireImage)[];
+};
+export type WireMessage = WireUserMessage | AssistantMessage | WireToolResultMessage;
+
+export function isRefImage(image: WireImage): image is RefImage {
+	return "ref" in image && typeof image.ref === "string";
+}
+
 export interface WireCustomMessage<T = unknown> {
 	id?: string;
 	role: "custom";
 	customType: string;
-	content: string | (TextContent | ImageContent)[];
+	content: string | (TextContent | WireImage)[];
 	display: boolean;
 	details?: T;
 	timestamp: number;
@@ -445,7 +466,7 @@ export interface WireCompactionSummary {
 	timestamp: number;
 }
 
-export type TranscriptMessage = Message | WireCustomMessage | WireCompactionSummary;
+export type TranscriptMessage = WireMessage | WireCustomMessage | WireCompactionSummary;
 
 export interface WireBranchSummary {
 	role: "branchSummary";

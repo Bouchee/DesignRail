@@ -40,7 +40,6 @@ import type {
 	SessionSummary,
 	SubagentResourceSummary,
 	ThinkingLevel,
-	ToolResultMessage,
 	TranscriptMessage,
 	WireModel,
 } from "@thinkrail/contracts";
@@ -50,7 +49,6 @@ import {
 	normalizeSessionTitle,
 	SUBAGENT_COMPLETION_CUSTOM_TYPE,
 } from "@thinkrail/contracts";
-import { parseToolResultContent } from "@thinkrail/extension-api/server";
 import { CodedError } from "@thinkrail/shared/codedError";
 import { truncateHead } from "@thinkrail/shared/toolOutput";
 import { createSpecTools, SPEC_RULE } from "@thinkrail/spec-graph";
@@ -64,6 +62,7 @@ import {
 	snapshotSdkExtensions,
 	workspaceFiles,
 } from "../extensions";
+import { findImageBlock, type ImageSource, projectImages } from "../images";
 import { logger } from "../log";
 import { dataDir, loadConfig, loadProjects, loadWorkspaces } from "../persistence";
 import { archivedCommandOutput, finishedResources, recordResource } from "../resourceHistory";
@@ -97,6 +96,7 @@ import {
 	modelOutputBudget,
 	responsesClientSettings,
 } from "./modelConfiguration";
+import { type StructuredToolResult, structuredToolResult } from "./sdkToolResult";
 import { workspaceTools } from "./sdkTools";
 import {
 	type ApprovalRequest,
@@ -121,6 +121,7 @@ import { webFetch, webSearch } from "./webAccess";
 import { createWorkspaceActions } from "./workspaceActions";
 
 const log = logger("agent");
+
 interface ActiveRun {
 	state?: RunState<unknown, Agent>;
 	suspended?: boolean;
@@ -135,15 +136,7 @@ interface ActiveRun {
 	assistantId?: string;
 	toolCalls: Map<string, { name: string; arguments: Record<string, unknown>; failed: boolean }>;
 	startedTools: Set<string>;
-	structuredResults?: Map<
-		string,
-		{
-			content: ToolResultMessage["content"];
-			details?: unknown;
-			isError: boolean;
-			terminate?: boolean;
-		}
-	>;
+	structuredResults?: Map<string, StructuredToolResult>;
 	usage?: {
 		inputTokens: number;
 		outputTokens: number;
@@ -211,18 +204,37 @@ export function setExtUiPublisher(fn: typeof publishDialog): void {
 	publishRawDialog = fn;
 }
 
+function imageOwner(entry: Entry): string {
+	return entry.store.record.childRun?.parentSessionId ?? entry.store.record.sessionId;
+}
+function projectDialog<T extends ExtUiRequest>(request: T, sessionId: string): T {
+	const projected = projectImages(request, sessionId) as T;
+	if (
+		request.kind === "confirm" &&
+		projected.kind === "confirm" &&
+		projected.toolInput !== request.toolInput
+	) {
+		return { ...projected, message: JSON.stringify(projected.toolInput) };
+	}
+	return projected;
+}
 function publishDialog(request: ExtUiRequest): void {
 	const child = sessions.get(request.sessionId)?.store.record.childRun;
 	if (!child) {
-		publishRawDialog(request);
+		publishRawDialog(projectDialog(request, request.sessionId));
 		return;
 	}
 	if (!sessions.has(child.parentSessionId)) return;
-	publishRawDialog({
-		...request,
-		sessionId: child.parentSessionId,
-		...("title" in request ? { title: `${child.definition.name}: ${request.title}` } : {}),
-	});
+	publishRawDialog(
+		projectDialog(
+			{
+				...request,
+				sessionId: child.parentSessionId,
+				...("title" in request ? { title: `${child.definition.name}: ${request.title}` } : {}),
+			},
+			child.parentSessionId,
+		),
+	);
 }
 function childApproval(entry: Entry): ApprovalRequest | undefined {
 	if (entry.store.record.childRun) return undefined;
@@ -262,6 +274,9 @@ function visibleState(entry: Entry): SessionState {
 	if (!state.needsInput) {
 		const request = childApproval(entry);
 		if (request) state.needsInput = { kind: "dialog", interactionId: request.id, request };
+	}
+	if (state.needsInput?.kind === "dialog") {
+		state.needsInput.request = projectDialog(state.needsInput.request, imageOwner(entry));
 	}
 	return state;
 }
@@ -340,7 +355,7 @@ function emit(entry: Entry, event: SessionEvent, immediate = true): void {
 			sessionId: record.sessionId,
 			runId: record.state.runId,
 			seq: record.eventSeq,
-			event: structuredClone(event),
+			event: structuredClone(projectImages(event, imageOwner(entry))) as SessionEvent,
 		},
 		record.workspaceId,
 	);
@@ -496,14 +511,19 @@ function recordToolResult(
 	isError = false,
 	completed = true,
 ): void {
-	const structured = entry.active?.structuredResults?.get(callId);
+	const structured = entry.active?.structuredResults?.get(callId) ?? structuredToolResult(output);
 	if (structured) isError ||= structured.isError;
 	const previous = entry.store.record.messages.find(
 		(message) => message.role === "toolResult" && message.toolCallId === callId,
 	);
+	const previousContent =
+		previous?.role === "toolResult" && textOf(previous.content) === output ? previous : null;
+	const content = structured?.content ??
+		previousContent?.content ?? [{ type: "text" as const, text: output }];
+	const details = structured?.details ?? previousContent?.details;
 	if (
 		previous?.role === "toolResult" &&
-		textOf(previous.content) === output &&
+		JSON.stringify(previous.content) === JSON.stringify(content) &&
 		previous.isError === isError
 	)
 		return;
@@ -512,8 +532,8 @@ function recordToolResult(
 		role: "toolResult",
 		toolCallId: callId,
 		toolName: name,
-		content: structured?.content ?? [{ type: "text", text: output }],
-		...(structured?.details !== undefined ? { details: structured.details } : {}),
+		content,
+		...(details !== undefined ? { details } : {}),
 		isError,
 		timestamp: previous?.timestamp ?? Date.now(),
 	};
@@ -884,9 +904,9 @@ export function resolveExtUi(response: ExtUiResponse): void {
 }
 export function pendingExtUiDialog(sessionId: string): ApprovalRequest | null {
 	const entry = sessions.get(sessionId);
-	return entry
-		? (entry.store.record.pendingApproval?.request ?? childApproval(entry) ?? null)
-		: null;
+	if (!entry) return null;
+	const request = entry.store.record.pendingApproval?.request ?? childApproval(entry);
+	return request ? projectDialog(request, imageOwner(entry)) : null;
 }
 export function notifyExtUi(
 	sessionId: string,
@@ -1879,7 +1899,9 @@ export async function subagentTranscript(
 	const parent = await ownedSessionEntry(workspaceId, parentSessionId);
 	const child = ownedChildEntry(parent, childSessionId);
 	return {
-		messages: structuredClone(child.store.record.messages),
+		messages: structuredClone(
+			projectImages(child.store.record.messages, parentSessionId),
+		) as TranscriptMessage[],
 		...(child.store.record.childRun ? { status: child.store.record.childRun.status } : {}),
 	};
 }
@@ -2256,24 +2278,12 @@ function captureStructuredToolResults(tools: Tool[], run: ActiveRun): void {
 				const call = run.toolCalls.get(callId);
 				if (call) call.failed = true;
 			}
-			if (
-				callId &&
-				result &&
-				typeof result === "object" &&
-				"content" in result &&
-				Array.isArray(result.content)
-			) {
-				const parsed = parseToolResultContent(result);
-				const isError = "isError" in result && result.isError === true;
-				run.structuredResults?.set(callId, {
-					content: [{ type: "text", text: parsed.text }, ...parsed.images],
-					...("details" in result ? { details: result.details } : {}),
-					isError,
-					...("terminate" in result && result.terminate === true ? { terminate: true } : {}),
-				});
+			const structured = structuredToolResult(result);
+			if (callId && structured) {
+				run.structuredResults?.set(callId, structured);
 				const call = run.toolCalls.get(callId);
-				if (call && isError) call.failed = true;
-				return parsed.text;
+				if (call && structured.isError) call.failed = true;
+				return typeof result === "string" ? result : textOf(structured.content);
 			}
 			return result;
 		};
@@ -3420,7 +3430,14 @@ export function promptSession(
 	);
 	if (!queuedInput)
 		publish(
-			{ sessionId, runId: run.id, seq: firstSeq + 1, event: { type: "message_end", message } },
+			{
+				sessionId,
+				runId: run.id,
+				seq: firstSeq + 1,
+				event: structuredClone(
+					projectImages({ type: "message_end", message }, imageOwner(entry)),
+				) as SessionEvent,
+			},
 			entry.store.record.workspaceId,
 		);
 	notifyState(entry);
@@ -3627,10 +3644,39 @@ export async function getSessionMessages(sessionId: string, workspaceId: string,
 	const entry = mustGet(sessionId);
 	return {
 		summary: summaryOf(entry),
-		messages: structuredClone(entry.store.record.messages),
+		messages: structuredClone(
+			projectImages(entry.store.record.messages, imageOwner(entry)),
+		) as TranscriptMessage[],
 		eventSeq: entry.store.record.eventSeq,
 	};
 }
+export const sessionImageSource: ImageSource = {
+	isServable: (sessionId) => {
+		const entry = sessions.get(sessionId);
+		if (
+			!entry ||
+			entry.store.record.childRun ||
+			closingSessions.has(sessionId) ||
+			deletingSessions.has(sessionId) ||
+			closingWorkspaces.has(entry.store.record.workspaceId)
+		)
+			return false;
+		const workspace = loadWorkspaces().find((item) => item.id === entry.store.record.workspaceId);
+		if (!workspace || workspace.deletionPending) return false;
+		const project = loadProjects().find((item) => item.id === workspace.projectId);
+		return !!project && !project.closed;
+	},
+	find: (sessionId, hash) => {
+		if (!sessionImageSource.isServable(sessionId)) return null;
+		const entry = sessions.get(sessionId);
+		if (!entry) return null;
+		for (const message of entry.store.record.messages) {
+			const found = findImageBlock("content" in message ? message.content : undefined, hash);
+			if (found) return found;
+		}
+		return null;
+	},
+};
 export async function listSessions(workspaceId: string, cwd: string): Promise<SessionSummary[]> {
 	const records = listSessionRecords().filter(
 		(record) =>

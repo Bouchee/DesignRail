@@ -128,7 +128,9 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 122;
+export const PROTOCOL_VERSION = 123;
+export const IMAGE_REFS_PROTOCOL_VERSION = 123;
+export const IMAGES_ROUTE = "/images/";
 export const DURABLE_SESSION_PROTOCOL_VERSION = 116;
 export const SDK_SESSION_PROTOCOL_VERSION = 115;
 export const PROJECT_ORDER_PROTOCOL_VERSION = 120;

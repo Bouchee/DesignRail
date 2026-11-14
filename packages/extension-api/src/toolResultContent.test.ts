@@ -44,6 +44,22 @@ describe("parseToolResultContent", () => {
 		expect(resultText(result)).toBe(parsed.text);
 	});
 
+	it("accepts host image references under the images route, sized only by positive integers", () => {
+		const ref = `/images/session-1/${"a".repeat(64)}`;
+		const parsed = parseToolResultContent({
+			content: [
+				{ type: "image", ref, mimeType: "image/png", width: 800, height: 600 },
+				{ type: "image", ref, mimeType: "image/png", width: 0, height: 600 },
+				{ type: "image", ref: "https://elsewhere.test/x.png", mimeType: "image/png" },
+				{ type: "image", ref, mimeType: "image/svg+xml" },
+			],
+		});
+		expect(parsed.images).toEqual([
+			{ type: "image", ref, mimeType: "image/png", width: 800, height: 600 },
+			{ type: "image", ref, mimeType: "image/png" },
+		]);
+	});
+
 	it("keeps image-only and empty canonical results free of fallback JSON", () => {
 		const image = { type: "image", data: "cG5n", mimeType: "image/png" } as const;
 		expect(parseToolResultContent({ content: [image] })).toEqual({ text: "", images: [image] });
@@ -89,4 +105,17 @@ describe("toolValueText", () => {
 		expect(toolValueText(unserializable)).toBe("[object Object]");
 		expect(toolValueText(42n)).toBe("42");
 	});
+});
+
+it("image references stay within the exact host image route", () => {
+	for (const ref of [
+		"/images/../files/workspace/secret",
+		"/images/session/not-a-hash",
+		`/images/session/${"a".repeat(64)}?other=1`,
+		"https://other.test/images/session/hash",
+	]) {
+		expect(
+			parseToolResultContent({ content: [{ type: "image", mimeType: "image/png", ref }] }).images,
+		).toEqual([]);
+	}
 });

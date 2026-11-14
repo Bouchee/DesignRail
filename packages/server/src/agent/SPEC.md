@@ -43,6 +43,14 @@ starts the next run.
 Responses bind session, run, tool call, interaction and revision. Identical decisions return their durable
 receipt; stale, missing-call, conflicting and cross-session replies fail before execution.
 
+Outbound transcript snapshots, session events, approval tool input and child transcript reads project
+inline images through `images` into HTTP references. Children register images under their owning parent
+chat. The projection never mutates canonical transcript, model history, queue inputs or checkpoints.
+A known serialized image-result envelope is normalized only for display; its textual `isError` or
+`terminate` cannot become execution flags. Actual object results keep their explicit SDK tool flags.
+The image source reads only this host's attached, live sessions and refuses closing/deleting sessions
+or closing workspaces. Composer queue restoration deliberately returns inline images for resending.
+
 Session get/add/pop/clear and public history transactions persist append/suffix replacement together
 with operation receipts. Canonical input content, current history membership and summary retirements are
 separate. Pop permits re-addition; memory reset clears retirements but keeps transcript and receipts.

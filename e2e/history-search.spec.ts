@@ -79,7 +79,10 @@ async function settleSubmittedTurn(page: Page): Promise<void> {
 		.last()
 		.or(page.locator('[data-testid="chat-message"][data-role="error"]').last());
 	await expect(abort.or(settled).first()).toBeVisible({ timeout: 20_000 });
-	if (await abort.isVisible()) await abort.click();
+	await expect(async () => {
+		if (await settled.isVisible()) return;
+		await abort.click({ timeout: 1000 });
+	}).toPass({ timeout: 20_000 });
 	await expect(settled).toBeVisible({ timeout: 20_000 });
 }
 

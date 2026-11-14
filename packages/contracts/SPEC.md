@@ -1240,3 +1240,12 @@ A parent resource catalogue may include commands from its direct children in the
 `BackgroundCommandSummary.sessionId` remains the actual command-owning session. Output and Stop requests
 address the parent scope plus command ID; the host resolves only that parent and its verified children.
 Catalogue pagination does not limit access to an owned archived command's retained output.
+
+## Chat image references
+
+`IMAGE_REFS_PROTOCOL_VERSION` is 123 and `IMAGES_ROUTE` is `/images/`. Host-to-page transcript and
+session-event image blocks use `RefImage` (`type`, `mimeType`, `ref`, optional header width/height),
+while `WireImage` also permits inline `ImageContent` for local upload echoes and composer restoration.
+`WireUserMessage`, `WireToolResultMessage` and `WireMessage` carry this presentation shape;
+`isRefImage` narrows it. Model history, RunState, persisted canonical content and client uploads keep
+inline bytes. Queue removal/clear/abort restoration and creation dismissal return those bytes for resend.

@@ -4,10 +4,10 @@ import {
 	REQUEST_IMAGE_BASE64_BUDGET,
 	type TranscriptMessage,
 } from "@thinkrail/contracts";
+import { imageDimensions } from "../images";
 import {
 	CONTEXT_IMAGE_BASE64_BUDGET,
 	guardOversizedImages,
-	imageDimensions,
 	isAnthropicFamilyModel,
 	MANY_IMAGE_EDGE_LIMIT,
 	MANY_IMAGE_THRESHOLD,

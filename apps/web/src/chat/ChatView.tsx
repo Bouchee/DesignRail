@@ -24,8 +24,9 @@ import {
 	useAppStore,
 	workspaceName,
 } from "@/store";
-import { errorText, getTransport, watchMcpWorkspace, wsErrorCode } from "@/transport";
+import { errorText, getTransport, hostUrl, watchMcpWorkspace, wsErrorCode } from "@/transport";
 import { ChatHeader } from "./ChatHeader";
+import { ChatMediaContext } from "./ChatImage";
 import ChatTranscript, { type ChatTranscriptHandle } from "./ChatTranscript";
 import {
 	Composer,
@@ -759,99 +760,103 @@ export default function ChatView({
 					{...(projectId ? { onOpenSkills: () => setSkillsOpen(true) } : {})}
 				/>
 			</div>
-			<ChatTranscript
-				ref={transcriptRef}
-				sessionId={sessionId}
-				workspaceId={workspaceId}
-				onOpenFile={onOpenFile}
-				workspaceRoot={workspaceRoot}
-				focusComposer={focusComposer}
-				onTryAgain={onTryAgain}
-				historyOpen={historyState.open}
-				inspectorOpen={inspectorOpen}
-				stillRunning={
-					resourcesVisible && groups.activeCount > 0
-						? { count: groups.activeCount, onOpen: () => openResource(null) }
-						: undefined
-				}
-				resultOpener={resultOpener}
-				openSubagentTranscript={setTranscriptChild}
-				readMcpOutput={readMcpOutput}
-				openMcpSettings={openMcpSettings}
-				resourcesOverlay={
-					resourcesVisible ? (
-						<ResourcesInspector
-							open={inspectorOpen}
-							onOpenChange={setInspectorOpen}
-							onCloseAutoFocus={(event) => {
-								event.preventDefault();
-								focusComposer();
-							}}
-							commands={groups.commands}
-							subagents={groups.subagents}
-							finishedCommands={groups.finishedCommands}
-							finishedSubagents={groups.finishedSubagents}
-							history={groups.history}
-							remaining={groups.remaining}
-							expanded={expandedResources}
-							onExpandedChange={(kind, expanded) =>
-								setInspector((current) =>
-									current?.workspaceId === workspaceId && current.sessionId === sessionId
-										? { ...current, expanded: { ...current.expanded, [kind]: expanded } }
-										: current,
-								)
-							}
-							{...(resources.loadOlder ? { onLoadMore: resources.loadOlder } : {})}
-							retained={resources.retained}
-							now={now}
-							authoritative={resources.authoritative}
-							loading={resources.loading}
-							staleness={resources.staleness}
-							error={resources.projection?.error ?? null}
-							actions={resources.actions}
-							selectedId={selectedResource}
-							onSelect={selectResource}
-							onRetry={resources.retry}
-							onStopCommand={resources.stopCommand}
-							onStopSubagent={resources.stopSubagent}
-							onStopAll={resources.stopAll}
-							renderSubagentModel={(child) => (
-								<RunModelLabel model={child.model} thinkingLevel={child.thinkingLevel} />
-							)}
-							mcpServers={groups.mcpServers}
-							onMcpSetEnabled={resources.setMcpEnabled}
-							onMcpReconnect={resources.reconnectMcp}
-							onOpenMcpSettings={openMcpSettings}
-							detail={
-								selectedCommand ? (
-									<CommandLogView
-										{...commandLog}
-										onRetry={commandLog.retry}
-										interrupted={selectedCommand.interrupted ?? false}
-										retained={resources.retained}
-									/>
-								) : selectedChild ? (
-									<SubagentTranscriptPane
-										workspaceId={workspaceId}
-										parentSessionId={sessionId}
-										childSessionId={selectedChild.childSessionId}
-									/>
-								) : selectedMcpServer ? (
-									<McpServerDetail
-										key={`${workspaceId}:${sessionId}:${selectedMcpServer}`}
-										status={mcpDetail.status}
-										calls={selectedMcpCalls}
-									/>
-								) : null
-							}
-						/>
-					) : null
-				}
-				openProviderSettings={openProviderSettings}
-				findModel={findModel}
-				dockTarget={dockTarget}
-				onDockedInteractionChange={setDockedToolCallId}
-			/>
+			<ChatMediaContext.Provider
+				value={{ resolveUrl: hostUrl, retryEpoch: syncedConnectionGeneration }}
+			>
+				<ChatTranscript
+					ref={transcriptRef}
+					sessionId={sessionId}
+					workspaceId={workspaceId}
+					onOpenFile={onOpenFile}
+					workspaceRoot={workspaceRoot}
+					focusComposer={focusComposer}
+					onTryAgain={onTryAgain}
+					historyOpen={historyState.open}
+					inspectorOpen={inspectorOpen}
+					stillRunning={
+						resourcesVisible && groups.activeCount > 0
+							? { count: groups.activeCount, onOpen: () => openResource(null) }
+							: undefined
+					}
+					resultOpener={resultOpener}
+					openSubagentTranscript={setTranscriptChild}
+					readMcpOutput={readMcpOutput}
+					openMcpSettings={openMcpSettings}
+					resourcesOverlay={
+						resourcesVisible ? (
+							<ResourcesInspector
+								open={inspectorOpen}
+								onOpenChange={setInspectorOpen}
+								onCloseAutoFocus={(event) => {
+									event.preventDefault();
+									focusComposer();
+								}}
+								commands={groups.commands}
+								subagents={groups.subagents}
+								finishedCommands={groups.finishedCommands}
+								finishedSubagents={groups.finishedSubagents}
+								history={groups.history}
+								remaining={groups.remaining}
+								expanded={expandedResources}
+								onExpandedChange={(kind, expanded) =>
+									setInspector((current) =>
+										current?.workspaceId === workspaceId && current.sessionId === sessionId
+											? { ...current, expanded: { ...current.expanded, [kind]: expanded } }
+											: current,
+									)
+								}
+								{...(resources.loadOlder ? { onLoadMore: resources.loadOlder } : {})}
+								retained={resources.retained}
+								now={now}
+								authoritative={resources.authoritative}
+								loading={resources.loading}
+								staleness={resources.staleness}
+								error={resources.projection?.error ?? null}
+								actions={resources.actions}
+								selectedId={selectedResource}
+								onSelect={selectResource}
+								onRetry={resources.retry}
+								onStopCommand={resources.stopCommand}
+								onStopSubagent={resources.stopSubagent}
+								onStopAll={resources.stopAll}
+								renderSubagentModel={(child) => (
+									<RunModelLabel model={child.model} thinkingLevel={child.thinkingLevel} />
+								)}
+								mcpServers={groups.mcpServers}
+								onMcpSetEnabled={resources.setMcpEnabled}
+								onMcpReconnect={resources.reconnectMcp}
+								onOpenMcpSettings={openMcpSettings}
+								detail={
+									selectedCommand ? (
+										<CommandLogView
+											{...commandLog}
+											onRetry={commandLog.retry}
+											interrupted={selectedCommand.interrupted ?? false}
+											retained={resources.retained}
+										/>
+									) : selectedChild ? (
+										<SubagentTranscriptPane
+											workspaceId={workspaceId}
+											parentSessionId={sessionId}
+											childSessionId={selectedChild.childSessionId}
+										/>
+									) : selectedMcpServer ? (
+										<McpServerDetail
+											key={`${workspaceId}:${sessionId}:${selectedMcpServer}`}
+											status={mcpDetail.status}
+											calls={selectedMcpCalls}
+										/>
+									) : null
+								}
+							/>
+						) : null
+					}
+					openProviderSettings={openProviderSettings}
+					findModel={findModel}
+					dockTarget={dockTarget}
+					onDockedInteractionChange={setDockedToolCallId}
+				/>
+			</ChatMediaContext.Provider>
 			<div
 				ref={setDockTarget}
 				data-testid="chat-dock"

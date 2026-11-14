@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyDiff, Usage } from "@openai/agents";
+import { applyDiff, tool, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
@@ -22,8 +22,10 @@ import {
 import type { ExtUiRequest, ExtUiResponse, SessionEventPayload } from "@thinkrail/contracts";
 import { TODO_NUDGE_PREFIX } from "@thinkrail/contracts";
 import { TodoStore } from "@thinkrail/todos/core";
+import { z } from "zod";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
 import { setTrashImplementationForTests } from "../trash";
+import * as modelConfigurationModule from "./modelConfiguration";
 import { configureAgentModelFactory, saveCustomEndpoint } from "./modelConfiguration";
 import {
 	abortSession,
@@ -53,6 +55,7 @@ import {
 	steerSession,
 	updateQueuedMessage,
 } from "./sdkSessionManager";
+import * as sdkToolsModule from "./sdkTools";
 import { applyWorkspacePatch, type ToolGrant, workspaceTools } from "./sdkTools";
 import { readSessionRecord, sessionRecordPath } from "./sessionStore";
 import { setWebAccessKey } from "./webAccess";
@@ -1447,4 +1450,196 @@ test("new input cancels a detached summary and waits for its model cleanup befor
 	expect(readSessionRecord(sessionId)?.history.slice(0, before?.length)).toEqual(before);
 	expect(readSessionRecord(sessionId)?.summaryOperations["cancelled-summary"]).toBeUndefined();
 	model.assertComplete();
+});
+
+const IMAGE_PAYLOAD = Buffer.from("sdk-image-bytes-that-stay-on-the-host").toString("base64");
+const IMAGE_BLOCK = { type: "image" as const, data: IMAGE_PAYLOAD, mimeType: "image/png" };
+
+for (const outputKind of ["object", "string"] as const) {
+	test(`SDK ${outputKind} tool image results retain raw canonical bytes and publish only detached references`, async () => {
+		const result = {
+			content: [{ type: "text", text: "Captured" }, IMAGE_BLOCK],
+			details: { screenshot: IMAGE_BLOCK },
+		};
+		const factory = spyOn(sdkToolsModule, "workspaceTools").mockImplementation(() => [
+			tool({
+				name: "fixture_image",
+				description: "fixture",
+				parameters: z.object({}),
+				execute: () =>
+					outputKind === "string"
+						? JSON.stringify({ ...result, isError: true, terminate: true })
+						: result,
+			}),
+		]);
+		try {
+			const model = new ScriptedModel([
+				modelResponse([functionCall("fixture_image", {}, { callId: "image-result" })]),
+				done(),
+			]);
+			configureAgentModelFactory(() => model);
+			const frames: SessionEventPayload[] = [];
+			setSessionPublisher((frame) => frames.push(frame));
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			await promptSession(sessionId, "Capture a fixture image");
+			expect(JSON.stringify(frames)).not.toContain(IMAGE_PAYLOAD);
+			expect(model.calls).toHaveLength(2);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+			const ends = frames.filter(
+				(frame) =>
+					frame.event.type === "tool_execution_end" && frame.event.toolCallId === "image-result",
+			);
+			expect(ends).toHaveLength(1);
+			expect(JSON.stringify(ends)).toContain(`/images/${sessionId}/`);
+			const raw = readSessionRecord(sessionId);
+			expect(JSON.stringify(raw?.messages)).toContain(IMAGE_PAYLOAD);
+			expect(JSON.stringify(raw)).not.toContain("/images/");
+			expect(JSON.stringify(model.calls[1]?.request.input).includes(IMAGE_PAYLOAD)).toBe(
+				outputKind === "string",
+			);
+			const first = await getSessionMessages(sessionId, "workspace", worktree);
+			expect(JSON.stringify(first)).not.toContain(IMAGE_PAYLOAD);
+			const before = structuredClone(first);
+			const user = first.messages.find((message) => message.role === "user");
+			if (user?.role === "user") user.content = "mutated snapshot";
+			const imageResult = first.messages.find((message) => message.role === "toolResult");
+			if (imageResult?.role === "toolResult") imageResult.content.splice(0);
+			first.messages.pop();
+			expect(await getSessionMessages(sessionId, "workspace", worktree)).toEqual(before);
+			const event = frames.find(
+				(frame) => frame.event.type === "message_end" && frame.event.message.role === "user",
+			);
+			if (event?.event.type === "message_end" && event.event.message.role === "user")
+				event.event.message.content = "mutated event";
+			expect(await getSessionMessages(sessionId, "workspace", worktree)).toEqual(before);
+			await removeSession(sessionId);
+			const replay = await getSessionMessages(sessionId, "workspace", worktree);
+			expect(JSON.stringify(replay)).not.toContain(IMAGE_PAYLOAD);
+			expect(JSON.stringify(replay.messages)).toContain(`/images/${sessionId}/`);
+			model.assertComplete();
+		} finally {
+			factory.mockRestore();
+		}
+	});
+}
+
+test("SDK image upload keeps model input and composer restore inline while its live echo is a reference", async () => {
+	const catalog = spyOn(modelConfigurationModule, "listAvailableModels").mockResolvedValue([
+		{
+			id: "fixture-image-model",
+			provider: "fixture",
+			name: "Image fixture",
+			contextWindow: 100_000,
+			reasoning: false,
+			thinkingLevels: ["off"],
+			input: ["text", "image"],
+		},
+	]);
+	try {
+		const model = new ScriptedModel([done()]);
+		configureAgentModelFactory(() => model);
+		const frames: SessionEventPayload[] = [];
+		setSessionPublisher((frame) => frames.push(frame));
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		await promptSession(sessionId, "Inspect attached fixture", [IMAGE_BLOCK], "upload-id");
+		expect(JSON.stringify(model.calls[0]?.request.input)).toContain(
+			`data:image/png;base64,${IMAGE_PAYLOAD}`,
+		);
+		expect(JSON.stringify(readSessionRecord(sessionId)?.messages)).toContain(IMAGE_PAYLOAD);
+		expect(JSON.stringify(frames)).not.toContain(IMAGE_PAYLOAD);
+		expect(JSON.stringify(frames)).toContain(`/images/${sessionId}/`);
+		const started = latch();
+		const release = latch();
+		const holding = new ScriptedModel([
+			modelResponder(async () => {
+				started.release();
+				await release.promise;
+				return [assistantMessage("done")];
+			}),
+		]);
+		configureAgentModelFactory(() => holding);
+		const run = promptSession(sessionId, "Hold");
+		await started.promise;
+		followUpSession(sessionId, "Restore attached fixture", [IMAGE_BLOCK], "restore-id");
+		const restored = clearSessionQueue(sessionId);
+		expect(JSON.stringify(restored)).toContain(IMAGE_PAYLOAD);
+		release.release();
+		await run;
+	} finally {
+		catalog.mockRestore();
+	}
+});
+
+test("SDK approval display projects argument images while checkpoint and restored canonical results keep bytes", async () => {
+	let executions = 0;
+	const factory = spyOn(sdkToolsModule, "workspaceTools").mockImplementation(() => [
+		tool({
+			name: "fixture_image",
+			description: "fixture",
+			parameters: z.object({}),
+			execute: () => {
+				executions += 1;
+				return { content: [{ type: "text", text: "Captured" }, IMAGE_BLOCK] };
+			},
+		}),
+		tool({
+			name: "fixture_approval",
+			description: "fixture",
+			parameters: z.object({
+				shot: z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
+			}),
+			needsApproval: true,
+			execute: () => "approved",
+		}),
+	]);
+	try {
+		const model = new ScriptedModel([
+			modelResponse([functionCall("fixture_image", {}, { callId: "saved-image" })]),
+			modelResponse([
+				functionCall("fixture_approval", { shot: IMAGE_BLOCK }, { callId: "image-approval" }),
+			]),
+		]);
+		configureAgentModelFactory(() => model);
+		const requested = latch();
+		let approval: ExtUiRequest | null = null;
+		setExtUiPublisher((request) => {
+			approval = request;
+			requested.release();
+		});
+		const frames: SessionEventPayload[] = [];
+		setSessionPublisher((frame) => frames.push(frame));
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		const pending = promptSession(sessionId, "Capture then ask");
+		await requested.promise;
+		expect(JSON.stringify(approval)).not.toContain(IMAGE_PAYLOAD);
+		expect(JSON.stringify(getSessionState(sessionId))).not.toContain(IMAGE_PAYLOAD);
+		expect(
+			JSON.stringify(await getSessionMessages(sessionId, "workspace", worktree)),
+		).not.toContain(IMAGE_PAYLOAD);
+		expect(JSON.stringify(frames)).not.toContain(IMAGE_PAYLOAD);
+		expect(JSON.stringify(readSessionRecord(sessionId)?.pendingApproval)).toContain(IMAGE_PAYLOAD);
+		await removeSession(sessionId);
+		await pending;
+		const resumed = new ScriptedModel([done()]);
+		configureAgentModelFactory(() => resumed);
+		await getSessionMessages(sessionId, "workspace", worktree);
+		const request = getSessionState(sessionId).needsInput;
+		if (request?.kind !== "dialog") throw new Error("Missing restored approval");
+		resolveExtUi(approvalResponse(request.request, true));
+		const deadline = Date.now() + 3000;
+		while (getSessionState(sessionId).execution !== "idle") {
+			if (Date.now() > deadline) throw new Error("Restore did not settle");
+			await Bun.sleep(0);
+		}
+		expect(executions).toBe(1);
+		const stored = readSessionRecord(sessionId)?.messages.find(
+			(message) => message.role === "toolResult" && message.toolCallId === "saved-image",
+		);
+		expect(JSON.stringify(stored)).toContain(IMAGE_PAYLOAD);
+		expect(
+			JSON.stringify(await getSessionMessages(sessionId, "workspace", worktree)),
+		).not.toContain(IMAGE_PAYLOAD);
+	} finally {
+		factory.mockRestore();
+	}
 });

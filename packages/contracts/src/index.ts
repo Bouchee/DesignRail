@@ -110,6 +110,7 @@ export type * from "./sessionProtocol";
 export {
 	assistantToolCallsAreExecutable,
 	canMarkCompletionUnread,
+	isRefImage,
 	isSessionWorking,
 	isTranscriptMessageRole,
 	sameModel,
