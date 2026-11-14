@@ -16,8 +16,9 @@ terminal mirrors used by feature render caches.
 
 - **Owns:** resolving the selected center placement to the matching editor cache or terminal catalog key;
   atomically clearing the incompatible legacy mirror; rerunning when a cache identity is repaired beneath a
-  stable placement; and revealing the Review tool when the active tab becomes a reviewed file, deferred while
-  `doubleClickPendingMs()` says a browse row's double-click could still arrive, so the row can keep its preview
+  stable placement; and revealing the Review tool when the selected tab/file identity changes to a reviewed
+  file. Saving a first draft in the already selected resource does not reveal Review or move focus. Reveal is
+  deferred while `doubleClickPendingMs()` says a browse row's double-click could still arrive, so the row can keep its preview
   before Review replaces it. When Review already shows (the workbench-supplied reader), nothing can replace the
   row, so the reveal runs at once: a late reveal's focus request would close whatever the user opened meanwhile.
   For the same reason a deferred reveal yields when the showing auxiliary tools (the reader's `showingKey`)
