@@ -466,6 +466,7 @@ test("a coarse pointer never focuses a returning page's text target in the dock"
 	const session = seedPanedQuestionnaire("touch questionnaire", "ask-touch-pages");
 
 	try {
+		expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
 		await enterDefaultWorkspace(page);
 		await hideAuxiliaryWorkbench(page);
 		await openPersistedChatAfterInput(page, "touch questionnaire");
@@ -480,9 +481,13 @@ test("a coarse pointer never focuses a returning page's text target in the dock"
 		const next = card.getByTestId("ask-continue");
 		await expect(next).toBeInViewport({ ratio: 1 });
 		await next.click();
+		const secondHeading = card.getByTestId("ask-question-text");
+		await expect(secondHeading).toHaveText("Which second-page rollout should we use?");
+		await expect(card.getByTestId("ask-option").first()).toBeFocused();
 
 		const custom = card.getByTestId("ask-custom");
 		await custom.fill("Use a custom second-stage rollout.");
+		await expect(custom).toHaveValue("Use a custom second-stage rollout.");
 		await expect(custom).toBeFocused();
 		await card.getByTestId("ask-tab").first().click();
 		await expect(card.getByTestId("ask-question-text")).toHaveText(
@@ -490,7 +495,6 @@ test("a coarse pointer never focuses a returning page's text target in the dock"
 		);
 		await next.click();
 
-		const secondHeading = card.getByTestId("ask-question-text");
 		await expect(secondHeading).toHaveText("Which second-page rollout should we use?");
 		await expect(secondHeading).toBeInViewport({ ratio: 1 });
 		await expect(custom).not.toBeFocused();

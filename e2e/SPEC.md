@@ -608,6 +608,23 @@ The first scenario in `raildesign-stage3.live.spec.ts` exercises Skill body and 
 Plan mutation and approved Spec creation, then checks stored state and the Plan UI after refresh.
 It is a focused live-provider check; adding the scenario does not claim it ran in an offline batch.
 
+The connected Stage 3 scenario uses that same parent session for Skill-directed Plan/Spec effects,
+real stdio MCP resource reads, a completed foreground child and a last-started background command.
+It verifies stored identities, the rendered MCP/child/Plan/command results after reload, then stops the
+idle parent's still-owned command and retains its output. Its approval replies match the native call
+identity, exact tool and owned Spec path/command; its fixture config is removed even on failure.
+Before Stop the badge counts the command and connected fixture MCP server. Stop pauses that session's
+owned MCP connections without disabling their configuration, so the badge changes from two to zero;
+direct resource snapshots prove the command is stopped, the only child is completed and no session MCP
+connection remains. The stopped snapshot is captured before its UI assertions.
+Its finally-time proof captures the phase, latest parent snapshot and actual MCP read trace before
+abort/config cleanup, including diagnostic read errors when the host is unavailable.
+This scenario does not claim cancellation of the already-completed child; active-child cancellation
+remains with the separate SDK lifecycle tests.
+Both Skill probes check parent instruction markers in the last actual text-bearing assistant answer.
+The connected child proof verifies text separately from transcript output usage, so thinking-only
+rows never satisfy answer assertions.
+
 The SDK E2E model fixture leaves `maxTokens` unset (`null`) to use the product's bounded default output budget.
 
 The Stage 3 background live scenario checks command output through refresh and parent Stop.

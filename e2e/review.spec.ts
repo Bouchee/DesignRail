@@ -499,6 +499,9 @@ test("the Review panel carries its own send buttons: per-file at the file level,
 		await page.getByTestId("review-composer-save").click();
 		await expect(page.getByTestId("review-composer")).toHaveCount(0);
 	}
+	const scriptSection = page.locator('[data-testid="review-file-section"][data-path="script.ts"]');
+	await revealWorkbenchTool(page, "review");
+	await expect(scriptSection).toHaveAttribute("data-expanded", "true");
 	writeFileSync(join(worktree(), "notes.txt"), "a fresh remark target\nsecond line\n");
 	await revealWorkbenchTool(page, "changes");
 	await page.getByTestId("change-item").filter({ hasText: "notes.txt" }).dblclick();
@@ -508,7 +511,6 @@ test("the Review panel carries its own send buttons: per-file at the file level,
 
 	await revealWorkbenchTool(page, "review");
 	const notesSection = page.locator('[data-testid="review-file-section"][data-path="notes.txt"]');
-	const scriptSection = page.locator('[data-testid="review-file-section"][data-path="script.ts"]');
 	await expect(notesSection).toHaveAttribute("data-expanded", "true");
 	await expect(notesSection.getByTestId("review-panel-send")).toContainText("Send review (1)");
 	await expect(page.getByTestId("review-send-all")).toContainText("Send all (3)");
@@ -993,7 +995,11 @@ test("a draft is server truth: a second client converges by push, and a cold rel
 	await page.reload();
 	await expect(page.getByTestId("connection-status")).toHaveAttribute("data-status", "connected");
 	await expect(worktreeRows(page).first()).toHaveAttribute("data-active", "true");
-	await revealWorkbenchTool(page, "review");
+	await expect(
+		page.locator('[data-testid="editor-tab"][data-active="true"][data-kind="diff"]'),
+	).toContainText("script.ts");
+	await expect(page.getByTestId("tool-rail-review")).toHaveAttribute("aria-pressed", "true");
+	await expect(page.getByTestId("review-panel")).toBeVisible();
 	await expect(page.getByTestId("review-pending-badge")).toHaveText("2");
 	await expect(page.getByTestId("review-file-row")).toContainText("2 drafts");
 });

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +21,7 @@ import {
 	storeMcpToolOutput,
 	watchUserMcpConfig,
 } from "./mcpSessions";
+import * as mcpSignIn from "./mcpSignIn";
 import { createSession, disposeAllSessions, ensureSessionAttached } from "./sdkSessionManager";
 import { readSessionRecord, writeSessionRecord } from "./sessionStore";
 
@@ -102,13 +104,77 @@ test("the owned user config watcher reloads actual transports after an external 
 	const pidFile = join(root, "watched-pid");
 	const config = entry(pidFile);
 	const path = join(root, "data/mcp.json");
-	writeFileSync(path, JSON.stringify({ mcpServers: { docs: config } }));
-	await refreshMcpStatus(sessionId, 1000);
-	const pid = Number(readFileSync(pidFile, "utf8").trim());
-	expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
-	const stop = watchUserMcpConfig();
+	const started = performance.now();
+	const events: { ms: number; stage: string; detail?: unknown }[] = [];
+	let failed = false;
+	let pid = 0;
+	let stop: (() => Promise<void>) | undefined;
+	const record = (stage: string, detail?: unknown) => {
+		const event = { ms: performance.now() - started, stage, detail };
+		events.push(event);
+		if (failed) console.error("MCP_WATCH_STAGE", JSON.stringify(event));
+	};
+	const observe = (stage: string, operation: Promise<void>) => {
+		void operation.then(
+			() => record(`${stage}.settled`),
+			(error) => record(`${stage}.rejected`, String(error)),
+		);
+		return operation;
+	};
+	const pidState = () => {
+		if (pid <= 0) return "not-read";
+		try {
+			process.kill(pid, 0);
+			return "alive";
+		} catch (error) {
+			return typeof error === "object" && error !== null && "code" in error
+				? error.code
+				: String(error);
+		}
+	};
+	const realClose = LoggedStdioMcpServer.prototype.close;
+	const realCancelProbes = mcpSignIn.cancelAllMcpProbes;
+	const probes = spyOn(mcpSignIn, "cancelAllMcpProbes").mockImplementation(() => {
+		record("cancel-probes.enter");
+		return observe("cancel-probes", realCancelProbes());
+	});
 	try {
+		LoggedStdioMcpServer.prototype.close = function () {
+			record("public-close.enter", { name: this.name });
+			return observe("public-close", realClose.call(this));
+		};
+		setMcpStatusPublisher((snapshot) => {
+			snapshots.push(snapshot);
+			record("status", snapshot);
+		});
+		writeFileSync(path, JSON.stringify({ mcpServers: { docs: config } }));
+		await refreshMcpStatus(sessionId, 1000);
+		pid = Number(readFileSync(pidFile, "utf8").trim());
+		expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
+		const realWatch = fs.watch;
+		const watching = spyOn(fs, "watch").mockImplementation(((
+			...args: Parameters<typeof fs.watch>
+		) => {
+			record("native-watch.enter");
+			const watcher = realWatch(...args);
+			watcher.on("change", (event, filename) =>
+				record("native-watch.change", { event, filename: filename?.toString() ?? null }),
+			);
+			watcher.on("close", () => record("native-watch.close"));
+			return watcher;
+		}) as typeof fs.watch);
+		try {
+			record("watch.start");
+			stop = watchUserMcpConfig({
+				onSettingsChanged: (changed) => record("settings-changed", changed),
+			});
+			record("watch.return");
+		} finally {
+			watching.mockRestore();
+		}
+		record("external-write.start");
 		writeFileSync(path, JSON.stringify({ mcpServers: { docs: { ...config, enabled: false } } }));
+		record("external-write.end");
 		for (
 			let attempt = 0;
 			attempt < 150 && snapshots.at(-1)?.servers[0]?.state !== "disabled";
@@ -117,8 +183,41 @@ test("the owned user config watcher reloads actual transports after an external 
 			await Bun.sleep(10);
 		expect(snapshots.at(-1)?.servers[0]?.state).toBe("disabled");
 		expect(() => process.kill(pid, 0)).toThrow();
+	} catch (error) {
+		failed = true;
+		console.error(
+			"MCP_WATCH_FAILURE",
+			JSON.stringify({
+				error: String(error),
+				events,
+				snapshots,
+				pid,
+				pidState: pidState(),
+				configBytes: existsSync(path) ? readFileSync(path, "utf8") : null,
+			}),
+		);
+		throw error;
 	} finally {
-		await stop();
+		try {
+			record("stop.enter");
+			await stop?.();
+			record("stop.settled");
+		} finally {
+			LoggedStdioMcpServer.prototype.close = realClose;
+			probes.mockRestore();
+			setMcpStatusPublisher((snapshot) => snapshots.push(snapshot));
+			if (failed)
+				console.error(
+					"MCP_WATCH_FINAL",
+					JSON.stringify({
+						events,
+						snapshots,
+						pid,
+						pidState: pidState(),
+						configBytes: existsSync(path) ? readFileSync(path, "utf8") : null,
+					}),
+				);
+		}
 	}
 });
 test("concurrent session close and host shutdown await the same held public SDK cleanup", async () => {
