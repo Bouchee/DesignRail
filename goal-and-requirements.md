@@ -37,6 +37,9 @@ Skills, Plan, Spec Graph, MCP, background commands and subagents are stage 3. Th
 unavailable until their execution works. Desktop platform artifacts and updates require stage 4 checks;
 private browser/server deployment requires stage 5 checks.
 
+The Resources dock can fold while work continues. Its inspector shows command logs, child transcripts
+and each MCP server's state and calls from the current chat.
+
 ## Product identity and data
 
 The product is RailDesign, identifier `io.github.bouchee.raildesign`, CLI `raildesign`.

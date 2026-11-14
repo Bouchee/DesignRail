@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import type { SessionResources } from "@thinkrail/contracts";
 import { enterDefaultWorkspace, openFixtureProject, openPersistedChat } from "./fixtures/app";
 import { E2E_DATA_DIR, E2E_FIXTURE_REPO } from "./fixtures/paths";
 import { seedWorkspaceSession } from "./fixtures/sessions";
@@ -177,4 +178,62 @@ test("parent resources read a completed child's command log with its actual owne
 	await page.getByTestId("resources-trigger").click();
 	await row.getByRole("option").click();
 	await expect(page.getByTestId("command-log-output")).toContainText("CHILD_OWNED_LOG");
+});
+
+test("a single live resource can stay folded across opening and closing its inspector", async ({
+	page,
+}) => {
+	await page.routeWebSocket(/\/ws(\?|$)/, (browser) => {
+		const server = browser.connectToServer();
+		const reads = new Set<string>();
+		browser.onMessage((message) => {
+			const request = JSON.parse(message.toString()) as { id?: string; method?: string };
+			if (request.id && request.method === "session.resources") reads.add(request.id);
+			server.send(message);
+		});
+		server.onMessage((message) => {
+			const response = JSON.parse(message.toString()) as {
+				id?: string;
+				ok?: boolean;
+				result?: SessionResources;
+			};
+			if (response.id && reads.delete(response.id) && response.ok && response.result) {
+				const result: SessionResources = {
+					...response.result,
+					commands: [
+						{
+							id: "fold-command",
+							sessionId: response.result.sessionId,
+							name: "Foldable command",
+							command: "fixture command output",
+							status: "running",
+							startedAt: Date.now(),
+						},
+					],
+				};
+				browser.send(JSON.stringify({ ...response, result }));
+			} else browser.send(message);
+		});
+	});
+	await openFixtureProject(page);
+	seedWorkspaceSession(realpathSync(E2E_FIXTURE_REPO), {
+		name: "Fold resources",
+		messages: [{ role: "user", text: "Inspect the current catalogue.", timestamp: Date.now() }],
+	});
+	await enterDefaultWorkspace(page);
+	await openPersistedChat(page, "Fold resources");
+	const dock = page.getByTestId("resources-dock");
+	const row = dock.getByTestId("resource-command");
+	const toggle = dock.getByTestId("resources-dock-toggle");
+	await expect(row).toBeVisible();
+	await expect(toggle).toHaveAttribute("aria-expanded", "true");
+	await toggle.click();
+	await expect(dock).toHaveAttribute("data-collapsed", "true");
+	await expect(row).toHaveCount(0);
+	await page.getByTestId("resources-trigger").click();
+	await expect(page.getByTestId("resources-inspector")).toBeVisible();
+	await page.getByTestId("resources-inspector-close").click();
+	await expect(dock).toHaveAttribute("data-collapsed", "true");
+	await toggle.click();
+	await expect(row).toBeVisible();
 });

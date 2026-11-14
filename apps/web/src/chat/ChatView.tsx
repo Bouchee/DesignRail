@@ -24,7 +24,7 @@ import {
 	useAppStore,
 	workspaceName,
 } from "@/store";
-import { errorText, getTransport, wsErrorCode } from "@/transport";
+import { errorText, getTransport, watchMcpWorkspace, wsErrorCode } from "@/transport";
 import { ChatHeader } from "./ChatHeader";
 import ChatTranscript, { type ChatTranscriptHandle } from "./ChatTranscript";
 import {
@@ -34,11 +34,14 @@ import {
 	type MentionCandidate,
 	type SubmitBehavior,
 } from "./Composer";
+import { DEFAULT_DOCK_FOLD, type DockFold, dockCollapsed, withDockCollapsed } from "./dockFold";
 import { mentionLookup } from "./fileTargets";
 import { HistoryOverlay } from "./HistoryOverlay";
 import { awaitingToolCallIdOf } from "./interactionState";
+import { McpServerDetail } from "./McpServerDetail";
 import { parseModelRef, RunModelLabel } from "./ModelEffortLabel";
 import type { ModelSelection } from "./ModelEffortPicker";
+import { mcpServerCalls } from "./mcpServerCalls";
 import {
 	mergeNativeChatCommands,
 	parseNativeChatCommand,
@@ -49,6 +52,7 @@ import { QueueStrip } from "./QueueStrip";
 import { deriveRecentPrompts } from "./recentPrompts";
 import {
 	CommandLogView,
+	mcpResourceId,
 	newestResourceId,
 	ResourcesAttention,
 	ResourcesButton,
@@ -60,7 +64,6 @@ import { SkillsDialog } from "./SkillsDialog";
 import { SubagentTranscriptDialog, SubagentTranscriptPane } from "./SubagentTranscriptDialog";
 import { TemplateEditorDialog } from "./TemplateEditorDialog";
 import { useChatResources, useCommandLog } from "./useChatResources";
-import { inspectedResult, useFreshResults } from "./useFreshResults";
 import { useModelCatalog } from "./useModelCatalog";
 import { useModelPreferences } from "./useModelPreferences";
 import { useSessionStats } from "./useSessionStats";
@@ -69,6 +72,7 @@ import type { ChatAttachment } from "./types";
 import { useHistorySearch } from "./useHistorySearch";
 
 const TRY_AGAIN_PROMPT = "Try again.";
+const NOTHING_EXPANDED: Partial<Record<ResourceKind, boolean>> = {};
 export default function ChatView({
 	sessionId,
 	workspaceId,
@@ -185,22 +189,52 @@ export default function ChatView({
 	const groups = resources.groups;
 	const resourcesVisible = resources.visible;
 	const now = useNow();
-	const [inspectorOpen, setInspectorOpen] = useState(false);
-	const [selectedResource, setSelectedResource] = useState<string | null>(null);
+	const [inspector, setInspector] = useState<{
+		workspaceId: string;
+		sessionId: string;
+		open: boolean;
+		selectedId: string | null;
+		expanded: Partial<Record<ResourceKind, boolean>>;
+	} | null>(null);
+	const inspectorCurrent =
+		inspector?.workspaceId === workspaceId && inspector.sessionId === sessionId;
+	const inspectorOpen = inspectorCurrent && inspector.open;
+	const selectedResource = inspectorCurrent ? inspector.selectedId : null;
+	const expandedResources = inspectorCurrent ? inspector.expanded : NOTHING_EXPANDED;
 	const [transcriptChild, setTranscriptChild] = useState<string | null>(null);
-	const [expandedResources, setExpandedResources] = useState<
-		Partial<Record<ResourceKind, boolean>>
-	>({});
-	const {
-		commands: freshCommands,
-		subagents: freshSubagents,
-		count: freshCount,
-		markSeen,
-	} = useFreshResults(workspaceId, sessionId, groups.recentFinished, resources.authoritative);
-	const freshIds = new Set([
-		...freshCommands.map((command) => command.id),
-		...freshSubagents.map((child) => child.childSessionId),
-	]);
+	const [dockedToolCallId, setDockedToolCallId] = useState<string | null>(null);
+	const [dockFoldState, setDockFoldState] = useState<{
+		workspaceId: string;
+		sessionId: string;
+		fold: DockFold;
+	} | null>(null);
+	const dockFold =
+		dockFoldState?.workspaceId === workspaceId && dockFoldState.sessionId === sessionId
+			? dockFoldState.fold
+			: DEFAULT_DOCK_FOLD;
+	const setDockCollapsed = (collapsed: boolean) =>
+		setDockFoldState({
+			workspaceId,
+			sessionId,
+			fold: withDockCollapsed(dockFold, dockedToolCallId, collapsed),
+		});
+	const setInspectorOpen = useCallback(
+		(open: boolean) =>
+			setInspector((previous) => ({
+				workspaceId,
+				sessionId,
+				open,
+				selectedId:
+					previous?.workspaceId === workspaceId && previous.sessionId === sessionId
+						? previous.selectedId
+						: null,
+				expanded:
+					previous?.workspaceId === workspaceId && previous.sessionId === sessionId
+						? previous.expanded
+						: NOTHING_EXPANDED,
+			})),
+		[workspaceId, sessionId],
+	);
 	const selectedCommand = [...groups.commands, ...groups.finishedCommands].find(
 		(command) => command.id === selectedResource,
 	);
@@ -212,36 +246,64 @@ export default function ChatView({
 		sessionId,
 		inspectorOpen ? (selectedCommand ?? null) : null,
 	);
+	const selectedMcpServer = inspectorOpen
+		? groups.mcpServers?.find((server) => mcpResourceId(server.name) === selectedResource)?.name
+		: undefined;
+	useEffect(() => {
+		if (!selectedMcpServer || status !== "connected" || !sessionExists) return;
+		return watchMcpWorkspace(workspaceId);
+	}, [workspaceId, sessionId, selectedMcpServer, status, sessionExists, connectionGeneration]);
+	const mcpDetail = useAppStore(
+		useShallow((state) => {
+			const runtime = selectedMcpServer ? state.sessions[sessionId] : undefined;
+			return {
+				turns: runtime?.turns ?? EMPTY_RUNTIME.turns,
+				toolResults: runtime?.toolResults ?? EMPTY_RUNTIME.toolResults,
+				status: selectedMcpServer
+					? state.mcpByWorkspace[workspaceId]?.sessions[sessionId]?.snapshot.servers.find(
+							(server) => server.name === selectedMcpServer,
+						)
+					: undefined,
+			};
+		}),
+	);
+	const selectedMcpCalls = useMemo(
+		() =>
+			selectedMcpServer
+				? mcpServerCalls(
+						mcpDetail.turns,
+						mcpDetail.toolResults,
+						selectedMcpServer,
+						groups.mcpServers?.map((server) => server.name) ?? [],
+					)
+				: [],
+		[mcpDetail.turns, mcpDetail.toolResults, selectedMcpServer, groups.mcpServers],
+	);
+	useEffect(() => {
+		if (selectedMcpServer && mcpDetail.status) resources.retry();
+	}, [selectedMcpServer, mcpDetail.status, resources.retry]);
 	const selectResource = useCallback(
-		(id: string) => {
-			setSelectedResource(id);
-			const target = inspectedResult(groups, id, id);
-			if (target) markSeen(target);
-		},
-		[groups, markSeen],
+		(selectedId: string) =>
+			setInspector((previous) => ({
+				workspaceId,
+				sessionId,
+				open: true,
+				selectedId,
+				expanded:
+					previous?.workspaceId === workspaceId && previous.sessionId === sessionId
+						? previous.expanded
+						: NOTHING_EXPANDED,
+			})),
+		[workspaceId, sessionId],
 	);
 	const openResource = useCallback(
-		(id: string | null) => {
-			setExpandedResources({});
-			setInspectorOpen(true);
-			if (id) selectResource(id);
-			else setSelectedResource(null);
-		},
-		[selectResource],
+		(selectedId: string | null) =>
+			setInspector({ workspaceId, sessionId, open: true, selectedId, expanded: NOTHING_EXPANDED }),
+		[workspaceId, sessionId],
 	);
 	const openFinished = useCallback(
-		() =>
-			openResource(
-				newestResourceId(freshCommands, freshSubagents) ??
-					newestResourceId(groups.finishedCommands, groups.finishedSubagents),
-			),
-		[
-			freshCommands,
-			freshSubagents,
-			groups.finishedCommands,
-			groups.finishedSubagents,
-			openResource,
-		],
+		() => openResource(newestResourceId(groups.finishedCommands, groups.finishedSubagents)),
+		[groups.finishedCommands, groups.finishedSubagents, openResource],
 	);
 	const resultOpener = useCallback(
 		(target: ResourceTarget) => {
@@ -684,7 +746,6 @@ export default function ChatView({
 									activeCount={
 										resources.authoritative ? groups.activeCount + groups.mcpActiveCount : null
 									}
-									freshCount={freshCount}
 									open={inspectorOpen}
 									working={groups.activeCount > 0}
 									onClick={() => (inspectorOpen ? setInspectorOpen(false) : openResource(null))}
@@ -714,7 +775,6 @@ export default function ChatView({
 						: undefined
 				}
 				resultOpener={resultOpener}
-				markResultSeen={markSeen}
 				openSubagentTranscript={setTranscriptChild}
 				readMcpOutput={readMcpOutput}
 				openMcpSettings={openMcpSettings}
@@ -733,10 +793,13 @@ export default function ChatView({
 							finishedSubagents={groups.finishedSubagents}
 							history={groups.history}
 							remaining={groups.remaining}
-							newIds={freshIds}
 							expanded={expandedResources}
 							onExpandedChange={(kind, expanded) =>
-								setExpandedResources((current) => ({ ...current, [kind]: expanded }))
+								setInspector((current) =>
+									current?.workspaceId === workspaceId && current.sessionId === sessionId
+										? { ...current, expanded: { ...current.expanded, [kind]: expanded } }
+										: current,
+								)
 							}
 							{...(resources.loadOlder ? { onLoadMore: resources.loadOlder } : {})}
 							retained={resources.retained}
@@ -773,6 +836,12 @@ export default function ChatView({
 										parentSessionId={sessionId}
 										childSessionId={selectedChild.childSessionId}
 									/>
+								) : selectedMcpServer ? (
+									<McpServerDetail
+										key={`${workspaceId}:${sessionId}:${selectedMcpServer}`}
+										status={mcpDetail.status}
+										calls={selectedMcpCalls}
+									/>
 								) : null
 							}
 						/>
@@ -781,6 +850,7 @@ export default function ChatView({
 				openProviderSettings={openProviderSettings}
 				findModel={findModel}
 				dockTarget={dockTarget}
+				onDockedInteractionChange={setDockedToolCallId}
 			/>
 			<div
 				ref={setDockTarget}
@@ -804,7 +874,8 @@ export default function ChatView({
 					commands={groups.commands}
 					subagents={groups.subagents}
 					finishedCount={groups.finishedCount}
-					freshCount={freshCount}
+					collapsed={dockCollapsed(dockFold, dockedToolCallId)}
+					onCollapsedChange={setDockCollapsed}
 					now={now}
 					authoritative={resources.authoritative}
 					staleness={resources.staleness}

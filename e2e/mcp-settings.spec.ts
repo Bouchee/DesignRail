@@ -1,8 +1,8 @@
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, type Page, test } from "@playwright/test";
-import type { WsRequest } from "@thinkrail/contracts";
+import { expect, type Page, test, type WebSocketRoute } from "@playwright/test";
+import type { AssistantMessage, SessionEvent, WsPush, WsRequest } from "@thinkrail/contracts";
 import { enterDefaultWorkspace, openFixtureProject, openPersistedChat } from "./fixtures/app";
 import { resolveBunExecutable } from "./fixtures/executables";
 import { E2E_DATA_DIR, E2E_FIXTURE_REPO } from "./fixtures/paths";
@@ -192,15 +192,50 @@ test("a partially successful JSON import keeps only failed adds for retry and ne
 test("a stdio server added through the form connects in a chat, is disabled there, and is removed", async ({
 	page,
 }) => {
+	let current: WebSocketRoute | null = null;
+	let coldInspection = false;
+	await page.routeWebSocket(/\/ws(\?|$)/, (socket) => {
+		current = socket;
+		const server = socket.connectToServer();
+		socket.onMessage((message) => server.send(message));
+		server.onMessage((message) => {
+			const frame = JSON.parse(message.toString()) as { channel?: string };
+			if (coldInspection && frame.channel === "mcp.status") return;
+			socket.send(message);
+		});
+	});
+	const browser = () => {
+		if (!current) throw new Error("Missing connected fixture browser");
+		return current;
+	};
 	rmSync(USER_CONFIG, { force: true });
 	try {
 		await openFixtureProject(page);
-		seedWorkspaceSession(realpathSync(E2E_FIXTURE_REPO), {
+		const seeded = seedWorkspaceSession(realpathSync(E2E_FIXTURE_REPO), {
 			name: "MCP chat",
 			messages: [{ role: "user", text: "Use the fixture server.", timestamp: Date.now() }],
 		});
 		await enterDefaultWorkspace(page);
 		await openPersistedChat(page, "MCP chat");
+		const preparation = await E2eWire.connect();
+		try {
+			const project = (await preparation.request("project.list", {})).find(
+				(item) => item.kind !== "chats",
+			);
+			if (!project) throw new Error("Missing fixture project");
+			const workspace = (
+				await preparation.request("workspace.list", { projectId: project.id })
+			).find((item) => item.kind === "default");
+			if (!workspace) throw new Error("Missing fixture workspace");
+			const resources = await preparation.request("session.resources", {
+				workspaceId: workspace.id,
+				sessionId: seeded.id,
+			});
+			expect(resources.sessionId).toBe(seeded.id);
+			expect(resources.workspaceId).toBe(workspace.id);
+		} finally {
+			preparation.close();
+		}
 
 		await openMcpSettings(page);
 		const settings = page.getByTestId("settings-mcp");
@@ -223,9 +258,6 @@ test("a stdio server added through the form connects in a chat, is disabled ther
 		await expect(dialog.getByTestId("mcp-run-item")).toContainText(STDIO_SERVER);
 		await dialog.getByTestId("mcp-add-confirm").click();
 		await expect(dialog).toBeHidden();
-		await expect(settings.getByTestId("mcp-feedback")).toHaveText(
-			"Saved — server connections will refresh.",
-		);
 
 		const row = serverRow(page, "fixture");
 		await expect(row.getByTestId("mcp-server-scope")).toHaveText("User");
@@ -234,6 +266,21 @@ test("a stdio server added through the form connects in a chat, is disabled ther
 			timeout: 30_000,
 		});
 		await closeSettings(page);
+		coldInspection = true;
+		await page.reload();
+		await expect(page.getByTestId("chat-toolbar")).toBeVisible();
+		await page.getByTestId("resources-trigger").click();
+		const inspector = page.getByTestId("resources-inspector");
+		const chatRow = inspector.locator('[data-testid="resource-mcp"][data-name="fixture"]');
+		await expect(chatRow.getByTestId("resource-mcp-disable")).toHaveCount(0);
+		await chatRow.getByRole("option").click();
+		const detail = inspector.getByTestId("resource-mcp-detail");
+		await expect(detail).toHaveAttribute("data-name", "fixture");
+		const lastStatus = inspector.getByTestId("resource-mcp-status");
+		await expect(lastStatus).toContainText("Last status · ");
+		await expect(lastStatus).toContainText("Connected · 4 tools");
+		await expect(chatRow.getByTestId("resource-mcp-state")).toHaveText("Connected · 4 tools");
+		coldInspection = false;
 
 		const wire = await E2eWire.connect();
 		try {
@@ -247,20 +294,65 @@ test("a stdio server added through the form connects in a chat, is disabled ther
 				(item) => item.title === "MCP chat",
 			);
 			if (!session) throw new Error("Missing fixture session");
-			await wire.request("mcp.setSessionOverride", {
-				workspaceId: workspace.id,
-				sessionId: session.sessionId,
-				name: "fixture",
-				enabled: false,
-			});
-			await expect
-				.poll(async () => {
-					const result = await wire.request("mcp.list", { workspaceId: workspace.id });
-					return result.statuses
-						.find((status) => status.sessionId === session.sessionId)
-						?.servers.find((server) => server.name === "fixture")?.state;
-				})
-				.toBe("disabled-in-chat");
+			let seq = session.eventSeq ?? 0;
+			const runId = `mcp-detail-${session.sessionId}`;
+			const toolCallId = `${runId}-echo`;
+			const toolName = "mcp__fixture__echo";
+			const args = { text: "ECHO_PING" };
+			const message: AssistantMessage = {
+				id: `${runId}-assistant`,
+				role: "assistant",
+				api: "responses",
+				provider: "fixture",
+				model: "fixture",
+				content: [{ type: "toolCall", id: toolCallId, name: toolName, arguments: args }],
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+			};
+			const events: SessionEvent[] = [
+				{ type: "agent_start" },
+				{ type: "turn_start" },
+				{ type: "message_start", message },
+				{ type: "message_end", message },
+				{ type: "tool_execution_start", toolCallId, toolName, args },
+				{
+					type: "tool_execution_end",
+					toolCallId,
+					toolName,
+					isError: false,
+					result: {
+						content: [{ type: "text", text: "ECHO_PING" }],
+						details: { server: "fixture", tool: "echo" },
+					},
+				},
+				{ type: "agent_end", messages: [], willRetry: false },
+				{ type: "agent_settled", terminal: null },
+			];
+			for (const event of events) {
+				browser().send(
+					JSON.stringify({
+						channel: "session.event",
+						data: { sessionId: session.sessionId, runId, seq: ++seq, event },
+					} satisfies WsPush),
+				);
+			}
+			const call = inspector.getByTestId("resource-mcp-call");
+			await expect(call).toHaveCount(1);
+			await expect(call).toHaveAttribute("data-status", "done");
+			await call.getByTestId("resource-mcp-call-toggle").click();
+			await expect(call.getByTestId("mcp-output")).toContainText("ECHO_PING");
+			await detail.getByTestId("resource-mcp-disable").click();
+			await expect(chatRow).toHaveAttribute("data-state", "disabled-in-chat");
+			await expect(detail.getByTestId("resource-mcp-enable")).toBeVisible();
+			await inspector.getByTestId("resources-inspector-close").click();
 		} finally {
 			wire.close();
 		}

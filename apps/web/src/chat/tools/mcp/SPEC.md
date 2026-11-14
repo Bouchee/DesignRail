@@ -10,7 +10,7 @@ tags: [chat, mcp]
 
 ## Responsibility
 
-Presentational renderers for pi's built-in MCP engine, joined by tool name: `McpToolCard` for every
+Presentational renderers for the host-owned SDK MCP results, joined by tool name: `McpToolCard` for every
 `mcp__<server>__<tool>` call (the registry's one prefix registration), `McpResourceListCard`
 (`list_mcp_resources`, `list_mcp_resource_templates`), `McpReadResourceCard` (`read_mcp_resource`),
 `ToolSearchCard` (`tool_search`), and the pure `mcpResult` readers. `register.ts` wires them as routine
@@ -76,7 +76,9 @@ standalone render) or a host older than MCP hides them.
 ## Boundary
 
 - **Owns:** these renderers, the `mcpResult` readers, and their registration.
-- **Public surface:** the side-effect `register` only (per-file imports, as in the parent).
+- **Public surface:** the side-effect `register`; `mcpResult`'s pure readers (the parent chat's
+  Resources MCP server detail reads `MCP_TOOL_PREFIX`, `readMcpToolDetails` and `mcpArgsSummary`).
+  Per-file imports, as in the parent.
 - **Allowed deps:** parent chat primitives (`toolRegistry`, `ChatActions`, `foldState`), sibling
   `Collapsible`; `@thinkrail/extension-api/web`; `contracts` (type-only — `McpToolDetails`,
   `McpResultSummary`, `McpContentBlockSummary`, `McpReadOutputResult`); `@thinkrail/ui/*`;

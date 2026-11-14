@@ -253,9 +253,8 @@ blocks in order into rows; `ChatTurnView` dispatches on row kind:
   the client holds it (the snapshot's window or a page loaded past it), a subagent it does not hold falls
   back to the transcript dialog, and a command has no fallback (no action). A row whose
   details carry a `delivery` marker leads with whether the agent received it ("Agent received") or will
-  react with the user's next message (`appended`); expanding or opening it marks the result seen
-  through `ChatActions.markResultSeen`. The rows never infer current resource authority. Never folded
-  into activity groups.
+  react with the user's next message (`appended`). The rows never infer current resource authority.
+  Never folded into activity groups.
 - `reviewFix` — a `todo-review-fix` custom message (#363): a plan-review verdict's fix request the host
   delivers to the worker chat as **structured `ReviewFixDetails`** (not a synthetic user turn). Rendered as
   a compact `ReviewFixCard` (`turns.tsx`, `data-testid="review-fix-card"`) — a one-line summary
@@ -534,7 +533,9 @@ both message orders. *Rejected:* keeping the modal for non-MCP extensions — ev
   `max-h` is the *Question panel height* setting in `cqh` (`--question-panel-height`, set beside
   `--chat-transcript-width`), and as a shrinkable `min-h-0` item it lets the transcript shrink to nothing at
   100%. The transcript's scroller ResizeObserver keeps the latest edge pinned while following and the
-  reading position while detached, so opening, collapsing and closing the dock need no scroll code.
+  reading position while detached, so opening, collapsing and closing the dock need no scroll code. It
+  also reports the docked call's id to `ChatView`, which folds the Resources dock meanwhile (Chat
+  Resources, below).
   *Rejected:* a self-subscribing dock component in `ChatView` sharing the plan page's
   `PlanInteractionCard` — a second runtime subscription, a second provider stack and a second focus scope
   to reconcile with the transcript's. An unanchored extension prompt keeps its own dock inside the
@@ -559,8 +560,7 @@ both message orders. *Rejected:* keeping the modal for non-MCP extensions — ev
   standing on, and focus would otherwise fall to `<body>` and swallow every following keystroke (the same
   stranding the history overlay's dismiss refocus avoids). Only the card's own reply path calls it, and
   only while the card still holds focus. Plus `openSubagentTranscript(childSessionId)` — the subagent
-  cards' transcript link (no provider → the cards hide the action) — and `markResultSeen(target)`, a
-  background result row reporting that the user opened it.
+  cards' transcript link (no provider → the cards hide the action).
   Plus `openWorkspace({ workspaceId, projectId, sessionId? }, gone?)` (`openWorkspace.ts`), the one way
   a card opens another workspace's chat: the `start_workspace` card, Continue in workspace's Open and
   follow, and the handoff's source. A workspace the store holds is activated under its own project while
@@ -1647,29 +1647,43 @@ extends the shared controls with `mcp.setSessionOverride` (Disable / Enable in t
 next idle reload) and `mcp.reconnect`, keyed `mcp:<name>` beside the stop actions. `ChatView` adds the
 connected/starting servers to the trigger's count without making it breathe, mounts `ResourcesAttention`
 beside the trigger while a server needs sign-in, failed or awaits approval, and deep-links that marker and
-the rows' Sign in / Review / Edit to `openSettings(SettingsSection.Mcp)`. While the inspector is open on a
-chat with servers it runs `watchMcpWorkspace`, restarted on every connected generation so a reconnect
-gets a fresh bounded read: the host publishes no edge when a server finishes
-connecting, and the `mcp.list` re-read is what makes it refresh status and push `session.resourcesChanged`.
-The divider's "still running" chip and the dock keep counting work only. No PID is shown — pi exposes
-none — and there is no immediate per-server stop.
+the rows' Sign in / Review / Edit to `openSettings(SettingsSection.Mcp)`. While an MCP detail is selected it runs `watchMcpWorkspace`, restarted on each connected generation
+so a fresh window and reconnect hydrate the recorded status. Selected status changes refresh the existing
+Resources read, keeping the roster/header and actions consistent with the detail without a second state owner.
+The divider's "still running" chip and the dock keep counting work only. The owned MCP snapshot
+exposes neither a PID nor an immediate per-server stop action.
 
-**New results.** `useFreshResults` tells the user a background result exists before or regardless of
-when the agent receives it (user-settled, 2026-10: "Resources announces, the chat marks receipt").
-A finished command or background (`detached`) subagent is **new** until the user opens it — the
-inspector selection once it has finished, or its chat result row (`ChatActions.markResultSeen`) — or
-sends the next message. `ChatView` passes their count to the dock's finished line and the trigger, and
-lands that line's Open on the newest new result, else the newest finished one (`newestResourceId`).
-The seen set is client UI state under a host-qualified localStorage key per chat: a client's first
-visit baselines everything already finished as seen (an acknowledgement before that first
-authoritative snapshot keeps the baseline pending), later visits surface what finished while away,
-and every send resets the set to the current finished list, so it stays bounded by the snapshot. Only the
-snapshot's window of recent finished records (`groups.recentFinished`) can be new: history paged in later
-predates every visit that could have seen it, so it never lights up.
+**MCP server detail.** Selecting a server (`mcpResourceId`) fills the inspector's detail slot with
+`McpServerDetail`, a props-driven body. `ChatView` supplies the host's last status line(s) and time from
+this chat's held `mcp.status` snapshot, hydrating an inspected server with the existing generation-fenced
+`watchMcpWorkspace` helper even in a fresh window. Successful statuses without a diagnostic detail show
+the shared translated state label beside their recorded time. The view also shows **Calls in this chat** — newest first, each a
+collapsed row (state, tool, argument one-liner, clock time) that expands into the transcript's own
+`ToolRendererBody`, so the card is identical. The pure `mcpServerCalls` reads the chat's turns: an
+`mcp__*` call belongs to its result's owned `details.server` / `details.tool`. Before details arrive,
+match only the current SDK host's exact namespace, `mcp__<server with - replaced by _>__`, against
+this chat's known servers. The host rejects invalid, duplicate or over-64-character names; it does not
+shorten or hash them. If more than one known prefix matches, leave the call unassigned until owned
+details identify it. The three MCP resource tools prefer owned result details and otherwise their explicit `server` argument; a
+listing across all servers belongs to none. The detail reads only this chat's transcript and held
+status snapshot, never child or other-chat calls. Declared calls remain neutral until an execution
+state arrives. It reuses the existing tool renderer and ChatActions for full-output and Settings
+requests; selecting a different chat or server remounts the detail's local folds and dialogs.
+
+**Dock fold.** `ChatView` owns the dock's fold (`dockFold.ts`, keyed by workspace + chat like the
+inspector state), so the choice survives the dock unmounting while the inspector is open. While the
+interaction dock holds a call, the Resources dock is folded (user-settled, 2026-11): `ChatTranscript`
+reports the docked call's id (`onDockedInteractionChange`, a layout effect so the dock never paints
+unfolded first), a toggle made during that question applies to that call only, and when it leaves the
+dock the previous choice — or the count default — returns; the next question folds it again. Deriving
+the docked call in `ChatView` instead was rejected: it would re-render the whole view on every streamed
+delta.
 
 The dependency edges are `ChatView`/`useChatResources` → `resources`, `store`, `transport`,
 `BackgroundResult` → `resources` (`ResultRow`, the run label as its `metaLead`), `tools/subagent`
-(`runDetails` helpers) and `ModelEffortLabel`, and `ChatView` → the transcript pane. The `resources`
+(`runDetails` helpers) and `ModelEffortLabel`, `McpServerDetail`/`mcpServerCalls` → `tools/mcp`
+(the pure `mcpResult` readers) and `ToolRendererBody`, and `ChatView` → the transcript pane and
+`McpServerDetail`. The `resources`
 child stays props-only and imports no sibling tool implementation; it receives the shared 30 s clock as a `now` prop. Command logs are fetched by the
 integration hook and passed into its read-only view; the module never loads xterm.
 
@@ -1696,8 +1710,8 @@ to their action and current connection; acknowledgement and detail-close focus s
 `history:<kind>`, offered only by a host at `RESOURCE_HISTORY_PROTOCOL_VERSION` whose snapshot carries
 `history`): it asks `session.resourceHistory` for the page before the oldest finished record the store
 holds and hands it to the store, which keeps it only if it still continues that chain. `ChatView` owns the
-inspector's per-kind expansion beside its selection and resets both on every open; it passes the current
-new results as the inspector's `newIds` and tells the command log whether its row was interrupted and
+inspector's per-kind expansion beside its selection and resets both on every open; it tells the command
+log whether its row was interrupted and
 whether the host keeps logs (`retained`). No per-token subagent progress or tool-result rewriting is needed
 for the header count.
 
@@ -1739,7 +1753,6 @@ Unknown custom messages retain their existing behavior.
   its `requestContinuation`), plus the hooks and dialogs
   it composes: `useChatTodos.ts`, `useHistorySearch.ts`,
   `useModelCatalog.ts`, **`useChatResources.ts`** (the Resources hydration/control/log-read seam),
-  **`useFreshResults.ts`** (the per-chat "new result" seen set),
   **`useSessionStats.ts`** (generation/revision-fenced authoritative telemetry reads),
   **`useTranscriptSync.ts`** (successful-compaction + connection-generation canonical transcript
   reconciliation), `SkillsDialog.tsx`, **`useProjectTrustSummary.ts`** (the trust-summary read the Skills

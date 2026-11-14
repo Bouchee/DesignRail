@@ -60,7 +60,7 @@ renderers are registered by the host's `extensions/registry.ts`. Unregistered to
   path. `spec_delete` never links its successful deleted path. Routine.
 - **`web/`** — search/fetch/stored-content renderers for `pi-web-access`; own child spec
   ([web/SPEC.md](web/SPEC.md)). Routine.
-- **`mcp/`** — pi's built-in MCP tools: the `mcp__*` card (server / tool, key/value args, ordered text,
+- **`mcp/`** — the host-owned SDK MCP tools: the `mcp__*` card (server / tool, key/value args, ordered text,
   collapsed JSON tree of the host's structured-content summary, Full output, sign-in action), the
   resource listing/read cards and `tool_search`; own child spec ([mcp/SPEC.md](mcp/SPEC.md)). Routine.
 - **The five `todo_*` tools** deliberately keep routine fallback receipts: their connected product surface
@@ -78,7 +78,9 @@ renderers are registered by the host's `extensions/registry.ts`. Unregistered to
 ## Boundary
 
 - **Public surface:** the side-effect `register` import + shared `CodeBlock`/`Collapsible` for sibling
-  renderers. No barrel (chat pulls the highlighter — per-file imports, as in the parent).
+  renderers, and pure readers the parent reuses outside a card: `subagent/runDetails` (result rows) and
+  `mcp/mcpResult` (the Resources MCP server detail). No barrel (chat pulls the highlighter — per-file
+  imports, as in the parent).
 - **Allowed deps:** parent chat primitives (`toolRegistry`, `Markdown`, `ChatActions`, `interactionState`,
   `fileTargets`, `foldState`, `HighlightedHtml`);
   `contracts` (types and pure guards); `@thinkrail/ui/*` (including

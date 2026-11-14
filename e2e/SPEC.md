@@ -172,6 +172,10 @@ idle Skill reload through the real host route. `chat-resources.spec.ts` checks c
 empty inspector, reload and usable phone composer focus. Metadata stays current while the inspector
 is closed. Detail reads and controls remain bound to host-reported resources.
 
+The dock folds at any active count and keeps that choice across the inspector; a docked question folds
+the rows. MCP server selection shows its status and this chat's calls, using owned transcript fixtures
+for browser presentation checks and the existing MCP card for expanded call details.
+
 Props-only inspector/dock/detail rendering remains covered by `resources/resources.test.tsx` and
 projection ownership, failures and controls by `useChatResources.test.ts`. Those checks cover markup,
 selected state and bounded data behavior. Browser and focused live gates separately check compiled
