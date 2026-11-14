@@ -18,6 +18,7 @@ export interface DiffRange {
 const OID = /^[0-9a-f]{4,64}$/;
 
 function throwExecutionFailure(result: GitResult): void {
+	throwOnTimeout(result, "resolve the diff range");
 	if (result.failure)
 		throw new Error(`Could not resolve the diff range: ${result.err || "git failed"}`);
 }

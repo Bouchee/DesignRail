@@ -43,6 +43,23 @@ posix("the async HEAD probe throws GIT_TIMEOUT instead of reporting no commit", 
 	});
 });
 
+posix("a stalled merge-base probe preserves GIT_TIMEOUT", async () => {
+	const bin = join(dir, "bin");
+	mkdirSync(bin);
+	writeFileSync(
+		join(bin, "git"),
+		'#!/bin/sh\ncase " $* " in *" merge-base "*) sleep 30;; *) exit 1;; esac\n',
+	);
+	chmodSync(join(bin, "git"), 0o755);
+	process.env.PATH = `${bin}${delimiter}${savedPath ?? ""}`;
+	asyncDeadlineMs = 300;
+
+	const ws = { baseBranch: "main", worktreePath: dir };
+	await expect(resolveDiffRange(ws, { kind: "branch" })).rejects.toMatchObject({
+		code: "GIT_TIMEOUT",
+	});
+});
+
 posix("a stalled HEAD probe is never read as an unborn HEAD", async () => {
 	const executable = Bun.which("git");
 	if (!executable) throw new Error("git not found");
