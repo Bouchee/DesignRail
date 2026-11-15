@@ -14,7 +14,8 @@ Images in chat history and tool results load on demand, with a Retry action when
 Artifacts lists workspace deliverables with their writing chat and keeps the latest copy after an
 external deletion; opening a deleted artifact restores it first. Diagrams and comparisons also save as
 Markdown artifacts. Files and Artifacts share Cut/Paste, rename and move; ignored build outputs are listed without kept copies.
-The focused workbench region stays at full contrast while others dim. F6 cycles regions; Mod+L focuses
+An accent line marks the focused workbench region; keyboard arrivals briefly show a frame.
+F6 first highlights the current region, then cycles regions while the frame is visible; Mod+L focuses
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
 palette offers these actions and desktop zoom controls. Controls that disappear or become disabled
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
