@@ -2,7 +2,7 @@ import { RiExternalLinkLine as ExternalLink } from "@remixicon/react";
 import type { ReactNode } from "react";
 
 const LINK =
-	"inline-flex items-center gap-2 rounded-sm text-primary underline underline-offset-2 outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary";
+	"inline-flex items-center gap-2 rounded-sm text-primary underline underline-offset-2 hover:opacity-80 focus-visible:focus-ring";
 
 export function NoticeLink({ href, children }: { href: string; children: ReactNode }) {
 	return (

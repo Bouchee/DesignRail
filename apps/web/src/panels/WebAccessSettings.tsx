@@ -77,7 +77,7 @@ export function WebAccessSettings() {
 					disabled={saving}
 					onChange={(event) => setApiKey(event.target.value)}
 					placeholder={t("settings.webAccess.placeholder")}
-					className="h-32 w-full min-w-0 rounded-sm border border-control-border-default bg-control-bg px-8 tr-text-ui text-text-default outline-none placeholder:text-text-muted focus:border-control-border-active"
+					className="h-32 w-full min-w-0 rounded-sm border border-control-border-default bg-control-bg px-8 tr-text-ui text-text-default placeholder:text-text-muted focus:border-control-border-active focus-visible:focus-ring"
 				/>
 				<div className="flex gap-8">
 					<Button
