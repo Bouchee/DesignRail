@@ -234,6 +234,7 @@ test("an approval lists the call's whole input inside the prompt, anchored or do
 		bound: list.clientHeight <= window.innerHeight * 0.4 + 1,
 	}));
 	expect(bounded).toEqual({ scrolls: true, bound: true });
+	await input.click();
 	await input.evaluate((list) => {
 		list.scrollTop = list.scrollHeight;
 	});
