@@ -79,7 +79,10 @@ for (const completed of [true, false]) {
 				writeFileSync(file, JSON.stringify(record));
 			}
 			await page.reload();
-			await page.getByTestId("chat-item").getByRole("button").first().click();
+			await page
+				.locator(`[data-testid="chat-item"][data-focus-row="${source.workspace.id}"]`)
+				.getByRole("treeitem")
+				.click();
 			await expect(page.getByTestId("scope-context")).toHaveAttribute("data-context", "chat");
 			await openPersistedChat(page, "Stored continuation");
 			const card = page.getByTestId("continuation-card");
