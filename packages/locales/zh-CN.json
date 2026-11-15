@@ -1408,6 +1408,7 @@
 	"review.thread.outdated": "{{status}} · 已失效",
 	"review.thread.stale": "{{status}} · 已过期",
 	"review.widget.commentOnSelection": "评论所选内容",
+	"search.item.noProject": "无项目",
 	"settings.appearance.changeFailed": "无法更改主题",
 	"settings.appearance.contrast.high": "高",
 	"settings.appearance.contrastLevel": "对比度",

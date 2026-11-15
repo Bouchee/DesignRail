@@ -1618,6 +1618,7 @@
 	"review.thread.outdated": "{{status}} · устарел",
 	"review.thread.stale": "{{status}} · изменён",
 	"review.widget.commentOnSelection": "Комментировать выделенное",
+	"search.item.noProject": "Без проекта",
 	"settings.appearance.changeFailed": "Не удалось изменить тему",
 	"settings.appearance.contrast.high": "Высокая",
 	"settings.appearance.contrastLevel": "Уровень контрастности",
