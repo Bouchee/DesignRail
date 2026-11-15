@@ -63,6 +63,7 @@ import {
 	toggleRightSide,
 } from "./chordActions";
 import { FindInFilesHost } from "./FindInFilesHost";
+import { installFocusRecovery } from "./focusRecovery";
 import { LayoutSettings } from "./LayoutSettings";
 import { useLocalLayoutState } from "./layoutState";
 import { LocationBar } from "./locationBar";
@@ -194,6 +195,7 @@ export function Shell() {
 		userFonts,
 	]);
 	useEffect(installRegionTracker, []);
+	useEffect(installFocusRecovery, []);
 	useGlobalHotkeys({
 		onProjects: () => toggleLeftSide(homeProjects.toggle),
 		...(hasActiveWorkspace

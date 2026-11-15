@@ -1179,6 +1179,7 @@ interface AppState {
 		workspaceId: string;
 		commentId: string;
 		surface: ReviewFocusSurface;
+		moveFocus: boolean;
 	} | null;
 	fsChangesByWorkspace: Record<string, { tick: number; paths: string[]; truncated: boolean }>;
 	skillChangeTickByWorkspace: Record<string, number>;
@@ -1353,7 +1354,7 @@ interface AppState {
 	consumeChangesTabReveal: (
 		workspaceId: string,
 		id: string,
-		target: { path: string; commentId?: string } | null,
+		target: { path: string; commentId?: string; moveFocus?: boolean } | null,
 	) => void;
 	setChangesTabSectionRenderer: (
 		workspaceId: string,
@@ -3446,6 +3447,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 							workspaceId,
 							commentId: target.commentId,
 							surface: { kind: "diff", scope },
+							moveFocus: target.moveFocus === true,
 						},
 					}
 				: patched;
@@ -4970,7 +4972,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 		set((state) =>
 			state.removedWorkspaceIds[workspaceId]
 				? {}
-				: { reviewFocusRequest: { workspaceId, commentId, surface } },
+				: { reviewFocusRequest: { workspaceId, commentId, surface, moveFocus: true } },
 		),
 	clearReviewFocus: (commentId) =>
 		set((state) =>

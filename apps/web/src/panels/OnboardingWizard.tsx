@@ -12,11 +12,21 @@ import type { ProviderStatus } from "@thinkrail/contracts";
 import type { MessageKey } from "@thinkrail/locales";
 import { useT } from "@thinkrail/locales/react";
 import { Button } from "@thinkrail/ui/button";
+import { focusFirstControl } from "@thinkrail/ui/focus";
 import { cn } from "@thinkrail/ui/utils";
-import { type ReactNode, useEffect, useEffectEvent, useState } from "react";
+import {
+	type ReactNode,
+	type RefObject,
+	useEffect,
+	useEffectEvent,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { PRODUCT_NAME } from "@/constants/branding";
 import { useAppStore } from "@/store";
 import { getTransport } from "@/transport";
+import { hasLayer, MODAL_LAYER_SELECTOR } from "../lib";
 import { ConnectedLine, type ConnectedSummary } from "./ConnectedLine";
 import { ConnectProviderOptions, connectedProviderName } from "./ConnectProviderOptions";
 
@@ -60,23 +70,38 @@ export function OnboardingWizard({
 	const [connected, setConnected] = useState<ConnectedSummary | null>(null);
 	const [done, setDone] = useState(false);
 	const skip = onSkip;
+	const shownStep = done ? "done" : step;
+	const rootRef = useRef<HTMLDivElement>(null);
+	const titleRef = useRef<HTMLHeadingElement>(null);
+	const titledStep = useRef(shownStep);
+	useLayoutEffect(() => {
+		if (titledStep.current === shownStep) return;
+		titledStep.current = shownStep;
+		const active = document.activeElement;
+		if (hasLayer(document, MODAL_LAYER_SELECTOR)) return;
+		if (active !== document.body && !rootRef.current?.contains(active)) return;
+		titleRef.current?.focus();
+	}, [shownStep]);
 
 	return (
 		<div
+			ref={rootRef}
 			data-testid="onboarding-wizard"
-			data-step={done ? "done" : step}
+			data-step={shownStep}
 			className="flex w-full max-w-[640px] flex-col items-center gap-24"
 		>
 			{step === "intro" ? (
 				<IntroStep
+					titleRef={titleRef}
 					onStart={() => {
 						setStep("connect");
 					}}
 				/>
 			) : done && connected ? (
-				<DoneStep connected={connected} projectCards={projectCards} />
+				<DoneStep titleRef={titleRef} connected={connected} projectCards={projectCards} />
 			) : (
 				<ConnectStep
+					titleRef={titleRef}
 					provider={provider}
 					connected={connected}
 					onPick={(fresh) => {
@@ -108,7 +133,13 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
 	);
 }
 
-function IntroStep({ onStart }: { onStart: () => void }) {
+function IntroStep({
+	titleRef,
+	onStart,
+}: {
+	titleRef: RefObject<HTMLHeadingElement | null>;
+	onStart: () => void;
+}) {
 	const t = useT();
 	return (
 		<div data-testid="onboarding-intro" className="flex flex-col items-center gap-24 text-center">
@@ -116,7 +147,12 @@ function IntroStep({ onStart }: { onStart: () => void }) {
 				<span className="tr-text-eyebrow text-text-muted">
 					{t("panels.onboarding.intro.welcomeTo")}
 				</span>
-				<h1 data-testid="welcome-title" className="tr-brand-hero text-primary">
+				<h1
+					ref={titleRef}
+					tabIndex={-1}
+					data-testid="welcome-title"
+					className="tr-brand-hero text-primary"
+				>
 					{PRODUCT_NAME}
 				</h1>
 				<p className="tr-heading-sm text-text-default">{t("panels.onboarding.intro.tagline")}</p>
@@ -147,16 +183,23 @@ function IntroStep({ onStart }: { onStart: () => void }) {
 }
 
 function DoneStep({
+	titleRef,
 	connected,
 	projectCards,
 }: {
+	titleRef: RefObject<HTMLHeadingElement | null>;
 	connected: ConnectedSummary;
 	projectCards: ReactNode;
 }) {
 	const t = useT();
 	return (
 		<div className="flex flex-col items-center gap-24 motion-safe:animate-reveal">
-			<h1 data-testid="welcome-title" className="tr-brand-hero break-words text-primary">
+			<h1
+				ref={titleRef}
+				tabIndex={-1}
+				data-testid="welcome-title"
+				className="tr-brand-hero break-words text-primary"
+			>
 				{t("panels.welcome.connectedTitle")}
 			</h1>
 			<ConnectedLine summary={connected} />
@@ -166,6 +209,7 @@ function DoneStep({
 }
 
 function ConnectStep({
+	titleRef,
 	provider,
 	connected,
 	onPick,
@@ -173,6 +217,7 @@ function ConnectStep({
 	onVerified,
 	onSkip,
 }: {
+	titleRef: RefObject<HTMLHeadingElement | null>;
 	provider: ProviderStatus | null;
 	connected: ConnectedSummary | null;
 	onPick: (provider: ProviderStatus) => void;
@@ -181,6 +226,29 @@ function ConnectStep({
 	onSkip: () => void;
 }) {
 	const t = useT();
+	const optionsRef = useRef<HTMLDivElement>(null);
+	const backTo = useRef<string | null>(null);
+	const back = () => {
+		backTo.current = provider?.id ?? null;
+		onBack();
+	};
+	useLayoutEffect(() => {
+		if (provider !== null || backTo.current === null) return;
+		const id = backTo.current;
+		backTo.current = null;
+		const options = optionsRef.current;
+		if (!options || hasLayer(document, MODAL_LAYER_SELECTOR)) return;
+		if (
+			document.activeElement !== document.body &&
+			!options.parentElement?.contains(document.activeElement)
+		)
+			return;
+		const picked = Array.from(options.querySelectorAll<HTMLElement>("[data-endpoint]")).find(
+			(row) => row.dataset.endpoint === id,
+		);
+		if (picked) focusFirstControl(picked);
+		else focusFirstControl(options);
+	}, [provider]);
 	return (
 		<div
 			inert={connected !== null}
@@ -190,17 +258,22 @@ function ConnectStep({
 			)}
 		>
 			<div className="flex flex-col items-center gap-8 text-center">
-				<h1 data-testid="welcome-title" className="tr-heading-xl break-words text-primary">
+				<h1
+					ref={titleRef}
+					tabIndex={-1}
+					data-testid="welcome-title"
+					className="tr-heading-xl break-words text-primary"
+				>
 					{t("panels.connectProvider.title")}
 				</h1>
 				<p className="tr-text-reading text-text-muted">{t("panels.connectProvider.description")}</p>
 			</div>
 			<div className="relative w-full">
-				<div inert={provider !== null}>
+				<div ref={optionsRef} inert={provider !== null}>
 					<ConnectProviderOptions configuredAtStart={[]} onConnected={onPick} />
 				</div>
 				{provider ? (
-					<VerifyConnection provider={provider} onBack={onBack} onVerified={onVerified} />
+					<VerifyConnection provider={provider} onBack={back} onVerified={onVerified} />
 				) : null}
 			</div>
 			<SkipButton onSkip={onSkip} />

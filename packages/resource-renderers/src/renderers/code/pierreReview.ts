@@ -3,6 +3,7 @@ import type { MessageKey } from "@thinkrail/locales";
 import { t } from "@thinkrail/locales/react";
 import { type RefObject, useEffect } from "react";
 import type { AnchorDraft, ResourceDiffProps, ReviewThread, SurfaceReview } from "../../registry";
+import { focusCommentCardWhenRendered, revealReviewCard } from "../../support/revealFocus";
 import type { PierreVirtualizer } from "./pierreVirtualizer";
 
 export const COLLAPSED_CONTEXT_THRESHOLD = 3;
@@ -205,6 +206,7 @@ export function usePierreFocus(
 	);
 	const focused = focusedSurface?.review?.focus ?? null;
 	const focusId = focused?.id ?? null;
+	const moveFocus = focused?.moveFocus === true;
 	const focusLine = focused ? (threadLineRange(focused)?.endLine ?? null) : null;
 	const focusSide = focusedSurface?.side;
 	const onFocusHandled = surfaces.find(({ review }) => review?.focus?.id === focusId)?.review
@@ -213,8 +215,17 @@ export function usePierreFocus(
 		if (!focusId || !onFocusHandled) return;
 		let card: HTMLElement | undefined;
 		let handled = false;
+		let releaseFocus: (() => void) | undefined;
 		let lineRevealed = focusLine === null;
 		const sizeObserver = new ResizeObserver(() => reveal());
+		const finish = () => {
+			if (handled) return;
+			handled = true;
+			releaseFocus?.();
+			onFocusHandled();
+			sizeObserver.disconnect();
+			mutationObserver.disconnect();
+		};
 		const findCard = () => {
 			const next = [
 				...(rootRef.current?.querySelectorAll<HTMLElement>("[data-comment-id]") ?? []),
@@ -233,11 +244,12 @@ export function usePierreFocus(
 				lineRevealed = virtualizer.revealLine(focusLine, focusSide);
 			}
 			if (!target || !rendered || handled) return;
-			handled = true;
-			target.scrollIntoView({ block: "center" });
-			onFocusHandled();
-			sizeObserver.disconnect();
-			mutationObserver.disconnect();
+			if (!revealReviewCard(target, moveFocus)) {
+				if (!releaseFocus)
+					releaseFocus = focusCommentCardWhenRendered(() => rootRef.current, focusId, finish);
+				return;
+			}
+			finish();
 		};
 		const mutationObserver = new MutationObserver(reveal);
 		const root = rootRef.current;
@@ -245,8 +257,9 @@ export function usePierreFocus(
 		if (root?.firstElementChild) sizeObserver.observe(root.firstElementChild);
 		reveal();
 		return () => {
+			releaseFocus?.();
 			sizeObserver.disconnect();
 			mutationObserver.disconnect();
 		};
-	}, [focusId, focusLine, focusSide, onFocusHandled, rootRef, virtualizer]);
+	}, [focusId, focusLine, focusSide, moveFocus, onFocusHandled, rootRef, virtualizer]);
 }

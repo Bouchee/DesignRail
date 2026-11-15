@@ -24,6 +24,7 @@ import {
 	revealLineNow,
 	syncFileModel,
 } from "./monacoSetup";
+import { focusCommentCardWhenRendered } from "./revealFocus";
 import {
 	applyReviewDecorations,
 	attachReviewCommenting,
@@ -70,6 +71,8 @@ export default function MonacoEditor({
 	const threadsRef = useRef<ReturnType<typeof attachReviewThreads> | null>(null);
 	const decorationsRef = useRef<string[]>([]);
 	const freshMountRef = useRef(false);
+	const pendingFocus = useRef<(() => void) | null>(null);
+	useLayoutEffect(() => () => pendingFocus.current?.(), [path]);
 	const appliedRef = useRef({ scope, path, text, options });
 	const latestRef = useRef({
 		scope,
@@ -178,6 +181,10 @@ export default function MonacoEditor({
 		if (line === null) return;
 		if (freshMount) revealLineNow(codeEditor, line);
 		else codeEditor.revealLineInCenter(line);
+		const focus = review.focus;
+		if (focus) pendingFocus.current?.();
+		if (focus?.moveFocus)
+			pendingFocus.current = focusCommentCardWhenRendered(() => containerRef.current, focus.id);
 		review.onFocusHandled();
 	}, [review]);
 

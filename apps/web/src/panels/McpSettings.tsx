@@ -255,6 +255,7 @@ export function McpServerRowView({
 	return (
 		<li
 			data-testid="mcp-server-row"
+			data-focus-row={row.key}
 			data-name={summary.name}
 			data-scope={summary.scope}
 			data-state={row.state}
@@ -353,6 +354,7 @@ export function McpServerRowView({
 								icon={MoreVertical}
 								label={t("mcp.server.more", { name: summary.name })}
 								data-testid="mcp-server-menu"
+								data-focus-row-primary
 							/>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
@@ -656,6 +658,7 @@ export function McpEmptyState({
 					size="m"
 					iconLeft={Plus}
 					data-testid="mcp-empty-add"
+					data-focus-fallback="mcp-servers"
 					disabled={disabled}
 					onClick={onAdd}
 				>
@@ -977,7 +980,11 @@ function McpWorkspaceSettings({ workspace }: { workspace: Workspace }) {
 					onPreset={(preset) => setAdding({ tier: "form", preset, key: Date.now() })}
 				/>
 			) : (
-				<ul className="flex flex-col gap-4" data-testid="mcp-server-list">
+				<ul
+					className="flex flex-col gap-4"
+					data-testid="mcp-server-list"
+					data-focus-list="mcp-servers"
+				>
 					{rows.map((row) => (
 						<McpServerRowView
 							key={row.key}

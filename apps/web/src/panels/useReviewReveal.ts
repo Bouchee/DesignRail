@@ -1,4 +1,5 @@
 import type { GitFileChange, GitStatus } from "@thinkrail/contracts";
+import { focusFirstControl } from "@thinkrail/ui/focus";
 import {
 	type RefObject,
 	useCallback,
@@ -8,14 +9,21 @@ import {
 	useState,
 } from "react";
 import type { VirtuosoHandle } from "react-virtuoso";
-import { type ChangesLayout, type ChangesTabReveal, useAppStore } from "../store";
+import {
+	type ChangesLayout,
+	type ChangesTabReveal,
+	isNavigationChange,
+	useAppStore,
+} from "../store";
+
+import { clearOwnedReviewFocus, guardReviewFocus } from "./revealFocus";
 
 const SECTION_HEADER_HEIGHT = 32;
 const END_NOTE_HEIGHT = 48;
 const HANDOFF_MAX_FRAMES = 30;
 const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
-type SettleTarget = { path: string; commentId?: string };
+type SettleTarget = { path: string; commentId?: string; focus?: boolean };
 
 interface ReviewRevealInput {
 	workspaceId: string;
@@ -37,6 +45,7 @@ interface ReviewReveal {
 	onTotalListHeightChanged: () => void;
 	handoffPath: string | null;
 	startHandoff: (path: string | null) => void;
+	focusNextCommentReveal: (focus: boolean) => void;
 }
 
 export function useReviewReveal({
@@ -60,11 +69,42 @@ export function useReviewReveal({
 	const restoredStacked = useRef(false);
 	const [handoffPath, setHandoffPath] = useState<string | null>(null);
 	const settling = useRef<SettleTarget | null>(null);
-	const releaseSettling = useCallback(() => {
-		const commentId = settling.current?.commentId;
-		settling.current = null;
-		if (commentId) useAppStore.getState().clearReviewFocus(commentId);
+	const pendingFocus = useRef<(() => void) | null>(null);
+	const ownedFocus = useRef<ReturnType<typeof useAppStore.getState>["reviewFocusRequest"]>(null);
+	const focusCommentReveal = useRef(false);
+	const focusNextCommentReveal = useCallback((focus: boolean) => {
+		focusCommentReveal.current = focus;
 	}, []);
+	const releaseSettling = useCallback(() => {
+		pendingFocus.current?.();
+		pendingFocus.current = null;
+		const owned = ownedFocus.current;
+		ownedFocus.current = null;
+		settling.current = null;
+		if (owned) clearOwnedReviewFocus(owned);
+	}, []);
+	useEffect(() => {
+		const cancel = () => {
+			focusCommentReveal.current = false;
+			releaseSettling();
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (!event.repeat) cancel();
+		};
+		const unsubscribe = useAppStore.subscribe((state, previous) => {
+			if (isNavigationChange(state, previous)) cancel();
+		});
+		window.addEventListener("keydown", onKeyDown, true);
+		window.addEventListener("pointerdown", cancel, true);
+		window.addEventListener("blur", cancel);
+		return () => {
+			unsubscribe();
+			cancel();
+			window.removeEventListener("keydown", onKeyDown, true);
+			window.removeEventListener("pointerdown", cancel, true);
+			window.removeEventListener("blur", cancel);
+		};
+	}, [releaseSettling, workspaceId, tabId]);
 	const detachScroller = useRef<(() => void) | null>(null);
 	const attachScroller = useCallback(
 		(element: HTMLElement | Window | null) => {
@@ -129,6 +169,10 @@ export function useReviewReveal({
 		);
 		if (!card) return false;
 		card.scrollIntoView({ block: "center" });
+		const target = settling.current;
+		if (target?.focus && focusFirstControl(card) && settling.current === target) {
+			settling.current = { ...target, focus: false };
+		}
 		return true;
 	}, []);
 	const spyActiveSection = useCallback(() => {
@@ -167,11 +211,18 @@ export function useReviewReveal({
 			...(reveal.commentId ? { commentId: reveal.commentId } : {}),
 		};
 		releaseSettling();
-		consumeReveal(workspaceId, tabId, target);
+		const focus = focusCommentReveal.current;
+		focusCommentReveal.current = false;
+		const previousFocus = useAppStore.getState().reviewFocusRequest;
+		consumeReveal(workspaceId, tabId, focus ? { ...target, moveFocus: true } : target);
 		if (layout === "stacked") {
 			restoredStacked.current = true;
-			scrollToSection(index, target);
+			scrollToSection(index, focus ? { ...target, focus } : target);
 		}
+		const request = useAppStore.getState().reviewFocusRequest;
+		if (request !== previousFocus) ownedFocus.current = request;
+		if (focus && request && ownedFocus.current === request)
+			pendingFocus.current = guardReviewFocus(request);
 	}, [
 		consumeReveal,
 		files,
@@ -260,5 +311,6 @@ export function useReviewReveal({
 		onTotalListHeightChanged,
 		handoffPath,
 		startHandoff: setHandoffPath,
+		focusNextCommentReveal,
 	};
 }
