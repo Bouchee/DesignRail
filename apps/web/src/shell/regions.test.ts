@@ -72,6 +72,7 @@ describe("delayed explicit focus", () => {
 		readonly isConnected = true;
 		readonly dataset: { tabKey?: string; chatWorkspace?: string; chatSession?: string } = {};
 		mode = "all";
+		busy = false;
 		child: FocusNode | null = null;
 
 		getClientRects() {
@@ -93,6 +94,7 @@ describe("delayed explicit focus", () => {
 			return [];
 		}
 		querySelector(selector: string) {
+			if (selector.includes("aria-busy")) return this.busy ? this : null;
 			return selector.includes("data-files-mode")
 				? selector.includes(`"${this.mode}"`)
 					? this
@@ -390,6 +392,31 @@ describe("delayed explicit focus", () => {
 		layers = [];
 		frame();
 		expect(focused).toBe(body);
+	});
+
+	test("a loading tool lands normally on its row when the skeleton resolves", () => {
+		body = new FocusNode();
+		body.mode = "changed";
+		body.busy = true;
+		showFiles("changed");
+		frame();
+		expect(focused).toBeNull();
+		body.busy = false;
+		frame();
+		expect(focused).toBe(body);
+	});
+
+	test("new user intent during the busy wait prevents late landing after the skeleton resolves", () => {
+		body = new FocusNode();
+		body.mode = "changed";
+		body.busy = true;
+		showFiles("changed");
+		frame();
+		gesture("pointerdown");
+		body.busy = false;
+		frame();
+		expect(focused).toBeNull();
+		expect(frames.size).toBe(0);
 	});
 
 	test("an unavailable target expires and releases the frame wait", () => {

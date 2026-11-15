@@ -18,6 +18,8 @@ The focused workbench region stays at full contrast while others dim. F6 cycles 
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
 palette offers these actions and desktop zoom controls. Controls that disappear or become disabled
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
+Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command
+palette and keyboard shortcuts share the same split, move, close and arrangement actions.
 
 The development build connects agent tasks to selected worktrees, with file edits, bounded commands,
 streaming output, tool approval and Stop. Sessions save conversation history, input queues and pending

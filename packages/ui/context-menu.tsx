@@ -1,5 +1,6 @@
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 import type * as React from "react";
+import { isImeComposing } from "./keyboard";
 import { menuContentClass, menuItemClass, menuSeparatorClass } from "./menu-styles";
 import { cn } from "./utils";
 
@@ -40,8 +41,12 @@ function ContextMenuSeparator({
 	);
 }
 
+function isContextMenuKey(event: Pick<KeyboardEvent, "key" | "shiftKey">): boolean {
+	return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
 function openContextMenuFromKeyboard(event: React.KeyboardEvent<HTMLElement>) {
-	if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+	if (isImeComposing(event.nativeEvent) || !isContextMenuKey(event)) return;
 	event.preventDefault();
 	const rect = event.currentTarget.getBoundingClientRect();
 	event.currentTarget.dispatchEvent(
@@ -55,5 +60,6 @@ export {
 	ContextMenuItem,
 	ContextMenuSeparator,
 	ContextMenuTrigger,
+	isContextMenuKey,
 	openContextMenuFromKeyboard,
 };

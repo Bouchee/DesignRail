@@ -4,7 +4,7 @@ import { createDoubleShiftDetector } from "../search";
 import { useAppStore } from "../store";
 import { openChatHistory } from "./chordActions";
 import { cancelPendingRegionFocus } from "./regions";
-import { hasLayer, isInTerminal, MODAL_LAYER_SELECTOR } from "./shortcutLayers";
+import { hasLayer, isInEditorFind, isInTerminal, MODAL_LAYER_SELECTOR } from "./shortcutLayers";
 
 type ChordHandler = (binding: KeybindingId) => void;
 
@@ -23,6 +23,9 @@ type GlobalHotkeyActions = {
 	onTerminal?: ChordHandler;
 	onFiles?: ChordHandler;
 	onChanges?: ChordHandler;
+	onCloseTab?: ChordHandler;
+	onSplitRight?: ChordHandler;
+	onMoveTab?: ChordHandler;
 };
 
 const CHORD_ACTIONS = {
@@ -48,6 +51,10 @@ const CHORD_ACTIONS = {
 	"focus.group7": "onFocusGroup",
 	"focus.group8": "onFocusGroup",
 	"focus.group9": "onFocusGroup",
+	"tab.close": "onCloseTab",
+	"group.splitRight": "onSplitRight",
+	"tab.moveToPreviousGroup": "onMoveTab",
+	"tab.moveToNextGroup": "onMoveTab",
 } as const satisfies Record<Exclude<KeybindingId, "chat.history">, keyof GlobalHotkeyActions>;
 
 type GlobalHotkeyCommand = keyof typeof CHORD_ACTIONS;
@@ -55,7 +62,13 @@ type GlobalHotkeyCommand = keyof typeof CHORD_ACTIONS;
 type GlobalHotkeyEvent = Pick<
 	KeyboardEvent,
 	"altKey" | "code" | "ctrlKey" | "isComposing" | "metaKey" | "shiftKey"
->;
+> &
+	Partial<Pick<KeyboardEvent, "getModifierState">>;
+
+const SHELL_CTRL_CHORDS: ReadonlySet<KeybindingId> = new Set([
+	"focus.composer",
+	"group.splitRight",
+]);
 
 export function globalHotkeyCommand(
 	event: GlobalHotkeyEvent,
@@ -63,11 +76,14 @@ export function globalHotkeyCommand(
 	modalOpen: boolean,
 	platform?: string,
 	inTerminal = false,
+	inEditorFind = false,
 ): GlobalHotkeyCommand | null {
-	if (modalOpen || event.isComposing) return null;
+	if (event.isComposing) return null;
 	const id = matchKeybinding(event, platform);
 	if (id === null || id === "chat.history") return null;
-	if (id === "focus.composer" && inTerminal && event.ctrlKey) return null;
+	if (modalOpen && id !== "tab.close") return null;
+	if (SHELL_CTRL_CHORDS.has(id) && inTerminal && event.ctrlKey) return null;
+	if (id === "tab.close" && inEditorFind && event.metaKey) return null;
 	return actions[CHORD_ACTIONS[id]] ? id : null;
 }
 
@@ -104,6 +120,7 @@ export function installGlobalHotkeys(readActions: () => GlobalHotkeyActions): ()
 			hasOpenModal(),
 			undefined,
 			isInTerminal(event.target),
+			isInEditorFind(event.target),
 		);
 		if (command) {
 			event.preventDefault();
