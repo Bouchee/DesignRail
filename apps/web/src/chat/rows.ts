@@ -6,6 +6,7 @@ import {
 	completionDelivery,
 	type GitDiffScope,
 	type GitFileChange,
+	type PlanReviewOutput,
 	type ReviewFixDetails,
 	type SubagentCompletionDetails,
 	type TurnChangeSet,
@@ -62,7 +63,7 @@ export type ChatRow =
 			maxAttempts: number;
 			delayMs: number;
 	  }
-	| { kind: "markdown"; id: string; text: string }
+	| { kind: "markdown"; id: string; text: string; planReview?: PlanReviewOutput }
 	| { kind: "backgroundCommandCompletion"; id: string; details: BackgroundCommandCompletionDetails }
 	| { kind: "subagentCompletion"; id: string; details: SubagentCompletionDetails; text: string }
 	| { kind: "reviewFix"; id: string; details: ReviewFixDetails; text: string }
@@ -180,6 +181,8 @@ export function deriveRows(
 		if (!turn) continue;
 		if (turn.kind === "assistant") {
 			const { message } = turn;
+			const review = message.stopReason === "stop" ? message.planReview : undefined;
+			let reviewShown = false;
 			const dead = !assistantToolCallsAreExecutable(message.stopReason);
 			for (let b = 0; b < message.content.length; b++) {
 				const block = message.content[b];
@@ -194,6 +197,18 @@ export function deriveRows(
 						tools: [],
 					});
 				} else if (block.type === "text") {
+					if (review) {
+						if (reviewShown) continue;
+						flushRun();
+						rows.push({
+							kind: "markdown",
+							id: `${turn.id}:text:${b}`,
+							text: JSON.stringify(review),
+							planReview: review,
+						});
+						reviewShown = true;
+						continue;
+					}
 					if (block.text.trim().length === 0) continue;
 					flushRun();
 					rows.push({ kind: "markdown", id: `${turn.id}:text:${b}`, text: block.text });
@@ -222,6 +237,15 @@ export function deriveRows(
 						run.push({ kind: "tool", id: block.id, ...data });
 					}
 				}
+			}
+			if (review && !reviewShown) {
+				flushRun();
+				rows.push({
+					kind: "markdown",
+					id: `${turn.id}:text:0`,
+					text: JSON.stringify(review),
+					planReview: review,
+				});
 			}
 		} else {
 			flushRun();

@@ -10,6 +10,14 @@ tags: [chat]
 
 ## RailDesign SDK execution contract
 
+An accepted `AssistantMessage.planReview` replaces provisional JSON in the existing same-ID markdown
+row with a read-only verdict, summary, findings and reading order. It uses current review labels;
+model-local finding IDs have no resolve/comment actions. `deriveRows` and `ChatTurnView` consume the
+application DTO only. Good/base/bad: request_changes is a completed review, approve can have no findings,
+and failed/cancelled messages never show an accepted result. Rows, hydration, store projection and
+history-fixture tests compare live correction and restored payload; refresh does not replay effects.
+Copy on this row uses the normalized DTO JSON; canonical transcript/model/checkpoint text stays faithful.
+
 The application owns its message, tool, usage and event types in `sessionProtocol.ts`; browser code does not import engine types. `session.event` carries `{sessionId, runId, seq, event}` with increasing per-session sequence numbers. SDK details and checkpoints remain on the host. The initial transcript snapshot carries its event sequence watermark; events arriving before hydration are buffered and only later events are applied. Stable message IDs join streamed snapshots and final messages. Basic tool approvals use the existing confirmation UI with session, run, interaction and revision ownership; failures keep the pending card visible. A declared tool without an execution result state is pending: its card and routine row use a neutral marker, and execution summaries/bodies begin only after `tool_execution_start`.
 
 `ChatView` connects the existing resource hook, header trigger, dock and inspector to the SDK host's owned resource routes. Command output and child transcripts load only for the selected detail. Historical text does not create resource authority. Skills retain catalog, trust and disable controls, manual commands and idle reload. Reload keeps the current watcher baseline and clears its stale badge only after host success. Stop remains available for owned work. Protocol versions gate available routes; they do not replace host ownership checks.

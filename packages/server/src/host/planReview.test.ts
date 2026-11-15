@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
@@ -17,13 +18,16 @@ import {
 	configureAgentModelFactory,
 	createSession,
 	disposeAllSessions,
+	followUpSession,
 	getSessionMessages,
 	getSessionState,
+	listSessionRecords,
 	promptSession,
 	readSessionRecord,
 	renameSession,
 	setRequestReviewHandler,
 	setResolveCommentHandler,
+	steerSession,
 } from "../agent";
 import { loadConfig, saveConfig, saveProjects, saveWorkspaces } from "../persistence";
 import { getReviewSnapshot } from "../reviews";
@@ -142,15 +146,84 @@ const verdict = (changes: boolean) =>
 			? [{ id: "f1", path: "a.ts", startLine: 1, body: "BUG: Correct the requested count." }]
 			: [],
 	});
-function reviewer(text: string) {
+function reviewer(text: string, onFinal?: () => void) {
 	return new ScriptedModel([
 		modelResponse([functionCall("read", { path: "a.ts" }, { callId: "review-read" })]),
-		modelResponse([assistantMessage(text)]),
+		modelResponder(() => {
+			onFinal?.();
+			return {
+				responseId: "review-response",
+				providerData: { status: "completed" },
+				usage: new Usage({ requests: 1 }),
+				output: [assistantMessage(text, { id: "review-answer" })],
+			};
+		}),
 	]);
 }
 
+test("the public prompt route cannot start a queued review child before its host", async () => {
+	const model = new ScriptedModel([]);
+	configureAgentModelFactory(() => model);
+	const child = await createSession({
+		cwd,
+		workspaceId: "workspace",
+		childRun: {
+			parentSessionId: sessionId,
+			purpose: "review",
+			outputContract: "plan-review-v1",
+			toolCallId: "queued-review-owner",
+			task: "Original host prompt",
+			enabledExtensions: [],
+			definition: {
+				name: "Plan reviewer",
+				description: "Independent review",
+				source: "builtin",
+				systemPrompt: "Review",
+				tools: ["read"],
+			},
+			detached: false,
+			createdAt: new Date().toISOString(),
+			status: "queued",
+			completionDelivered: false,
+			collected: false,
+		},
+	});
+	const before = readSessionRecord(child.sessionId);
+	expect(before?.state.runId).toBeNull();
+	await expect(
+		handleRequest(
+			"session.prompt",
+			{
+				sessionId: child.sessionId,
+				text: "Replace the host prompt",
+				messageId: "queued-review-input",
+			},
+			{ clientKey: "queued-review-input" },
+		),
+	).rejects.toThrow("read-only");
+	expect(readSessionRecord(child.sessionId)).toEqual(before);
+	expect(model.calls).toHaveLength(0);
+});
+
 test("an actual SDK review child reads the change set and persists canonical findings and its guide", async () => {
-	const model = reviewer(verdict(true));
+	const rejected: string[] = [];
+	let unchanged = false;
+	const model = reviewer(verdict(true), () => {
+		const child = listSessionRecords().find((record) => record.childRun?.purpose === "review");
+		if (!child) throw new Error("Missing active reviewer");
+		const before = readSessionRecord(child.sessionId);
+		for (const [name, admit] of [
+			["steer", steerSession],
+			["followUp", followUpSession],
+		] as const) {
+			try {
+				admit(child.sessionId, "Unsupported review continuation", undefined, `host-${name}`);
+			} catch {
+				rejected.push(name);
+			}
+		}
+		unchanged = JSON.stringify(readSessionRecord(child.sessionId)) === JSON.stringify(before);
+	});
 	configureAgentModelFactory(() => model);
 	expect(startPlanReview("workspace", sessionId, itemId)).toBe(true);
 	expect(readReviewMeta(cwd, sessionId).pending[itemId]).toBeDefined();
@@ -169,6 +242,13 @@ test("an actual SDK review child reads the change set and persists canonical fin
 	expect(names).not.toContain("bash");
 	expect(names).not.toContain("request_review");
 	expect(failures).toEqual([]);
+	expect(rejected).toEqual(["steer", "followUp"]);
+	expect(unchanged).toBe(true);
+	expect(model.calls).toHaveLength(2);
+	const child = listSessionRecords().find((record) => record.childRun?.purpose === "review");
+	expect(child?.childRun?.status).toBe("completed");
+	expect(child?.childRun?.reviewOutput).toBeDefined();
+	expect(child?.queue).toEqual([]);
 });
 
 test("host boot wires SDK review tools, button routes, failure publication and fix delivery", async () => {

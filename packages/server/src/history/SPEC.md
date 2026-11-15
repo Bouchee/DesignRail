@@ -42,6 +42,8 @@ explicit workspace metadata and display transcript, never pi records. `sessionDi
 returns the flat directory; callers pass the actual workspace ID when attaching through the UI.
 Renderer fixtures may explicitly supply a complete `SessionState` and application-owned custom or
 summary transcript messages. They never append legacy JSONL entries to a JSON record or infer a live run.
+Assistant fixtures preserve an optional validated `planReview` payload only with `stopReason:"stop"`;
+malformed payloads fail before writing. The deterministic fixture round-trip test verifies this field.
 An explicit `updatedAt` fixture option sets session activity metadata even for an empty transcript;
 session ordering does not use a fixture file's mtime.
 Tests cover extraction/schema rejection, stable IDs, index alignment, bounded and scoped search,

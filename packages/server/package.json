@@ -7,7 +7,8 @@
 		".": "./src/index.ts",
 		"./agent": "./src/agent/index.ts",
 		"./build-support": "./src/buildSupport.ts",
-		"./history-test-fixtures": "./src/history/testFixtures.ts"
+		"./history-test-fixtures": "./src/history/testFixtures.ts",
+		"./structured-review-test-fixtures": "./src/agent/structuredReviewTestFixtures.ts"
 	},
 	"scripts": {
 		"dev": "bun run --watch src/dev.ts",

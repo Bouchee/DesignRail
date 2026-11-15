@@ -1,8 +1,88 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { createWorkspaceViaDialog, openFixtureProject, revealWorkbenchTool } from "./fixtures/app";
+import {
+	createWorkspaceViaDialog,
+	enterDefaultWorkspace,
+	openFixtureProject,
+	openPersistedChat,
+	revealWorkbenchTool,
+} from "./fixtures/app";
 import { commitFile, gitAs } from "./fixtures/git";
+import { E2E_FIXTURE_REPO } from "./fixtures/paths";
+import { completedFixtureState, seedWorkspaceSession } from "./fixtures/sessions";
+
+test("validated child review remains read-only and visible after refresh", async ({ page }) => {
+	await openFixtureProject(page);
+	const cwd = realpathSync(E2E_FIXTURE_REPO);
+	const parent = seedWorkspaceSession(cwd, {
+		id: "typed-review-parent",
+		name: "Typed review fixture",
+		messages: [{ role: "user", text: "Review this fixture", timestamp: 1 }],
+	});
+	const value = {
+		verdict: "request_changes" as const,
+		summary: "A fixture result",
+		findings: [
+			{ id: "local-finding-1", body: "Correct the fixture boundary", path: "a.ts", startLine: 2 },
+		],
+		readingOrder: [{ path: "a.ts", why: "Read the shared contract" }],
+	};
+	const child = seedWorkspaceSession(cwd, {
+		id: "typed-review-child",
+		name: "Plan reviewer",
+		messages: [{ role: "assistant", text: JSON.stringify(value), timestamp: 2, planReview: value }],
+		state: { ...completedFixtureState("typed-review-run"), runId: "typed-review-run" },
+	});
+	const record = JSON.parse(readFileSync(child.path, "utf8"));
+	record.childRun = {
+		parentSessionId: parent.id,
+		purpose: "review",
+		outputContract: "plan-review-v1",
+		reviewOutput: { runId: "typed-review-run", messageId: "typed-review-child-m0" },
+		toolCallId: "typed-review-call",
+		task: "Review fixture",
+		definition: {
+			name: "Plan reviewer",
+			description: "Fixture review",
+			source: "builtin",
+			systemPrompt: "Read-only fixture",
+		},
+		enabledExtensions: [],
+		detached: false,
+		createdAt: new Date(1).toISOString(),
+		status: "completed",
+		finishedAt: 2,
+		completionDelivered: true,
+		collected: true,
+	};
+	writeFileSync(child.path, JSON.stringify(record));
+	await enterDefaultWorkspace(page);
+	await openPersistedChat(page, "Typed review fixture");
+	for (const refresh of [false, true]) {
+		if (refresh) {
+			await page.reload();
+			await expect(page.getByTestId("connection-status")).toHaveAttribute(
+				"data-status",
+				"connected",
+			);
+		}
+		const inspector = page.getByTestId("resources-inspector");
+		if (!(await inspector.isVisible())) await page.getByTestId("resources-trigger").click();
+		await inspector
+			.getByTestId("resource-subagent")
+			.filter({ hasText: "Plan reviewer" })
+			.getByRole("option")
+			.click();
+		const body = inspector.getByTestId("plan-review-output");
+		await expect(body).toHaveAttribute("data-verdict", "request_changes");
+		await expect(body).toContainText("A fixture result");
+		await expect(body).toContainText("Correct the fixture boundary");
+		await expect(body).toContainText("Read the shared contract");
+		await expect(body).not.toContainText("local-finding-1");
+		await expect(body.getByRole("button")).toHaveCount(0);
+	}
+});
 
 // The TODO → review workflow's user-visible half, no agent: a seeded plan whose done steps carry
 // completion summaries + real commit artifacts (the host's change-set shape) renders on the plan page

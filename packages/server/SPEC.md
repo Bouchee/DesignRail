@@ -17,6 +17,10 @@ extension entries rather than those helpers directly. Other bundled tool package
 
 ## Responsibility
 
+The `/structured-review-test-fixtures` test-only subpath exposes bounded server-side selected-schema
+compatibility fixtures to the public live E2E runner. SDK construction and request inspection stay
+server-side; no browser entry point or debug RPC is added. It is not a production execution service.
+
 The embeddable Bun host serves the application HTTP/WebSocket protocol and owns workspace services
 and RailDesign state. CLI, desktop and development entries launch the same host. The installed OpenAI
 Agents SDK owns model calls, the agent loop and FunctionTool dispatch. There is one execution path.
@@ -34,7 +38,8 @@ Agents SDK owns model calls, the agent loop and FunctionTool dispatch. There is 
 - The root barrel exports host APIs, `dataDir`, `setBundledSkillPaths` and `setBundledTrashHelpers`. Build-only
   `@thinkrail/server/build-support` supplies Skill content roots, native PTY libraries and trash helpers. The `/agent`
   subpath exposes the production session surface to isolated tests; `/history-test-fixtures` exposes
-  test-only application-record builders. The development entry is `src/dev.ts`.
+  test-only application-record builders and `/structured-review-test-fixtures` exposes the bounded
+  selected-schema compatibility fixture. The development entry is `src/dev.ts`.
 - Main dependencies are contracts/shared, the locked Agents SDK and OpenAI client, Zod, Bun PTY,
   local logging, `proper-lockfile`, YAML and existing pure graph/Todo services. No pi runtime,
   credentials, Central service, telemetry or survey is initialized by a product entry.

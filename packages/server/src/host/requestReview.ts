@@ -6,7 +6,7 @@ import type {
 	ReviewFixComment,
 	TodoPlan,
 } from "@thinkrail/contracts";
-import { isPlanReviewResult } from "@thinkrail/contracts";
+import { isPlanReviewOutput, isPlanReviewResult } from "@thinkrail/contracts";
 import type { Todo } from "@thinkrail/todos/core";
 import {
 	acquireSessionReviewScope,
@@ -93,23 +93,13 @@ function agentPath(path: string): string {
 	return path.replaceAll("\\", "/");
 }
 
-export function parseVerdict(
-	finalText: string | undefined,
+export function normalizeVerdict(
+	output: unknown,
 	itemId: string,
 	itemTitle: string,
 ): PlanReviewResult | null {
-	if (!finalText) return null;
-	const fenced = /```json\s*([\s\S]*?)```/gi.exec(finalText);
-	const raw = fenced?.[1] ?? finalText;
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw.trim());
-	} catch {
-		return null;
-	}
-	if (typeof parsed !== "object" || parsed === null) return null;
-	const candidate = { ...parsed, itemId, itemTitle };
-	if (!isPlanReviewResult(candidate)) return null;
+	if (!isPlanReviewOutput(output)) return null;
+	const candidate = output;
 	const findings: ReviewFixComment[] = candidate.findings.map((f) => ({
 		id: f.id,
 		kind: f.kind ?? "inline",
@@ -118,7 +108,7 @@ export function parseVerdict(
 		...(f.startLine !== undefined ? { startLine: f.startLine } : {}),
 		...(f.endLine !== undefined ? { endLine: f.endLine } : {}),
 	}));
-	return {
+	const result = {
 		verdict: candidate.verdict,
 		itemId,
 		itemTitle,
@@ -133,6 +123,7 @@ export function parseVerdict(
 			: {}),
 		findings,
 	};
+	return isPlanReviewResult(result) ? result : null;
 }
 
 export type VerdictOutcome =
@@ -513,7 +504,7 @@ async function runReview(
 	if (run.status !== "completed") {
 		throw new Error(`The review subagent did not complete (${run.status}).`);
 	}
-	const parsed = parseVerdict(run.text, params.id, itemTitle);
+	const parsed = normalizeVerdict(run.output, params.id, itemTitle);
 	if (!parsed) throw new Error("The review subagent did not return a valid verdict.");
 	return { ...parsed, ...(reviewedSha ? { reviewedSha } : {}) };
 }

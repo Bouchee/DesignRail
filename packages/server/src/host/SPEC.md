@@ -234,8 +234,8 @@ unused session; it preserves an already-published workspace that another client 
 reports that Retry reuses it. The shared chat-start helper performs the same unused-session cleanup
 when a creation claim is revoked, without replacing the original failure if cleanup fails.
 
-`requestReview` retains host-stamped verdict parsing, normalized finding/reading-order paths, stripping
-of model-supplied host-only flags, item-title lookup across all plan collections, and result text that
+`requestReview` consumes committed typed review output, stamps host identity, normalizes finding/reading-order paths, rejects
+model-supplied host-only fields, retains item-title lookup across all plan collections, and result text that
 respects blocked approvals and the automatic-fix budget. Host startup installs the review/resolve tool
 handlers and failure publisher. `todo.startReview`, `todo.reviewAll` and `todo.requestFix` validate the
 parent session's workspace and invoke the same review owner. Artifact settlement triggers eligible

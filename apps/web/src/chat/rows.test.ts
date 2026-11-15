@@ -65,6 +65,28 @@ function done(id: string, endedAt = 0): ChatTurn {
 	return { kind: "system", id, endedAt } as ChatTurn;
 }
 
+test("typed review replaces only final text while preserving thinking/tools and row identity", () => {
+	const turn = assistant("review-message", [
+		{ type: "thinking", thinking: "Inspect" },
+		{ type: "text", text: "provisional JSON" },
+		{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "a.ts" } },
+	]);
+	if (turn.kind !== "assistant") throw new Error("Missing assistant");
+	const provisional = deriveRows([turn], {}, false);
+	turn.message.planReview = { verdict: "approve", summary: "Complete", findings: [] };
+	const accepted = deriveRows([turn], {}, false);
+	expect(accepted.map((row) => row.id)).toEqual(provisional.map((row) => row.id));
+	expect(accepted.find((row) => row.kind === "markdown")).toMatchObject({
+		planReview: turn.message.planReview,
+	});
+	expect(JSON.stringify(accepted)).toContain("Inspect");
+	expect(JSON.stringify(accepted)).toContain("read-1");
+	turn.message.stopReason = "error";
+	expect(
+		deriveRows([turn], {}, false).some((row) => row.kind === "markdown" && row.planReview),
+	).toBe(false);
+});
+
 const tc = (id: string, name = "bash"): Block => ({ type: "toolCall", id, name, arguments: {} });
 const think = (thinking: string): Block => ({ type: "thinking", thinking });
 const text = (t: string): Block => ({ type: "text", text: t });

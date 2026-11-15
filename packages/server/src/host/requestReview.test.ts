@@ -1,61 +1,56 @@
 import { expect, test } from "bun:test";
 import type { PlanReviewResult, TodoItem, TodoPlan } from "@thinkrail/contracts";
-import { composeText, itemTitleOf, parseVerdict } from "./requestReview";
+import { composeText, itemTitleOf, normalizeVerdict } from "./requestReview";
 
 const ID = "t_1";
 const TITLE = "Wire login redirect";
 
-test("parseVerdict extracts a fenced json verdict and stamps host-owned id/title", () => {
-	const finalText = [
-		"Here is my review.",
-		"```json",
-		'{ "verdict": "request_changes", "summary": "off-by-one", "findings": [',
-		'  { "id": "f1", "path": "src/a.ts", "startLine": 4, "endLine": 6, "body": "loop bound" } ] }',
-		"```",
-	].join("\n");
-	const result = parseVerdict(finalText, ID, TITLE);
-	expect(result).not.toBeNull();
-	expect(result?.itemId).toBe(ID);
-	expect(result?.itemTitle).toBe(TITLE);
-	expect(result?.verdict).toBe("request_changes");
-	expect(result?.findings[0]).toEqual({
-		id: "f1",
-		kind: "inline",
-		body: "loop bound",
-		path: "src/a.ts",
-		startLine: 4,
-		endLine: 6,
+test("normalizeVerdict stamps host identity and keeps finding normalization", () => {
+	const result = normalizeVerdict(
+		{
+			verdict: "request_changes",
+			summary: "off-by-one",
+			findings: [{ id: "f1", path: "src/a.ts", startLine: 4, endLine: 6, body: "loop bound" }],
+		},
+		ID,
+		TITLE,
+	);
+	expect(result).toMatchObject({
+		itemId: ID,
+		itemTitle: TITLE,
+		verdict: "request_changes",
+		findings: [
+			{ id: "f1", kind: "inline", body: "loop bound", path: "src/a.ts", startLine: 4, endLine: 6 },
+		],
 	});
 });
-
-test("parseVerdict reads a reviewer's backslashes as path separators", () => {
-	const result = parseVerdict(
-		JSON.stringify({
+test("normalizeVerdict normalizes paths and accepts an approve without findings", () => {
+	const result = normalizeVerdict(
+		{
 			verdict: "request_changes",
 			findings: [{ id: "f1", path: "src\\x.ts", startLine: 2, body: "b" }],
 			readingOrder: [{ path: "C:\\repo\\src\\x.ts", why: "w" }],
-		}),
+		},
 		ID,
 		TITLE,
 	);
 	expect(result?.findings[0]?.path).toBe("src/x.ts");
 	expect(result?.readingOrder).toEqual([{ path: "C:/repo/src/x.ts", why: "w" }]);
+	expect(normalizeVerdict({ verdict: "approve", findings: [] }, ID, TITLE)?.verdict).toBe(
+		"approve",
+	);
 });
-
-test("parseVerdict accepts an approve with no findings and no fence (bare json)", () => {
-	const result = parseVerdict('{ "verdict": "approve", "findings": [] }', ID, TITLE);
-	expect(result?.verdict).toBe("approve");
-	expect(result?.findings).toEqual([]);
-});
-
-test("parseVerdict rejects malformed / missing / bad-verdict output", () => {
-	expect(parseVerdict(undefined, ID, TITLE)).toBeNull();
-	expect(parseVerdict("no json here", ID, TITLE)).toBeNull();
-	expect(parseVerdict("```json\nnot json\n```", ID, TITLE)).toBeNull();
-	expect(parseVerdict('{ "verdict": "maybe", "findings": [] }', ID, TITLE)).toBeNull();
-	expect(
-		parseVerdict('{ "verdict": "approve", "findings": [ { "id": "f1" } ] }', ID, TITLE),
-	).toBeNull();
+test("normalizeVerdict rejects obsolete text and invalid model objects", () => {
+	for (const output of [
+		undefined,
+		"no json",
+		"```json\n{}\n```",
+		'{"verdict":"approve","findings":[]}',
+		{ verdict: "maybe", findings: [] },
+		{ verdict: "approve", findings: [{ id: "f1" }] },
+		{ verdict: "request_changes", findings: [] },
+	])
+		expect(normalizeVerdict(output, ID, TITLE)).toBeNull();
 });
 
 const CHANGES: PlanReviewResult = {
@@ -99,24 +94,20 @@ test("composeText for approve names the step and never asks for a fix", () => {
 	expect(text).not.toContain("REQUEST_CHANGES");
 });
 
-test("parseVerdict strips a model-supplied host-only field (blockedByOpenFindings)", () => {
-	const result = parseVerdict(
-		'{ "verdict": "approve", "findings": [], "blockedByOpenFindings": 5 }',
-		ID,
-		TITLE,
-	);
-	expect(result?.verdict).toBe("approve");
-	// The host owns this field; a hallucinated value must not survive an approve and mislead the card.
-	expect(result?.blockedByOpenFindings).toBeUndefined();
-});
-
-test("parseVerdict defaults a finding's kind and drops absent location fields", () => {
-	const result = parseVerdict(
-		'{ "verdict": "request_changes", "findings": [ { "id": "f1", "body": "no location" } ] }',
-		ID,
-		TITLE,
-	);
-	expect(result?.findings[0]).toEqual({ id: "f1", kind: "inline", body: "no location" });
+test("normalizeVerdict rejects model host-only fields and defaults optional finding kind", () => {
+	expect(
+		normalizeVerdict({ verdict: "approve", findings: [], blockedByOpenFindings: 5 }, ID, TITLE),
+	).toBeNull();
+	expect(
+		normalizeVerdict({ verdict: "approve", findings: [], itemId: "forged" }, ID, TITLE),
+	).toBeNull();
+	expect(
+		normalizeVerdict(
+			{ verdict: "request_changes", findings: [{ id: "local", body: "no location" }] },
+			ID,
+			TITLE,
+		)?.findings[0],
+	).toEqual({ id: "local", kind: "inline", body: "no location" });
 });
 
 test("itemTitleOf resolves stored, grouped and adopted items while retaining an unknown id", async () => {

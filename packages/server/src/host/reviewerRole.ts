@@ -34,13 +34,11 @@ export const REVIEWER_SYSTEM_PROMPT = [
 	"Remove findings that the actual code does not support.",
 	"For a re-review, check the named change and all other callers of the affected shared code.",
 	"",
-	"Return exactly one fenced JSON block. Put no text after that block.",
-	"```json",
+	"Return the single review object required by the supplied output schema.",
 	'{ "verdict": "approve" | "request_changes",',
 	'  "summary": "The verdict and its reason.",',
 	'  "readingOrder": [ { "path": "src/x.ts", "why": "Read the shared contract first." } ],',
 	'  "findings": [ { "id": "f1", "path": "src/x.ts", "startLine": 12, "endLine": 14, "body": "BUG: Describe the failure and correction." } ] }',
-	"```",
 	"Use approve only after you inspect the change set and find no blocking problem.",
 	"Use request_changes only with at least one finding.",
 	"Each finding requires a nonempty id and body. Add a valid path and line range when available.",
@@ -50,4 +48,4 @@ export const REVIEWER_SYSTEM_PROMPT = [
 ].join("\n");
 
 export const REVIEWER_OUTPUT_CONTRACT =
-	"Review the supplied change set. Return the single fenced JSON verdict from your instructions.";
+	"Review the supplied change set. Return the review object using the supplied output schema.";

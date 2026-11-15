@@ -34,6 +34,7 @@ export {
 	isLineWidth,
 	isLiveResource,
 	isLocalePreference,
+	isPlanReviewOutput,
 	isPlanReviewResult,
 	isQuestionPanelHeight,
 	isRetriedAttempt,

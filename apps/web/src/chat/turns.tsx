@@ -49,6 +49,7 @@ import { FileChip } from "./FileChip";
 import { useFold, useSelection } from "./foldState";
 import { Markdown } from "./Markdown";
 import { NoticeLink } from "./NoticeLink";
+import { PlanReviewOutputBody } from "./PlanReviewOutputBody";
 import { ReviewPackageComments } from "./ReviewPackageComments";
 import { parseReviewPackage, reviewFixCommentsToItems, reviewPackageLabel } from "./reviewPackage";
 import { type ChatRow, LARGE_USER_MESSAGE, type TurnDividerData } from "./rows";
@@ -140,11 +141,15 @@ function ChatTurnViewImpl({
 								"w-full min-w-0 pl-24 [&>div>*:last-child]:mb-0 [&_ol]:list-inside [&_ul]:list-inside [&_li>p:first-child]:inline",
 						)}
 					>
-						<AssistantMarkdown
-							text={row.text}
-							workspaceRoot={workspaceRoot}
-							onOpenFile={onOpenFile}
-						/>
+						{row.planReview ? (
+							<PlanReviewOutputBody value={row.planReview} />
+						) : (
+							<AssistantMarkdown
+								text={row.text}
+								workspaceRoot={workspaceRoot}
+								onOpenFile={onOpenFile}
+							/>
+						)}
 					</div>
 				</MessageWithCopy>
 			);

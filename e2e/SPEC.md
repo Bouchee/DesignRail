@@ -18,6 +18,37 @@ explicit, authenticated, on-demand runs.
 
 ## Execution model
 
+`structured-review-compatibility.live.spec.ts` enters only through `e2e:agent`, with retries zero and
+one worker. The server-only fixture uses the actual fixed Plan-review schema and configured Go model.
+It runs nonstream then stream, no tools, maxTurns 1, cap 512, model timeout 30 seconds, case deadline
+45 seconds, tracing disabled. An explicitly supplied frozen-source manifest and shared ledger are
+mandatory. Current-shaped ledgers require `batch_start`: zero for fresh offline compatibility fixtures (cap five),
+or five for the authorized follow-up with a lifetime cap of 25. The follow-up retains the original five
+entries once and admits at most 20 new host requests; compatibility remains the first two historical
+entries and is not repeated. An exclusive atomic reservation precedes transport. Historical entries
+cannot be finalized again, and their prefix hash must survive every ledger update unchanged. A failed
+or unfinished new reservation blocks further requests. Stop revokes admission, aborts and awaits cleanup. Evidence allowlists
+request/status/usage metadata and fixture outputs; credentials and private RunState are never saved.
+
+`structured-review-host.live.spec.ts` is the single later integration case. It reuses restart-host
+isolation and launches normal `dev.ts` with the test-only `structuredReviewAdmission.ts` preload.
+All outgoing host fetches pass shared ledger admission. Unexpected helper/schema/tool traffic fails
+before transport, and a non-fresh follow-up ledger is rejected. Initial/final counts use `batch_start`
+and `request_cap`; the refreshed UI proof also verifies that the historical prefix hash did not change.
+A 30-second per-request AbortSignal remains active through SSE consumption;
+the owned case deadline is 45 seconds. Native streams pass original bytes incrementally and hold the
+chunk completing a terminal event until its safe receipt is committed. The public Plan review entry
+must execute a real read, commit the exact typed message, normalize/persist business effects and show
+the same child/Plan result after refresh. Transport compatibility, semantic review quality and full
+product acceptance remain separate claims. The no-agent Plan-review fixture covers read-only typed
+child display and refresh without model calls.
+The host case checks refreshed Plan review flags and its verdict badge. It attaches allowlisted phase,
+child/binding/read-effect and business-result evidence in `finally` before disposing its fixture data.
+RPC-seeded projects are expanded with the existing project-tree helper before workspace selection.
+The Plan rail opens its plan-page action explicitly; Resources inspection returns to the parent chat tab.
+Setup phases also write an allowlisted proof file synchronously, so a test timeout retains its boundary
+even if asynchronous cleanup cannot finish attaching evidence.
+
 `E2eWire` acknowledges every consumed success or error response with the existing `{ack:[id]}`
 protocol receipt. Long observation loops must release those host replay entries. The no-agent workflow
 browser regression consumes 600 successful reads and 600 failed reads on one connection, exceeding
@@ -26,6 +57,10 @@ the replay capacity on either path without invoking a model.
 Synthetic `session.event` replays allocate sequence numbers in the same order as their emitted steps. Sequence numbers increase across successive replays of one session; each session has its own counter. Start events precede deltas and the matching final message retains its stable ID. Sampling assertions retain their geometry and minimum-observation thresholds rather than compensating for replay events discarded by the client's sequence watermark.
 
 Dialog containment retries the complete bounds/text/overflow measurement for at most two seconds after resize. This lets the dictation overlay's resize observer run its scheduled animation frame; containment tolerances and all geometric assertions remain unchanged. Persistent overflow still fails.
+
+The anchored approval's nested argument-scroll test clicks its focusable argument list before scrolling
+it. This reveals the list and yields automatic attention to user intent; the outer transcript may be
+shorter than the full prompt. The final argument must still satisfy the original viewport assertion.
 
 Per-test isolation is `resetState()` in `fixtures/app.ts`: it clears the host's `projects.json`,
 `workspaces.json`, every chat in `chats.json` and the `chats/` folders, turns, reviews, worktrees and application JSON

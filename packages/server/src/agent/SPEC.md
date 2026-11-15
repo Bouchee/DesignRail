@@ -116,6 +116,53 @@ recovery retains identity, original usage and once-only effects".
 
 ## Model configuration
 
+`planReviewOutput.ts` owns one fixed public `StandardSchemaWithJSON<PlanReviewOutput>` adapter.
+Its input/output schemas describe the same natural optional DTO; synchronous validation delegates to
+the contracts guard without effects or transformations. SDK 0.21.0 makes optional wire properties
+required/nullable and removes synthetic nulls before that guard. Deterministic public Responses
+captures must freeze the converted schema and prove semantic rejection, rather than trusting raw
+JSON-schema parsing. Only `childRun.purpose:"review"` selects this output type.
+
+## Scenario: validated independent Plan review
+
+Trigger: the host calls `runSessionChild(parentSessionId, SessionChildRequest)` for Plan review.
+It returns `{sessionId,status,output?:PlanReviewOutput,usage}`; ordinary Agent delegation stays text.
+New review children persist `outputContract:"plan-review-v1"`. Their accepted output binds
+`childRun.reviewOutput:{runId,messageId}` to the exact final-output `AssistantMessage.planReview`.
+The existing Session transaction commits payload, binding and event sequence before publishing the
+same-ID `message_end` correction or child success. No last-assistant scan or transcript parsing is used.
+Review children accept only their initial host prompt. `steerSession`, `followUpSession`,
+`nudgeSession`, host notifications and review-fix delivery reject before queue, transcript, checkpoint
+or input-state writes; editing/flushing queued input also rejects. Public `promptSession` rejects
+review children even before their first run; only `runSessionChild` uses the private prompt core for
+the initial host input. Recovery resumes
+the owned checkpoint. Another Plan review creates a fresh child. Ordinary child queues keep working.
+Only the projected assistant belonging to the last action-free, nonempty response can receive final
+correction or run usage. A completed commentary message followed by a tool call is intermediate:
+Stop, turn exhaustion or a later model error preserves its complete snapshot and appends a distinct
+terminal note. Final DTO/getter/persistence failure still corrects the actual final message by ID,
+including when reasoning follows that message.
+
+| Condition | Settlement |
+| --- | --- |
+| Completed response ID/status and final assistant status, no refusal, settled stream, active grant, valid DTO | Commit typed value; then complete child. |
+| Refusal including JSON plus refusal, incomplete/nonterminal output, getter/validation/write error | Fail without accepted payload or review effects. |
+| Stop or authority revoked during final validation/persistence | Cancel; no late filing or typed success. |
+| Stop/turn limit/model error after commentary plus tool | Preserve commentary ID/content/status/usage; append the later terminal outcome. |
+| Additional input to a review child | Reject before any admission write; accepted verdict and parent effects cannot be undone by queue replay. |
+| Current output contract checkpoint | Rebuild same adapter; preserve context, approval, grants and usage. |
+| Missing/unknown contract on pending review | Explicit failure before model/tool continuation; completed histories remain readable. |
+
+Good/base/bad: valid request_changes is successful computation; approve with no findings is valid;
+request_changes with no findings fails. Correct: bind the committed final message ID/run to the consumer.
+Wrong: parse clipped child prose, attach to a later reasoning message, or publish success before persistence.
+Assertions live in `structuredReviewSession.test.ts`, `sessionStore.test.ts`, `sessionRecoveryAudit.test.ts`
+and host `planReview.test.ts`; projection/hydration tests pin same-ID final corrections.
+Lifecycle regressions compare the earlier commentary's full snapshot, reject active steering and
+follow-up before writes, retain a generic-child queue positive control and file the host finding once.
+Wrong: treat every `message_output_item` as terminal, or admit input that fails only during queue drain.
+Correct: bind final correction to an action-free response and reject unsupported input at admission.
+
 Only the configured, verified stage-1 Responses target is offered. API keys are host-side and saved with mode 0600 in the RailDesign data directory. SDK tracing starts disabled. When enabled, an application-local processor records only trace/span IDs, fixed workflow names, span types and timestamps through the local logger. It replaces the SDK exporter; no trace reaches OpenAI, and sensitive model/tool content is excluded. Ordinary FunctionTools are used for files and commands; native provider shell/patch/compact endpoints are not required.
 
 Go requests identify the client as `RailDesign/0.1`. `createConfiguredModel(model, sessionId)` requires the application conversation ID and sends it as `x-opencode-session` through the public OpenAI client's `defaultHeaders`. Every run and approval continuation in that conversation uses the stored session ID, independent of run IDs and credentials. One-shot assistance allocates one UUID for its logical invocation. The fixed `responsesClientSettings` uses public `ModelSettings.providerData.extra_headers` for the user agent because Agents SDK 0.21.0 replaces the client default with its own per-request header. Model discovery sends the same client identity without inventing a conversation. This follows the [Go client requirements](https://opencode.ai/docs/console/go/#where-can-i-use-it), checked 2026-11-11 with Agents SDK 0.21.0 and OpenAI 7.55.0; generic SDK identification or a missing session header can reject a request before inference.

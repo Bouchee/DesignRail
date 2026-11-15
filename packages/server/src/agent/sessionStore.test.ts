@@ -90,6 +90,45 @@ test("invalid IDs and corrupt history or lifecycle data fail before attachment",
 	}
 });
 
+test("stored review payload is retained only when valid and terminal; corrupt reload cannot certify it", () => {
+	const store = new PersistentSession(record());
+	store.update((current) =>
+		current.messages.push({
+			id: "final",
+			role: "assistant",
+			api: "responses",
+			provider: "fixture",
+			model: "fixture",
+			timestamp: 1,
+			stopReason: "stop",
+			content: [{ type: "text", text: "raw" }],
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			planReview: { verdict: "approve", findings: [] },
+		}),
+	);
+	expect(readSessionRecord(store.record.sessionId)?.messages[0]).toMatchObject({
+		planReview: { verdict: "approve", findings: [] },
+	});
+	const bytes = readFileSync(sessionRecordPath(store.record.sessionId), "utf8");
+	for (const patch of [
+		{ planReview: { verdict: "request_changes", findings: [] } },
+		{ stopReason: "error" },
+		{ planReview: { verdict: "approve", findings: [], itemId: "forged" } },
+	]) {
+		const corrupt = JSON.parse(bytes);
+		Object.assign(corrupt.messages[0], patch);
+		writeFileSync(sessionRecordPath(store.record.sessionId), JSON.stringify(corrupt));
+		expect(() => readSessionRecord(store.record.sessionId)).toThrow();
+	}
+});
+
 test("listing skips unreadable records and keeps readable sessions", () => {
 	new PersistentSession(record()).update(() => {});
 	writeFileSync(join(directory, "sessions", "truncated.json"), "{");

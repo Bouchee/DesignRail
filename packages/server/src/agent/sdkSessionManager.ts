@@ -21,6 +21,7 @@ import type {
 	ExtUiRequest,
 	ExtUiResponse,
 	ImageContent,
+	PlanReviewOutput,
 	PlanReviewResult,
 	QueueLane,
 	RemovedQueuedMessage,
@@ -46,6 +47,7 @@ import type {
 import {
 	firstPromptOfTexts,
 	isControlMessage,
+	isPlanReviewOutput,
 	normalizeSessionTitle,
 	SUBAGENT_COMPLETION_CUSTOM_TYPE,
 } from "@thinkrail/contracts";
@@ -96,6 +98,7 @@ import {
 	modelOutputBudget,
 	responsesClientSettings,
 } from "./modelConfiguration";
+import { assertCompletedPlanReviewResponse, planReviewOutput } from "./planReviewOutput";
 import { type StructuredToolResult, structuredToolResult } from "./sdkToolResult";
 import { workspaceTools } from "./sdkTools";
 import {
@@ -103,6 +106,7 @@ import {
 	type ChildRunRecord,
 	listSessionRecords,
 	PersistentSession,
+	REVIEW_OUTPUT_CONTRACT,
 	readSessionRecord,
 	type SessionRecord,
 	type StoredInput,
@@ -125,7 +129,7 @@ const log = logger("agent");
 
 type SessionContext = Readonly<{ workspaceId: string }>;
 
-type SessionAgent = Agent<SessionContext>;
+type SessionAgent = Agent<SessionContext, "text" | typeof planReviewOutput>;
 
 interface ActiveRun {
 	state?: RunState<SessionContext, SessionAgent>;
@@ -139,6 +143,12 @@ interface ActiveRun {
 	granted: boolean;
 	done: Promise<void>;
 	assistantId?: string;
+	finalAssistant?: {
+		messageId: string;
+		providerId?: string | undefined;
+		responseId?: string | undefined;
+	};
+	reviewResponse?: { responseId: string | undefined; status?: unknown };
 	toolCalls: Map<string, { name: string; arguments: Record<string, unknown>; failed: boolean }>;
 	startedTools: Set<string>;
 	structuredResults?: Map<string, StructuredToolResult>;
@@ -356,6 +366,9 @@ function emit(entry: Entry, event: SessionEvent, immediate = true): void {
 		}, 100);
 		entry.flush.unref();
 	}
+	publishEvent(entry, event);
+}
+function publishEvent(entry: Entry, event: SessionEvent): void {
 	const record = entry.store.record;
 	publish(
 		{
@@ -580,6 +593,15 @@ function recordToolResult(
 
 function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): void {
 	if (!run.granted || entry.active !== run) return;
+	if (
+		entry.store.record.childRun?.purpose === "review" &&
+		event.type === "raw_model_stream_event" &&
+		event.data.type === "response_done"
+	)
+		run.reviewResponse = {
+			responseId: event.data.response.id,
+			status: event.data.response.providerData?.status,
+		};
 	if (event.type === "raw_model_stream_event" && event.data.type === "output_text_delta") {
 		const previous = startAssistant(entry, run);
 		const message = {
@@ -619,6 +641,11 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 		);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_end", message });
+		run.finalAssistant = {
+			messageId: previous.id ?? "",
+			providerId: item.rawItem.id,
+			responseId: run.reviewResponse?.responseId,
+		};
 		delete run.assistantId;
 	} else if (item.type === "tool_call_item" && item.rawItem.type === "function_call") {
 		addToolCall(entry, run, item.rawItem);
@@ -1177,6 +1204,7 @@ function queueResourceCompletion(
 	customType: string,
 	details: unknown,
 ): void {
+	assertAdditionalInputAllowed(parent);
 	if (
 		parent.stopping ||
 		closingSessions.has(parent.store.record.sessionId) ||
@@ -1444,6 +1472,8 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 						},
 						onStream: ({ event }) => projectStream(child, childRun, event),
 						customOutputExtractor: (result) => {
+							const output = result.interruptions.length ? "" : (result.finalOutput ?? "");
+							if (typeof output !== "string") throw new Error("Ordinary child output must be text");
 							hasChildOutcome = true;
 							childRun.state = result.state;
 							const usage = result.state.usage;
@@ -1475,7 +1505,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 								childRun.granted = false;
 								delete child.active;
 							}
-							return result.interruptions.length ? "" : (result.finalOutput ?? "");
+							return output;
 						},
 					});
 					let childInvocationDetails = details;
@@ -2048,6 +2078,7 @@ export async function runSessionChild(parentSessionId: string, request: SessionC
 			childRun: {
 				parentSessionId,
 				purpose: "review",
+				outputContract: REVIEW_OUTPUT_CONTRACT,
 				toolCallId: randomUUID(),
 				task: request.prompt,
 				enabledExtensions: snapshotSdkExtensions(
@@ -2088,19 +2119,22 @@ export async function runSessionChild(parentSessionId: string, request: SessionC
 			request.signal?.throwIfAborted();
 			await acquireChildSlot(child, controller.signal);
 			request.signal?.throwIfAborted();
-			await promptSession(created.sessionId, request.prompt);
-			const completion = child.store.record.state.completion;
-			finishChild(
-				child,
-				completion?.outcome === "succeeded"
-					? "completed"
-					: completion?.outcome === "cancelled"
-						? "aborted"
-						: "error",
-			);
+			await promptEntry(child, request.prompt);
+			request.signal?.throwIfAborted();
+			const binding = child.store.record.childRun?.reviewOutput;
+			const message =
+				binding && binding.runId === child.store.record.state.completion?.completionId
+					? child.store.record.messages.find((message) => message.id === binding.messageId)
+					: undefined;
+			const output =
+				message?.role === "assistant" && message.stopReason === "stop"
+					? message.planReview
+					: undefined;
+			if (child.store.record.childRun?.status === "completed" && !output)
+				throw new Error("The review child has no committed output");
 			return {
 				sessionId: created.sessionId,
-				text: childOutput(child).content[0]?.text ?? "",
+				output,
 				status: child.store.record.childRun?.status ?? "error",
 				usage: getSessionStats(created.sessionId).tokens,
 			};
@@ -2188,6 +2222,7 @@ export async function sendReviewFixToSession(
 	details: unknown,
 ): Promise<void> {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	if (entry.stopping || closingSessions.has(sessionId) || deletingSessions.has(sessionId))
 		throw new Error("The session cannot accept a review fix");
 	const messageId = `review-fix-${randomUUID()}`;
@@ -2224,7 +2259,10 @@ function reconcileStoredChildren(parent: Entry): void {
 			!child.detached &&
 			!!parent.store.record.runCheckpoint &&
 			!!(parent.store.record.pendingApproval || parent.store.record.pendingToolResponse);
+		const unsupportedReview =
+			child.purpose === "review" && child.outputContract !== REVIEW_OUTPUT_CONTRACT;
 		if (
+			!unsupportedReview &&
 			(waiting || nested) &&
 			!Object.values(record.effects).some((effect) => effect.status !== "completed")
 		)
@@ -2232,8 +2270,10 @@ function reconcileStoredChildren(parent: Entry): void {
 		const store = new PersistentSession(record);
 		store.update((current) => {
 			if (current.childRun) {
-				current.childRun.status = "aborted";
-				current.childRun.abortReason = "interrupted";
+				current.childRun.status = unsupportedReview ? "error" : "aborted";
+				current.childRun.abortReason = unsupportedReview
+					? "Unsupported Plan review output contract; start a new review"
+					: "interrupted";
 				current.childRun.finishedAt = Date.now();
 				current.childRun.completionDelivered = true;
 			}
@@ -2241,7 +2281,9 @@ function reconcileStoredChildren(parent: Entry): void {
 			current.state.needsInput = null;
 			current.state.completion = {
 				completionId: current.state.runId ?? current.sessionId,
-				outcome: "interrupted",
+				...(unsupportedReview
+					? { outcome: "failed" as const, failure: "error" as const }
+					: { outcome: "interrupted" as const }),
 			};
 			for (const effect of Object.values(current.effects))
 				if (effect.status === "started") effect.status = "unknown";
@@ -2402,8 +2444,9 @@ async function buildSessionAgent(
 					},
 				}))),
 	];
-	const agent = new Agent<SessionContext>({
+	const agent = new Agent<SessionContext, "text" | typeof planReviewOutput>({
 		name: childDefinition?.name ?? "RailDesign",
+		outputType: entry.store.record.childRun?.purpose === "review" ? planReviewOutput : "text",
 		instructions: (context) => {
 			assertWorkspaceContext(context.context, entry);
 			assertActive(entry, run);
@@ -2531,6 +2574,32 @@ async function buildSessionAgent(
 	return agent;
 }
 
+function commitReviewOutput(
+	entry: Entry,
+	run: ActiveRun,
+	output: PlanReviewOutput,
+	messageId: string,
+): void {
+	assertActive(entry, run);
+	if (entry.flush) clearTimeout(entry.flush);
+	delete entry.flush;
+	entry.store.update((record) => {
+		assertActive(entry, run);
+		const message = record.messages.find((message) => message.id === messageId);
+		if (message?.role !== "assistant" || !record.childRun || record.childRun.purpose !== "review")
+			throw new Error("Missing final Plan review message");
+		message.planReview = structuredClone(output);
+		message.stopReason = "stop";
+		record.childRun.reviewOutput = { runId: run.id, messageId };
+		record.eventSeq += 1;
+	});
+	assertActive(entry, run);
+	const message = entry.store.record.messages.find((message) => message.id === messageId);
+	if (message?.role !== "assistant") throw new Error("Missing committed Plan review message");
+	publishEvent(entry, { type: "message_end", message });
+	assertActive(entry, run);
+}
+
 async function executeRun(
 	entry: Entry,
 	run: ActiveRun,
@@ -2538,8 +2607,14 @@ async function executeRun(
 	recovery?: string,
 ): Promise<void> {
 	let terminal: AgentSettlement = { stopReason: "stop" };
+	let streamFailed = false;
 	try {
 		assertActive(entry, run);
+		if (
+			entry.store.record.childRun?.purpose === "review" &&
+			entry.store.record.childRun.outputContract !== REVIEW_OUTPUT_CONTRACT
+		)
+			throw new Error("Unsupported Plan review output contract; start a new review");
 		const selected = entry.store.record.model;
 		const model = selected
 			? (await listAvailableModels()).find(
@@ -2623,33 +2698,82 @@ async function executeRun(
 			const stream = await startStream(runner, agent, next, entry.store, run.controller.signal);
 			run.state = stream.state;
 			stageSteering(entry);
-			for await (const event of stream) {
-				projectStream(entry, run, event);
-				stageSteering(entry);
+			const completed = stream.completed.catch(() => undefined);
+			try {
+				for await (const event of stream) {
+					projectStream(entry, run, event);
+					stageSteering(entry);
+				}
+			} catch (error) {
+				if (run.granted && !run.controller.signal.aborted) streamFailed = true;
+				run.granted = false;
+				run.controller.abort();
+				throw error;
+			} finally {
+				await completed;
+				if (entry.store.record.childRun?.purpose === "review") {
+					const response = stream.rawResponses.at(-1);
+					const message = response?.output.findLast(
+						(item) => item.type === "message" && item.role === "assistant",
+					);
+					if (
+						!response?.responseId ||
+						response.responseId !== run.finalAssistant?.responseId ||
+						response.output.some((item) => item.type !== "message" && item.type !== "reasoning") ||
+						message?.type !== "message" ||
+						message.role !== "assistant" ||
+						message.id !== run.finalAssistant?.providerId ||
+						!message.content.some(
+							(part) =>
+								(part.type === "output_text" && part.text.length > 0) || part.type === "refusal",
+						)
+					)
+						delete run.finalAssistant;
+				}
+				const lastUsage = stream.state.usage.requestUsageEntries?.at(-1);
+				entry.store.record.modelContextTokens =
+					lastUsage?.totalTokens ??
+					(stream.state.usage.requests === 1 ? stream.state.usage.totalTokens : 0);
+				run.usage = {
+					inputTokens: stream.state.usage.inputTokens,
+					outputTokens: stream.state.usage.outputTokens,
+					totalTokens: stream.state.usage.totalTokens,
+					cacheRead: stream.state.usage.inputTokensDetails.reduce(
+						(sum, detail) =>
+							sum + (typeof detail.cached_tokens === "number" ? detail.cached_tokens : 0),
+						0,
+					),
+					cacheWrite: stream.state.usage.inputTokensDetails.reduce(
+						(sum, detail) =>
+							sum + (typeof detail.cache_write_tokens === "number" ? detail.cache_write_tokens : 0),
+						0,
+					),
+				};
 			}
 			await stream.completed;
-			const lastUsage = stream.state.usage.requestUsageEntries?.at(-1);
-			entry.store.record.modelContextTokens =
-				lastUsage?.totalTokens ??
-				(stream.state.usage.requests === 1 ? stream.state.usage.totalTokens : 0);
-			run.usage = {
-				inputTokens: stream.state.usage.inputTokens,
-				outputTokens: stream.state.usage.outputTokens,
-				totalTokens: stream.state.usage.totalTokens,
-				cacheRead: stream.state.usage.inputTokensDetails.reduce(
-					(sum, detail) =>
-						sum + (typeof detail.cached_tokens === "number" ? detail.cached_tokens : 0),
-					0,
-				),
-				cacheWrite: stream.state.usage.inputTokensDetails.reduce(
-					(sum, detail) =>
-						sum + (typeof detail.cache_write_tokens === "number" ? detail.cache_write_tokens : 0),
-					0,
-				),
-			};
+
 			if (run.controller.signal.aborted || stream.cancelled) throw new Error("Run cancelled");
 			if (stream.error) throw stream.error;
-			if (stream.interruptions.length === 0) break;
+			if (stream.interruptions.length === 0) {
+				if (entry.store.record.childRun?.purpose === "review") {
+					assertActive(entry, run);
+					const response = stream.rawResponses.at(-1);
+					assertCompletedPlanReviewResponse(response, run.reviewResponse);
+					const finalMessage = response?.output.findLast(
+						(item) => item.type === "message" && item.role === "assistant",
+					);
+					if (
+						!run.finalAssistant?.messageId ||
+						!finalMessage?.id ||
+						run.finalAssistant.providerId !== finalMessage.id
+					)
+						throw new Error("The final Plan review message is not bound");
+					const output = stream.finalOutput;
+					if (!isPlanReviewOutput(output)) throw new Error("Invalid Plan review output");
+					commitReviewOutput(entry, run, output, run.finalAssistant.messageId);
+				}
+				break;
+			}
 			for (const interruption of stream.interruptions) {
 				if (interruption.rawItem.type !== "function_call")
 					throw new Error("Unsupported approval type");
@@ -2693,26 +2817,41 @@ async function executeRun(
 		if (run.suspended) return;
 		terminal = {
 			stopReason:
-				!run.granted || run.controller.signal.aborted
+				!streamFailed && (!run.granted || run.controller.signal.aborted)
 					? "aborted"
 					: error instanceof MaxTurnsExceededError
 						? "length"
 						: "error",
-			...(run.controller.signal.aborted || !run.granted
+			...(!streamFailed && (run.controller.signal.aborted || !run.granted)
 				? {}
 				: { errorMessage: error instanceof Error ? error.message : String(error) }),
 		};
-		const partial = run.assistantId
-			? entry.store.record.messages.find((message) => message.id === run.assistantId)
+		const failedId =
+			run.assistantId ??
+			(entry.store.record.childRun?.purpose === "review"
+				? run.finalAssistant?.messageId
+				: undefined);
+		const partial = failedId
+			? entry.store.record.messages.find((message) => message.id === failedId)
 			: undefined;
-		if (terminal.stopReason !== "aborted" || partial?.role === "assistant") {
+		if (entry.store.record.childRun?.reviewOutput?.runId === run.id)
+			entry.store.update((record) => {
+				if (record.childRun) delete record.childRun.reviewOutput;
+			});
+		if (
+			terminal.stopReason !== "aborted" ||
+			partial?.role === "assistant" ||
+			entry.store.record.childRun?.purpose === "review"
+		) {
+			const messageId = failedId ?? randomUUID();
 			const message = assistant(
 				entry,
-				run.assistantId ?? randomUUID(),
+				messageId,
 				partial?.role === "assistant" ? partial.content : [],
 				terminal.stopReason,
 			);
 			if (terminal.errorMessage) message.errorMessage = terminal.errorMessage;
+			if (entry.store.record.childRun?.purpose === "review") run.assistantId = messageId;
 			appendMessage(entry, message);
 			emit(entry, { type: "message_end", message });
 		}
@@ -2745,9 +2884,12 @@ async function executeRun(
 							},
 						]);
 				}
-				const lastAssistant = entry.store.record.messages.findLast(
-					(message) => message.role === "assistant",
-				);
+				const lastAssistant =
+					entry.store.record.childRun?.purpose === "review"
+						? entry.store.record.messages.find(
+								(message) => message.id === (run.assistantId ?? run.finalAssistant?.messageId),
+							)
+						: entry.store.record.messages.findLast((message) => message.role === "assistant");
 				if (lastAssistant?.role === "assistant" && run.usage) {
 					lastAssistant.usage.input = run.usage.inputTokens;
 					lastAssistant.usage.output = run.usage.outputTokens;
@@ -2951,6 +3093,10 @@ function stageSteering(entry: Entry): void {
 			});
 	}
 }
+function assertAdditionalInputAllowed(entry: Entry): void {
+	if (entry.store.record.childRun?.purpose === "review")
+		throw new Error("Plan review children are read-only; start a new review");
+}
 function enqueue(
 	sessionId: string,
 	kind: QueueLane,
@@ -2960,6 +3106,7 @@ function enqueue(
 	internal = false,
 ): void {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	if (
 		closingSessions.has(sessionId) ||
 		deletingSessions.has(sessionId) ||
@@ -3060,6 +3207,7 @@ export function nudgeSession(
 	images?: readonly ImageContent[],
 ): { disposition: "needs_input" | "queued" | "prompted" } {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	if (!isControlMessage(text)) throw new Error("Nudges must be internal control messages");
 	if (visibleState(entry).needsInput) return { disposition: "needs_input" };
 	if (entry.stopping) throw new Error("Session is stopping");
@@ -3074,6 +3222,7 @@ export function sendHostMessageToSession(
 	details: ChatHandoffDetails | ContinueInWorkspaceRequestDetails,
 ): Promise<void> {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	if (
 		entry.stopping ||
 		closingSessions.has(sessionId) ||
@@ -3157,6 +3306,7 @@ export function updateQueuedMessage(
 	images?: readonly ImageContent[],
 ): void {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	const input = entry.store.record.queue.find((item) => item.id === messageId);
 	if (!input || input.state === "staged")
 		throw new Error("Queued input is unavailable for editing");
@@ -3200,6 +3350,7 @@ async function drainQueue(entry: Entry, steeringOnly = false): Promise<void> {
 }
 export async function sendSteeringNow(sessionId: string): Promise<void> {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
 	if (entry.active) {
 		stageSteering(entry);
 		return;
@@ -3372,6 +3523,16 @@ export function promptSession(
 	messageId?: string,
 ): Promise<void> {
 	const entry = mustGet(sessionId);
+	assertAdditionalInputAllowed(entry);
+	return promptEntry(entry, text, images, messageId);
+}
+function promptEntry(
+	entry: Entry,
+	text: string,
+	images?: readonly ImageContent[],
+	messageId?: string,
+): Promise<void> {
+	const sessionId = entry.store.record.sessionId;
 	if (typeof text !== "string") throw new Error("Message must be text");
 	if (
 		closingSessions.has(sessionId) ||
@@ -3597,14 +3758,21 @@ export async function ensureSessionAttached(
 		([, effect]) => effect.status !== "completed" && effect.runId === record.state.runId,
 	);
 	const checkpoint = record.runCheckpoint;
+	const unsupportedReview =
+		record.childRun?.purpose === "review" &&
+		record.childRun.outputContract !== REVIEW_OUTPUT_CONTRACT &&
+		(record.state.execution === "running" || record.pendingApproval || record.pendingToolResponse);
 	if (
-		checkpoint?.granted &&
-		interruptedEffects.length === 0 &&
-		(record.pendingApproval || record.pendingToolResponse || record.state.execution === "running")
+		unsupportedReview ||
+		(checkpoint?.granted &&
+			interruptedEffects.length === 0 &&
+			(record.pendingApproval ||
+				record.pendingToolResponse ||
+				record.state.execution === "running"))
 	) {
 		const run: ActiveRun = {
-			id: checkpoint.runId,
-			enabledExtensions: checkpoint.enabledExtensions,
+			id: checkpoint?.runId ?? record.state.runId ?? randomUUID(),
+			enabledExtensions: checkpoint?.enabledExtensions ?? record.childRun?.enabledExtensions ?? [],
 			controller: new AbortController(),
 			granted: true,
 			done: Promise.resolve(),
@@ -3615,7 +3783,7 @@ export async function ensureSessionAttached(
 			run.markReady = resolveReady;
 		});
 		entry.active = run;
-		run.done = executeRun(entry, run, [], checkpoint.checkpoint);
+		run.done = executeRun(entry, run, [], checkpoint?.checkpoint);
 		await run.ready;
 	} else if (
 		record.state.execution === "running" ||

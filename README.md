@@ -42,7 +42,10 @@ The SDK tool graph includes admitted Skills and workspace instructions, question
 Plan and Spec Graph, configured MCP tools, and foreground or background child tasks. Resources retains
 child transcripts and background-command output, with ownership checks and Stop controls. The Resources
 dock can fold while work continues; inspect an MCP server for its status and this chat's calls.
-Plan review uses an independent SDK child. Web search and page reading use DeepSeek Search and Fetch with a separate
+Plan review uses an independent SDK child with a validated verdict saved in its read-only transcript.
+Plan and Review show the recorded outcome and findings. Finish or stop pending reviews before updating;
+older pending review checkpoints stop explicitly.
+Web search and page reading use DeepSeek Search and Fetch with a separate
 host key configured in Extensions settings. Skill search, content reads, manual `/skill:name` commands
 and idle catalog reload share current trust and enable policy. The Extensions settings page manages bundled SDK
 extensions and their declared settings; Pi package installation and Pi built-in switches are retired.

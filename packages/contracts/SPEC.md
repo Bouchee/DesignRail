@@ -11,6 +11,18 @@ tags: [wire]
 
 ## RailDesign sessions
 
+`PlanReviewOutput` is the fixed model-owned review DTO: verdict, optional summary/reading order,
+and findings with local IDs and optional kind/path/range. `isPlanReviewOutput` rejects unknown fields
+at every object boundary. It shares verdict, range, reading-order and finding-cardinality validation
+with `isPlanReviewResult`; host task identity, SHA, canonical comment IDs and open-finding policy remain
+outside model authority. Summary length remains prompt guidance. The contracts package has no SDK
+or schema-library dependency. `domain.test.ts` covers the shared semantics and strict DTO boundary.
+
+`AssistantMessage.planReview?: PlanReviewOutput` is present only on the accepted final message of a
+host-owned review child with `stopReason:"stop"`. A `message_end` correction carries the complete same-ID
+message; provisional JSON text has no verdict authority. Session hydration and history fixtures retain
+the field unchanged. Bad DTOs or a typed payload on a failed message fail stored-record validation.
+
 The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction, call and revision ownership, and remain visible on reply failure. Queue entries have stable IDs, pending/staged admission state and an optional retained error; admitted input appears in the transcript under the same ID. Queue mutation addresses IDs, never mutable positions. Compaction uses an operation ID and keeps the full transcript. Advanced tool execution remains assigned to stage 3. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## Responsibility

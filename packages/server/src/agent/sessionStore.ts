@@ -17,6 +17,7 @@ import type {
 	TranscriptMessage,
 	WireModel,
 } from "@thinkrail/contracts";
+import { isPlanReviewOutput } from "@thinkrail/contracts";
 import { z } from "zod";
 import { logger } from "../log";
 import { dataDir } from "../persistence";
@@ -24,6 +25,7 @@ import type { AgentDefinition } from "./childDefinitions";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
 const log = logger("agent");
+export const REVIEW_OUTPUT_CONTRACT = "plan-review-v1";
 
 export type ApprovalRequest = Extract<ExtUiRequest, { kind: "confirm" | "select" }> & {
 	runId: string;
@@ -65,6 +67,8 @@ export interface SummaryReceipt {
 export interface ChildRunRecord {
 	parentSessionId: string;
 	purpose?: "review" | undefined;
+	outputContract?: string | undefined;
+	reviewOutput?: { runId: string; messageId: string } | undefined;
 	toolCallId: string;
 	task: string;
 	definition: AgentDefinition;
@@ -166,27 +170,30 @@ const transcriptSchema = z.discriminatedUnion("role", [
 		role: z.literal("user"),
 		content: z.union([z.string(), z.array(z.union([textSchema, imageSchema]))]),
 	}),
-	messageBase.extend({
-		role: z.literal("assistant"),
-		api: z.string(),
-		provider: z.string(),
-		model: z.string(),
-		content: z.array(
-			z.union([
-				textSchema,
-				z.object({ type: z.literal("thinking"), thinking: z.string() }),
-				z.object({
-					type: z.literal("toolCall"),
-					id: z.string(),
-					name: z.string(),
-					arguments: z.record(z.string(), z.unknown()),
-				}),
-			]),
-		),
-		usage: usageSchema,
-		stopReason: z.enum(["stop", "length", "toolUse", "error", "aborted"]),
-		errorMessage: z.string().optional(),
-	}),
+	messageBase
+		.extend({
+			role: z.literal("assistant"),
+			api: z.string(),
+			provider: z.string(),
+			model: z.string(),
+			content: z.array(
+				z.union([
+					textSchema,
+					z.object({ type: z.literal("thinking"), thinking: z.string() }),
+					z.object({
+						type: z.literal("toolCall"),
+						id: z.string(),
+						name: z.string(),
+						arguments: z.record(z.string(), z.unknown()),
+					}),
+				]),
+			),
+			usage: usageSchema,
+			stopReason: z.enum(["stop", "length", "toolUse", "error", "aborted"]),
+			errorMessage: z.string().optional(),
+			planReview: z.custom((value) => value === undefined || isPlanReviewOutput(value)).optional(),
+		})
+		.refine((message) => message.planReview === undefined || message.stopReason === "stop"),
 	messageBase.extend({
 		role: z.literal("toolResult"),
 		toolCallId: z.string(),
@@ -257,157 +264,176 @@ const stateSchema = z.object({
 	queuedCount: z.number().int().nonnegative(),
 	backgroundWork: z.boolean(),
 });
-const recordSchema = z.object({
-	version: z.literal(2),
-	childRun: z
-		.object({
-			parentSessionId: idSchema,
-			purpose: z.literal("review").optional(),
-			toolCallId: z.string().min(1),
-			task: z.string(),
-			definition: z.object({
-				name: z.string().min(1),
-				description: z.string(),
-				source: z.enum(["builtin", "personal", "project"]),
-				filePath: z.string().optional(),
-				tools: z.array(z.string()).optional(),
-				model: z.string().optional(),
-				thinking: thinkingSchema.optional(),
-				maxTurns: z.number().int().positive().optional(),
-				inheritProjectContext: z.boolean().optional(),
-				skills: z.array(z.string()).optional(),
-				extensions: z.boolean().optional(),
-				systemPrompt: z.string(),
-			}),
-			enabledExtensions: z.array(
-				z.object({ name: z.string(), settings: z.record(z.string(), z.boolean()) }),
-			),
-			detached: z.boolean(),
-			createdAt: z.string(),
-			status: z.enum(["queued", "running", "completed", "error", "aborted"]),
-			finishedAt: z.number().finite().optional(),
-			completionDelivered: z.boolean(),
-			collected: z.boolean(),
-			abortReason: z.string().optional(),
-		})
-		.optional(),
-	sessionId: idSchema,
-	workspaceId: z.string().min(1),
-	cwd: z.string().min(1),
-	title: z.string().optional(),
-	model: z.custom<WireModel | null>((v) => v === null || wireModelSchema.safeParse(v).success),
-	thinkingLevel: thinkingSchema,
-	eventSeq: z.number().int().nonnegative(),
-	revision: z.number().int().nonnegative(),
-	history: z.array(protocol.ModelItem),
-	inputItems: z.record(z.string(), protocol.ModelItem),
-	historyOperations: z.record(
-		z.string(),
-		z.discriminatedUnion("type", [
-			z.object({ type: z.literal("append_items"), items: z.array(protocol.ModelItem) }),
+const recordSchema = z
+	.object({
+		version: z.literal(2),
+		childRun: z
+			.object({
+				parentSessionId: idSchema,
+				purpose: z.literal("review").optional(),
+				outputContract: z.string().min(1).optional(),
+				reviewOutput: z.object({ runId: idSchema, messageId: idSchema }).optional(),
+				toolCallId: z.string().min(1),
+				task: z.string(),
+				definition: z.object({
+					name: z.string().min(1),
+					description: z.string(),
+					source: z.enum(["builtin", "personal", "project"]),
+					filePath: z.string().optional(),
+					tools: z.array(z.string()).optional(),
+					model: z.string().optional(),
+					thinking: thinkingSchema.optional(),
+					maxTurns: z.number().int().positive().optional(),
+					inheritProjectContext: z.boolean().optional(),
+					skills: z.array(z.string()).optional(),
+					extensions: z.boolean().optional(),
+					systemPrompt: z.string(),
+				}),
+				enabledExtensions: z.array(
+					z.object({ name: z.string(), settings: z.record(z.string(), z.boolean()) }),
+				),
+				detached: z.boolean(),
+				createdAt: z.string(),
+				status: z.enum(["queued", "running", "completed", "error", "aborted"]),
+				finishedAt: z.number().finite().optional(),
+				completionDelivered: z.boolean(),
+				collected: z.boolean(),
+				abortReason: z.string().optional(),
+			})
+			.optional(),
+		sessionId: idSchema,
+		workspaceId: z.string().min(1),
+		cwd: z.string().min(1),
+		title: z.string().optional(),
+		model: z.custom<WireModel | null>((v) => v === null || wireModelSchema.safeParse(v).success),
+		thinkingLevel: thinkingSchema,
+		eventSeq: z.number().int().nonnegative(),
+		revision: z.number().int().nonnegative(),
+		history: z.array(protocol.ModelItem),
+		inputItems: z.record(z.string(), protocol.ModelItem),
+		historyOperations: z.record(
+			z.string(),
+			z.discriminatedUnion("type", [
+				z.object({ type: z.literal("append_items"), items: z.array(protocol.ModelItem) }),
+				z.object({
+					type: z.literal("replace_suffix"),
+					expectedSuffix: z.array(protocol.ModelItem),
+					replacement: z.array(protocol.ModelItem),
+				}),
+			]),
+		),
+		summaryOperations: z.record(
+			z.string(),
 			z.object({
-				type: z.literal("replace_suffix"),
-				expectedSuffix: z.array(protocol.ModelItem),
-				replacement: z.array(protocol.ModelItem),
+				force: z.boolean(),
+				instructions: z.string(),
+				sourceRevision: z.number().int().nonnegative(),
+				beforeTokens: z.number().int().nonnegative(),
+				afterTokens: z.number().int().nonnegative(),
+				usage: z
+					.object({
+						input: z.number().int().nonnegative(),
+						output: z.number().int().nonnegative(),
+						cacheRead: z.number().int().nonnegative(),
+						cacheWrite: z.number().int().nonnegative(),
+						total: z.number().int().nonnegative(),
+					})
+					.optional(),
 			}),
-		]),
-	),
-	summaryOperations: z.record(
-		z.string(),
-		z.object({
-			force: z.boolean(),
-			instructions: z.string(),
-			sourceRevision: z.number().int().nonnegative(),
-			beforeTokens: z.number().int().nonnegative(),
-			afterTokens: z.number().int().nonnegative(),
-			usage: z
-				.object({
-					input: z.number().int().nonnegative(),
-					output: z.number().int().nonnegative(),
-					cacheRead: z.number().int().nonnegative(),
-					cacheWrite: z.number().int().nonnegative(),
-					total: z.number().int().nonnegative(),
-				})
-				.optional(),
-		}),
-	),
-	retiredInputIds: z.array(z.string()),
-	queue: z.array(
-		z.object({
-			id: idSchema,
-			text: z.string(),
-			images: z.array(imageSchema).optional(),
-			kind: z.enum(["steering", "followUp"]),
-			state: z.enum(["pending", "staged"]),
-			internal: z.boolean().optional(),
-			error: z.string().optional(),
-		}),
-	),
-	effects: z.record(
-		z.string(),
-		z.object({
-			runId: z.string(),
-			name: z.string(),
-			arguments: z.record(z.string(), z.unknown()),
-			status: z.enum(["started", "completed", "unknown"]),
-			result: z.string().optional(),
-			isError: z.boolean().optional(),
-		}),
-	),
-	messages: z.array(z.custom<TranscriptMessage>((v) => transcriptSchema.safeParse(v).success)),
-	state: z.custom<SessionState>((v) => stateSchema.safeParse(v).success),
-	updatedAt: z.number().finite(),
-	modelContextTokens: z.number().int().nonnegative().optional(),
-	pendingApproval: z
-		.custom<SessionRecord["pendingApproval"]>(
-			(v) =>
-				v === undefined ||
-				z.object({ request: approvalSchema, checkpoint: z.string() }).safeParse(v).success,
-		)
-		.optional(),
-	pendingToolResponse: z
-		.object({
-			id: z.string(),
-			sessionId: idSchema,
-			runId: z.string(),
-			revision: z.number().int().nonnegative(),
-			toolCallId: z.string(),
-			toolName: z.string(),
-			args: z.record(z.string(), z.unknown()),
-			checkpoint: z.string(),
-		})
-		.optional(),
-	toolResponses: z.record(
-		z.string(),
-		z.object({
-			runId: z.string(),
-			revision: z.number().int().nonnegative(),
-			toolCallId: z.string(),
-			response: z.unknown(),
-		}),
-	),
-	runCheckpoint: z
-		.object({
-			runId: z.string(),
-			checkpoint: z.string(),
-			granted: z.boolean(),
-			enabledExtensions: z.array(
-				z.object({ name: z.string().min(1), settings: z.record(z.string(), z.boolean()) }),
-			),
-		})
-		.optional(),
-	decisions: z.record(
-		z.string(),
-		z.object({
-			runId: z.string(),
-			revision: z.number().int(),
-			toolCallId: z.string(),
-			value: z.boolean(),
-			selection: z.string().nullable().optional(),
-			policyFingerprint: z.string().optional(),
-		}),
-	),
-});
+		),
+		retiredInputIds: z.array(z.string()),
+		queue: z.array(
+			z.object({
+				id: idSchema,
+				text: z.string(),
+				images: z.array(imageSchema).optional(),
+				kind: z.enum(["steering", "followUp"]),
+				state: z.enum(["pending", "staged"]),
+				internal: z.boolean().optional(),
+				error: z.string().optional(),
+			}),
+		),
+		effects: z.record(
+			z.string(),
+			z.object({
+				runId: z.string(),
+				name: z.string(),
+				arguments: z.record(z.string(), z.unknown()),
+				status: z.enum(["started", "completed", "unknown"]),
+				result: z.string().optional(),
+				isError: z.boolean().optional(),
+			}),
+		),
+		messages: z.array(z.custom<TranscriptMessage>((v) => transcriptSchema.safeParse(v).success)),
+		state: z.custom<SessionState>((v) => stateSchema.safeParse(v).success),
+		updatedAt: z.number().finite(),
+		modelContextTokens: z.number().int().nonnegative().optional(),
+		pendingApproval: z
+			.custom<SessionRecord["pendingApproval"]>(
+				(v) =>
+					v === undefined ||
+					z.object({ request: approvalSchema, checkpoint: z.string() }).safeParse(v).success,
+			)
+			.optional(),
+		pendingToolResponse: z
+			.object({
+				id: z.string(),
+				sessionId: idSchema,
+				runId: z.string(),
+				revision: z.number().int().nonnegative(),
+				toolCallId: z.string(),
+				toolName: z.string(),
+				args: z.record(z.string(), z.unknown()),
+				checkpoint: z.string(),
+			})
+			.optional(),
+		toolResponses: z.record(
+			z.string(),
+			z.object({
+				runId: z.string(),
+				revision: z.number().int().nonnegative(),
+				toolCallId: z.string(),
+				response: z.unknown(),
+			}),
+		),
+		runCheckpoint: z
+			.object({
+				runId: z.string(),
+				checkpoint: z.string(),
+				granted: z.boolean(),
+				enabledExtensions: z.array(
+					z.object({ name: z.string().min(1), settings: z.record(z.string(), z.boolean()) }),
+				),
+			})
+			.optional(),
+		decisions: z.record(
+			z.string(),
+			z.object({
+				runId: z.string(),
+				revision: z.number().int(),
+				toolCallId: z.string(),
+				value: z.boolean(),
+				selection: z.string().nullable().optional(),
+				policyFingerprint: z.string().optional(),
+			}),
+		),
+	})
+	.refine(
+		(record) => {
+			const binding = record.childRun?.reviewOutput;
+			if (!binding) return true;
+			const message = record.messages.find((message) => message.id === binding.messageId);
+			return (
+				record.childRun?.purpose === "review" &&
+				record.childRun.outputContract === REVIEW_OUTPUT_CONTRACT &&
+				binding.runId === record.state.runId &&
+				message?.role === "assistant" &&
+				message.stopReason === "stop" &&
+				isPlanReviewOutput(message.planReview)
+			);
+		},
+		{ message: "Invalid committed Plan review binding" },
+	);
 
 export function sessionRecordPath(sessionId: string, directory = dataDir()): string {
 	if (!idSchema.safeParse(sessionId).success) throw new Error("Invalid session ID");

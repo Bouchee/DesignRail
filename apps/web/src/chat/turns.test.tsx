@@ -14,6 +14,31 @@ function renderRow(row: ChatRow, isFinalAnswer: boolean): string {
 	);
 }
 
+test("validated review renders read-only findings without granting local comment actions", async () => {
+	await applyLocale("en", {});
+	const html = renderRow(
+		{
+			kind: "markdown",
+			id: "review:text:0",
+			text: "raw JSON",
+			planReview: {
+				verdict: "request_changes",
+				summary: "One defect",
+				findings: [{ id: "local-f1", body: "Fix the bound", path: "a.ts", startLine: 2 }],
+				readingOrder: [{ path: "a.ts", why: "Shared contract" }],
+			},
+		},
+		true,
+	);
+	expect(html).toContain('data-testid="plan-review-output"');
+	expect(html).toContain("One defect");
+	expect(html).toContain("Fix the bound");
+	expect(html).toContain("Shared contract");
+	expect(html).not.toContain("resolve_comment");
+	expect(html).not.toContain("local-f1");
+	expect(html).not.toContain("raw JSON");
+});
+
 describe("message copy layout", () => {
 	test("places an assistant copy action inside the bottom-left content band", () => {
 		const html = renderRow({ kind: "markdown", id: "answer", text: "100. Final answer" }, true);

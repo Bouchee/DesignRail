@@ -1,3 +1,5 @@
+import type { PlanReviewOutput } from "./domain";
+
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
@@ -54,6 +56,7 @@ export interface AssistantMessage {
 	usage: Usage;
 	stopReason: StopReason;
 	errorMessage?: string;
+	planReview?: PlanReviewOutput;
 	timestamp: number;
 }
 

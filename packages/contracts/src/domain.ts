@@ -1965,6 +1965,15 @@ export interface ReviewFixDetails {
 
 export type PlanReviewVerdict = "approve" | "request_changes";
 
+export type PlanReviewFinding = Omit<ReviewFixComment, "kind"> & { kind?: ReviewCommentKind };
+
+export interface PlanReviewOutput {
+	verdict: PlanReviewVerdict;
+	summary?: string;
+	readingOrder?: ReviewReadingStep[];
+	findings: PlanReviewFinding[];
+}
+
 /** Result of the worker-invoked request_review tool (Option A): a review subagent's structured verdict on
  * a plan step. Carried as the tool result's `details`, rendered by the request_review card, and written to
  * the item's review record. See submodule-server-host-plan-review + submodule-server-todos. */
@@ -2005,7 +2014,7 @@ function isPositiveInt(n: unknown): n is number {
 
 /** A single reviewer finding: id + body required; kind (if present) a known enum; a line requires a path,
  * an endLine requires a startLine, and any range is positive and coherent. See submodule-server-host-plan-review. */
-function isReviewFinding(f: unknown): f is ReviewFixComment {
+function isReviewFinding(f: unknown): f is PlanReviewFinding {
 	if (!f || typeof f !== "object") return false;
 	const c = f as Partial<ReviewFixComment>;
 	if (typeof c.id !== "string" || c.id.length === 0) return false;
@@ -2023,10 +2032,9 @@ function isReviewFinding(f: unknown): f is ReviewFixComment {
 /** Validate the review subagent's parsed JSON verdict (untrusted — model output). Every finding field and
  * its enum/line coherence is checked, and the verdict/finding cardinality is enforced: a `request_changes`
  * with no actionable finding is rejected (it would strand the worker), while an `approve` may carry none. */
-export function isPlanReviewResult(value: unknown): value is PlanReviewResult {
+function isPlanReviewBody(value: unknown): value is PlanReviewOutput {
 	if (!value || typeof value !== "object") return false;
-	const r = value as Partial<PlanReviewResult>;
-	if (typeof r.itemId !== "string" || typeof r.itemTitle !== "string") return false;
+	const r = value as Partial<PlanReviewOutput>;
 	if (typeof r.verdict !== "string" || !PLAN_REVIEW_VERDICTS.includes(r.verdict)) return false;
 	if (r.summary !== undefined && typeof r.summary !== "string") return false;
 	if (
@@ -2037,10 +2045,36 @@ export function isPlanReviewResult(value: unknown): value is PlanReviewResult {
 	) {
 		return false;
 	}
-	if (r.blockedByOpenFindings !== undefined && typeof r.blockedByOpenFindings !== "number")
-		return false;
 	if (!Array.isArray(r.findings)) return false;
 	if (!r.findings.every(isReviewFinding)) return false;
 	if (r.verdict === "request_changes" && r.findings.length === 0) return false;
 	return true;
+}
+
+export function isPlanReviewOutput(value: unknown): value is PlanReviewOutput {
+	if (!isPlanReviewBody(value)) return false;
+	return (
+		Object.keys(value).every((key) =>
+			["verdict", "summary", "readingOrder", "findings"].includes(key),
+		) &&
+		value.findings.every((finding) =>
+			Object.keys(finding).every((key) =>
+				["id", "kind", "body", "path", "startLine", "endLine"].includes(key),
+			),
+		) &&
+		(value.readingOrder?.every((step) =>
+			Object.keys(step).every((key) => key === "path" || key === "why"),
+		) ??
+			true)
+	);
+}
+
+export function isPlanReviewResult(value: unknown): value is PlanReviewResult {
+	if (!isPlanReviewBody(value)) return false;
+	const r = value as Partial<PlanReviewResult>;
+	return (
+		typeof r.itemId === "string" &&
+		typeof r.itemTitle === "string" &&
+		(r.blockedByOpenFindings === undefined || typeof r.blockedByOpenFindings === "number")
+	);
 }

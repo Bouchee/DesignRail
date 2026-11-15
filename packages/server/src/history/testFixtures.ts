@@ -8,6 +8,7 @@ import type {
 	ToolResultMessage,
 	TranscriptMessage,
 } from "@thinkrail/contracts";
+import { isPlanReviewOutput } from "@thinkrail/contracts";
 
 import type { SessionRecord } from "../agent";
 
@@ -16,6 +17,7 @@ type FixtureAssistantMessage = {
 	timestamp: number;
 	stopReason?: StopReason;
 	errorMessage?: string;
+	planReview?: AssistantMessage["planReview"];
 } & ({ text: string; content?: never } | { text?: never; content: AssistantMessage["content"] });
 
 export type FixtureMessage =
@@ -54,6 +56,11 @@ export function writeFixtureSession(
 		if (message.role === "custom" || message.role === "compactionSummary")
 			return { ...message, id };
 		const content = message.content ?? [{ type: "text" as const, text: message.text }];
+		if (
+			message.planReview !== undefined &&
+			(!isPlanReviewOutput(message.planReview) || (message.stopReason ?? "stop") !== "stop")
+		)
+			throw new Error("Invalid fixture Plan review output");
 		return {
 			id,
 			role: "assistant",
@@ -72,6 +79,7 @@ export function writeFixtureSession(
 			},
 			stopReason: message.stopReason ?? "stop",
 			...(message.errorMessage === undefined ? {} : { errorMessage: message.errorMessage }),
+			...(message.planReview === undefined ? {} : { planReview: message.planReview }),
 		};
 	});
 	const record: SessionRecord = {

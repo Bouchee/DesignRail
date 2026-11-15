@@ -74,6 +74,40 @@ test("fixture session IDs cannot escape the session directory", () => {
 	).toThrow("Invalid fixture session ID");
 });
 
+test("assistant fixtures retain validated review output and reject malformed or failed typed messages before writing", () => {
+	const root = mkdtempSync(join(tmpdir(), "raildesign-review-history-"));
+	try {
+		const planReview = { verdict: "approve" as const, summary: "Complete", findings: [] };
+		const options = {
+			id: "typed-review",
+			cwd: root,
+			messages: [{ role: "assistant" as const, text: "raw", timestamp: 1, planReview }],
+		};
+		const saved = writeFixtureSession(sessionDirFor(root), options);
+		expect(JSON.parse(readFileSync(saved.path, "utf8")).messages[0]).toMatchObject({
+			id: "typed-review-m0",
+			planReview,
+		});
+		expect(() =>
+			writeFixtureSession(sessionDirFor(root), {
+				...options,
+				messages: [
+					{
+						...options.messages[0],
+						role: "assistant",
+						text: "raw",
+						timestamp: 1,
+						stopReason: "error",
+						planReview,
+					},
+				],
+			}),
+		).toThrow("Invalid fixture");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("an empty fixture carries explicit session activity metadata", () => {
 	const root = mkdtempSync(join(tmpdir(), "raildesign-history-empty-fixture-"));
 	try {

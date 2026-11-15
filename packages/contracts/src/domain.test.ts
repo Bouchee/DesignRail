@@ -21,6 +21,7 @@ import {
 	isFontWeightOffset,
 	isLiveResource,
 	isLocalePreference,
+	isPlanReviewOutput,
 	isPlanReviewResult,
 	isQuestionPanelHeight,
 	isRetriedAttempt,
@@ -117,6 +118,64 @@ describe("isPlanReviewResult", () => {
 	test("enforces cardinality: request_changes needs a finding, approve may have none", () => {
 		expect(isPlanReviewResult({ ...ok, verdict: "request_changes", findings: [] })).toBe(false);
 		expect(isPlanReviewResult({ ...ok, verdict: "approve", findings: [] })).toBe(true);
+	});
+});
+
+describe("isPlanReviewOutput", () => {
+	const approve = { verdict: "approve", findings: [] };
+	test("accepts natural optional fields and keeps the current summary policy", () => {
+		expect(isPlanReviewOutput(approve)).toBe(true);
+		expect(isPlanReviewOutput({ ...approve, summary: "word ".repeat(80) })).toBe(true);
+		expect(
+			isPlanReviewOutput({ verdict: "request_changes", findings: [{ id: "local", body: "Fix" }] }),
+		).toBe(true);
+	});
+
+	test("rejects host authority and unknown fields at each object boundary", () => {
+		for (const key of ["itemId", "itemTitle", "reviewedSha", "blockedByOpenFindings", "extra"])
+			expect(isPlanReviewOutput({ ...approve, [key]: "forged" })).toBe(false);
+		expect(
+			isPlanReviewOutput({
+				...approve,
+				findings: [{ id: "local", body: "Fix", canonicalId: "rc_1" }],
+			}),
+		).toBe(false);
+		expect(
+			isPlanReviewOutput({ ...approve, readingOrder: [{ path: "a", why: "Read", extra: true }] }),
+		).toBe(false);
+	});
+
+	test("shares verdict, finding, range and reading-order rules with the business result", () => {
+		const finding = { id: "local", body: "Fix", path: "a.ts", startLine: 2, endLine: 3 };
+		const values: unknown[] = [
+			null,
+			{},
+			{ findings: [] },
+			{ ...approve, verdict: "maybe" },
+			{ ...approve, summary: null },
+			{ ...approve, findings: "bad" },
+			{ verdict: "request_changes", findings: [] },
+			...[
+				{ id: "" },
+				{ body: "" },
+				{ kind: "bad" },
+				{ startLine: 0 },
+				{ startLine: 1.5 },
+				{ endLine: 1 },
+				{ path: undefined },
+				{ startLine: undefined },
+			].map((extra) => ({ ...approve, findings: [{ ...finding, ...extra }] })),
+			{ ...approve, readingOrder: Array.from({ length: 13 }, () => ({ path: "a", why: "Read" })) },
+			{ ...approve, readingOrder: [{ path: "", why: "Read" }] },
+			{ ...approve, readingOrder: [{ path: "a", why: "" }] },
+		];
+		for (const value of values) {
+			expect(isPlanReviewOutput(value)).toBe(false);
+			expect(isPlanReviewResult({ ...(value as object), itemId: "host", itemTitle: "Host" })).toBe(
+				false,
+			);
+		}
+		expect(isPlanReviewOutput({ verdict: "request_changes", findings: [finding] })).toBe(true);
 	});
 });
 

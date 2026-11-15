@@ -82,6 +82,51 @@ beforeEach(() =>
 	}),
 );
 
+test("typed final correction survives peers, watermark replay and refresh on the original message", () => {
+	const partial = assistant("provisional");
+	const final: AssistantMessage = {
+		...assistant("canonical JSON"),
+		planReview: { verdict: "approve", summary: "Complete", findings: [] },
+	};
+	const frame: SessionEventPayload = {
+		sessionId: "review",
+		runId: "run",
+		seq: 3,
+		event: { type: "message_end", message: final },
+	};
+	const peer = reduceSessionEvent(
+		reduceSessionEvent(EMPTY_RUNTIME, { type: "message_start", message: partial }),
+		frame.event,
+	);
+	expect(peer.turns).toEqual(messagesToRuntime([final]).turns);
+	const store = useAppStore.getState();
+	store.beginSessionHydration("review");
+	store.handleSessionEvents([frame]);
+	store.hydrateSession(
+		{
+			sessionId: "review",
+			workspaceId: "workspace",
+			title: "Review",
+			model: null,
+			thinkingLevel: "off",
+			isStreaming: false,
+			messageCount: 1,
+			updatedAt: 1,
+			live: true,
+			eventSeq: 2,
+		},
+		messagesToRuntime([partial]),
+	);
+	const current = useAppStore.getState().sessions.review;
+	expect(current?.turns).toEqual(peer.turns);
+	store.handleSessionEvents([
+		frame,
+		{ ...frame, seq: 2, event: { type: "message_end", message: partial } },
+	]);
+	expect(useAppStore.getState().sessions.review).toBe(current);
+	expect(messagesToRuntime(JSON.parse(JSON.stringify([final]))).turns).toEqual(peer.turns);
+});
+
 test("a final correction updates its stable message even after streaming ends", () => {
 	let runtime = reduceSessionEvent(EMPTY_RUNTIME, {
 		type: "message_start",

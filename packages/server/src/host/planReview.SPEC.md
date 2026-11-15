@@ -13,7 +13,7 @@ tags: [host, review]
 
 Review one completed Plan step. Save the verdict, canonical Review findings and reading guide. Deliver a fix request when the configured budget permits it.
 
-`requestReview.ts` owns this flow. `reviewerRole.ts` defines the review role and JSON contract. `planReviewQueue.ts` serializes reviews for each plan and prevents duplicate reviews of one step.
+`requestReview.ts` owns this flow. `reviewerRole.ts` defines the review role and typed-output instructions. `planReviewQueue.ts` serializes reviews for each plan and prevents duplicate reviews of one step.
 
 ## Execution contract
 
@@ -22,7 +22,7 @@ Review one completed Plan step. Save the verdict, canonical Review findings and 
 - Permit only `read`, `search`, `spec_search`, `spec_grep`, `spec_get`, `spec_graph` and `spec_validate`. The manager enforces this list. The reviewer cannot edit files, execute commands, delegate work or request another review.
 - Supply the step's title, note, artifacts and verification claims. Also supply the actual original and modified file versions from `gitStatus` and `gitDiffFile`. Resolve commit artifacts in commit scope and change artifacts in uncommitted scope. Reject a change set above 512 KiB. Do not silently truncate it.
 - Limit the child to 20 model turns and five minutes. A failed, interrupted, cancelled or timed-out child cannot approve a step.
-- Treat model output as untrusted. `parseVerdict` uses `isPlanReviewResult`, stamps the host-owned item ID and title, normalizes path separators, and copies only accepted fields. Require a known verdict, nonempty finding IDs and bodies, valid line ranges and bounded reading order. A request for changes requires at least one finding. Invalid output fails the review.
+- Consume only the child's committed `PlanReviewOutput`. `normalizeVerdict(output,itemId,itemTitle)` validates the model DTO, stamps host identity, defaults kind, normalizes path separators, then validates the resulting `PlanReviewResult` before effects. Require current range/order/cardinality rules. Host-only fields in model output fail; fenced or clipped text is not accepted.
 
 ## Entry points and ownership
 
@@ -57,8 +57,14 @@ Review one completed Plan step. Save the verdict, canonical Review findings and 
 
 Use the public barrels for `agent`, `todos`, `reviews`, `git`, `settings` and `workspaces`. Do not access SDK private fields or duplicate their stores. `todoReview` can read claim state from `planReviewQueue`; it must not import `requestReview`.
 
-Public flow functions are `startPlanReview`, `reviewAllPlan`, `requestPlanFix`, `maybeAutoReReview`, `installRequestReviewSeam` and `setReviewFailedPublisher`. `parseVerdict`, `composeText` and `itemTitleOf` are pure or injected lookup helpers.
+Public flow functions are `startPlanReview`, `reviewAllPlan`, `requestPlanFix`, `maybeAutoReReview`, `installRequestReviewSeam` and `setReviewFailedPublisher`. `normalizeVerdict`, `composeText` and `itemTitleOf` are pure or injected lookup helpers.
+
+Good/base/bad: valid request_changes files new canonical rc_* findings; approve without findings settles
+only when earlier findings are resolved; failed/stopped/unbound typed output clears pending without a
+verdict. `requestReview.test.ts` pins normalization and model authority, `planReview.test.ts` pins real
+SDK effects and compensation. Correct: consume `run.output` after completed status and signal checks.
+Wrong: JSON.parse a last assistant's text or treat a local finding ID as canonical comment authority.
 
 ## Verification
 
-`planReview.test.ts` uses actual SDK child dispatch with `ScriptedModel` and a temporary local Git repository. It checks actual file reads and before/after snapshots, canonical findings and guide persistence, invalid-output retry cleanup, request-review → resolve-comment → approval, Stop cancellation, and automatic fix → resolve → completion → re-review within the worker run. A later worker failure cannot replace the approved result. The real host fixture also invokes `set_title` through the SDK and checks persisted titles and manual-name protection. `requestReview.test.ts` checks strict parsing and policy-dependent result text. `titleTool.test.ts` checks that a revoked grant blocks delayed title effects. No test requires a real API key or external provider.
+`planReview.test.ts` uses actual SDK child dispatch with `ScriptedModel` and a temporary local Git repository. It checks actual file reads and before/after snapshots, canonical findings and guide persistence, invalid-output retry cleanup, request-review → resolve-comment → approval, Stop cancellation, and automatic fix → resolve → completion → re-review within the worker run. A later worker failure cannot replace the approved result. The real host fixture also invokes `set_title` through the SDK and checks persisted titles and manual-name protection. `requestReview.test.ts` checks typed normalization and policy-dependent result text. `titleTool.test.ts` checks that a revoked grant blocks delayed title effects. No test requires a real API key or external provider.
