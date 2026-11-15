@@ -117,6 +117,7 @@ import {
 	skillInstructions,
 	workspaceInstructions,
 } from "./skillTools";
+import { stripAnsi } from "./stripAnsi";
 import { webFetch, webSearch } from "./webAccess";
 import { createWorkspaceActions } from "./workspaceActions";
 
@@ -212,14 +213,16 @@ function imageOwner(entry: Entry): string {
 	return entry.store.record.childRun?.parentSessionId ?? entry.store.record.sessionId;
 }
 function projectDialog<T extends ExtUiRequest>(request: T, sessionId: string): T {
-	const projected = projectImages(request, sessionId) as T;
+	let projected = projectImages(request, sessionId) as T;
 	if (
 		request.kind === "confirm" &&
 		projected.kind === "confirm" &&
 		projected.toolInput !== request.toolInput
 	) {
-		return { ...projected, message: JSON.stringify(projected.toolInput) };
+		projected = { ...projected, message: JSON.stringify(projected.toolInput) };
 	}
+	if ("title" in projected) projected = { ...projected, title: stripAnsi(projected.title) };
+	if ("message" in projected) projected = { ...projected, message: stripAnsi(projected.message) };
 	return projected;
 }
 function publishDialog(request: ExtUiRequest): void {

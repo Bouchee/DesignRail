@@ -51,6 +51,16 @@ A known serialized image-result envelope is normalized only for display; its tex
 The image source reads only this host's attached, live sessions and refuses closing/deleting sessions
 or closing workspaces. Composer queue restoration deliberately returns inline images for resending.
 
+The shared SDK extension-UI display projection strips terminal escape sequences from title/message
+fields, including notify text, after child-title prefixing and image-related message reconstruction.
+Live publication, pending-dialog reads and state/transcript summaries use the same projection.
+It removes complete CSI/OSC/DCS/APC and related ESC/C1 sequences. For a broken sequence it drops only
+the control byte and preserves the following text; ordinary Unicode, tabs and newlines remain.
+The small deterministic stripAnsi scanner owns this rule: existing platform stripping functions do
+not preserve the required incomplete-sequence behavior. This is display-only. Canonical approval
+requests, toolInput/arguments, RunState/checkpoints, ordinary transcripts/tool output and PTYs keep
+original values. MCP select options are exact consent decision tokens and are never rewritten.
+
 Session get/add/pop/clear and public history transactions persist append/suffix replacement together
 with operation receipts. Canonical input content, current history membership and summary retirements are
 separate. Pop permits re-addition; memory reset clears retirements but keeps transcript and receipts.

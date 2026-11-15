@@ -26,6 +26,8 @@ import { z } from "zod";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
 import { resetConfigCache, updateConfig } from "../settings";
 import { setTrashImplementationForTests } from "../trash";
+import { MCP_CONFIRM_CHAT, MCP_CONFIRM_CHOICES } from "./mcp";
+import { closeAllMcpConnections, setMcpProjectResolver } from "./mcpSessions";
 import * as modelConfigurationModule from "./modelConfiguration";
 import { configureAgentModelFactory, saveCustomEndpoint } from "./modelConfiguration";
 import {
@@ -40,7 +42,9 @@ import {
 	getSessionState,
 	getSessionStats,
 	liveSessionIdsOf,
+	notifyExtUi,
 	nudgeSession,
+	pendingExtUiDialog,
 	promptSession,
 	queuedMessages,
 	removeQueuedMessage,
@@ -58,7 +62,7 @@ import {
 } from "./sdkSessionManager";
 import * as sdkToolsModule from "./sdkTools";
 import { applyWorkspacePatch, type ToolGrant, workspaceTools } from "./sdkTools";
-import { readSessionRecord, sessionRecordPath } from "./sessionStore";
+import { readSessionRecord, sessionRecordPath, writeSessionRecord } from "./sessionStore";
 import { setWebAccessKey } from "./webAccess";
 import { setContinueToolHost, setWorkspaceToolsHost } from "./workspaceActions";
 
@@ -1571,6 +1575,196 @@ test("SDK image upload keeps model input and composer restore inline while its l
 	}
 });
 
+test("SDK select display retains exact MCP consent tokens through live and snapshot projections", async () => {
+	writeFileSync(
+		join(root, "data", "mcp.json"),
+		JSON.stringify({
+			mcpServers: {
+				docs: {
+					command: process.execPath,
+					args: [join(import.meta.dir, "mcp/fixtures/stdioServer.ts")],
+					env: { MCP_FIXTURE_NOTE_FILE: join(root, "note.txt") },
+					exposure: "direct",
+				},
+			},
+		}),
+	);
+	setMcpProjectResolver(undefined);
+	const model = new ScriptedModel([
+		modelResponse([
+			functionCall("mcp__docs__write_note", { text: "kept" }, { callId: "select-write" }),
+		]),
+		done(),
+	]);
+	configureAgentModelFactory(() => model);
+	const ready = latch();
+	const displays: ExtUiRequest[] = [];
+	setExtUiPublisher((request) => {
+		displays.push(request);
+		if (request.kind === "select") ready.release();
+	});
+	try {
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		const run = promptSession(sessionId, "Write the note");
+		await ready.promise;
+		const request = pendingExtUiDialog(sessionId);
+		if (
+			request?.kind !== "select" ||
+			!request.runId ||
+			request.revision === undefined ||
+			!request.toolCallId
+		)
+			throw new Error("Missing actual MCP consent");
+		expect(request.options).toEqual(MCP_CONFIRM_CHOICES);
+		expect(displays).toContainEqual(
+			expect.objectContaining({ kind: "select", options: MCP_CONFIRM_CHOICES }),
+		);
+		const before = readSessionRecord(sessionId)?.pendingApproval;
+		const snapshot = await getSessionMessages(sessionId, "workspace", worktree);
+		expect(snapshot.summary.state?.needsInput).toMatchObject({
+			request: { options: MCP_CONFIRM_CHOICES },
+		});
+		expect(readSessionRecord(sessionId)?.pendingApproval).toEqual(before);
+		resolveExtUi({
+			id: request.id,
+			sessionId,
+			runId: request.runId,
+			revision: request.revision,
+			toolCallId: request.toolCallId,
+			value: MCP_CONFIRM_CHAT,
+		});
+		await run;
+		expect(readFileSync(join(root, "note.txt"), "utf8")).toBe("kept");
+		expect(readSessionRecord(sessionId)?.decisions[request.id]?.selection).toBe(MCP_CONFIRM_CHAT);
+		model.assertComplete();
+	} finally {
+		await closeAllMcpConnections();
+		setMcpProjectResolver(undefined);
+	}
+});
+
+test("SDK UI display cleans notification and restored approval text without changing execution input", async () => {
+	const raw = "\u009b31mraw input\u009b0m";
+	const rawOutput = "\u001b[32mtool output\u001b[0m";
+	let executed = "";
+	const factory = spyOn(sdkToolsModule, "workspaceTools").mockImplementation(() => [
+		tool({
+			name: "fixture_approval",
+			description: "fixture",
+			parameters: z.object({ query: z.string() }),
+			needsApproval: true,
+			execute: ({ query }) => {
+				executed = query;
+				return rawOutput;
+			},
+		}),
+	]);
+	try {
+		configureAgentModelFactory(
+			() =>
+				new ScriptedModel([
+					modelResponse([
+						functionCall("fixture_approval", { query: raw }, { callId: "ansi-approval" }),
+					]),
+				]),
+		);
+		const initial = latch();
+		const live: ExtUiRequest[] = [];
+		setExtUiPublisher((request) => {
+			live.push(request);
+			if (request.kind === "confirm") initial.release();
+		});
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		const running = promptSession(sessionId, "Ask for approval");
+		await initial.promise;
+		expect(live).toContainEqual(
+			expect.objectContaining({
+				kind: "confirm",
+				message: JSON.stringify({ query: "raw input" }),
+				toolInput: { query: raw },
+			}),
+		);
+		expect(readSessionRecord(sessionId)?.pendingApproval?.request).toMatchObject({
+			message: JSON.stringify({ query: raw }),
+			toolInput: { query: raw },
+		});
+		await removeSession(sessionId);
+		await running;
+		const saved = readSessionRecord(sessionId);
+		if (saved?.pendingApproval?.request.kind !== "confirm")
+			throw new Error("Missing real SDK approval");
+		saved.pendingApproval.request.title = "\u001b[31mApproval\u001b[0m";
+		saved.pendingApproval.request.message = "\u001b]0;terminal title\u0007Approve this\u001b[0m";
+		if (saved.state.needsInput?.kind === "dialog")
+			saved.state.needsInput.request = saved.pendingApproval.request;
+		writeSessionRecord(saved);
+		const restored = latch();
+		const displays: ExtUiRequest[] = [];
+		const states: ReturnType<typeof getSessionState>[] = [];
+		setExtUiPublisher((request) => {
+			displays.push(request);
+			if (request.kind === "confirm") restored.release();
+		});
+		setSessionStatePublisher((record) => states.push(record.state));
+		configureAgentModelFactory(() => new ScriptedModel([done()]));
+		const snapshot = await getSessionMessages(sessionId, "workspace", worktree);
+		await restored.promise;
+		const display = pendingExtUiDialog(sessionId);
+		expect(display).toMatchObject({ kind: "confirm", title: "Approval", message: "Approve this" });
+		expect(displays).toContainEqual(
+			expect.objectContaining({ kind: "confirm", title: "Approval", message: "Approve this" }),
+		);
+		expect(snapshot.summary.state?.needsInput).toMatchObject({
+			request: { title: "Approval", message: "Approve this" },
+		});
+		expect(states).toContainEqual(
+			expect.objectContaining({
+				needsInput: expect.objectContaining({
+					request: expect.objectContaining({ title: "Approval", message: "Approve this" }),
+				}),
+			}),
+		);
+		const before = readSessionRecord(sessionId)?.pendingApproval;
+		getSessionState(sessionId);
+		pendingExtUiDialog(sessionId);
+		await getSessionMessages(sessionId, "workspace", worktree);
+		expect(readSessionRecord(sessionId)?.pendingApproval).toEqual(before);
+		expect(before?.request).toMatchObject({
+			title: saved.pendingApproval.request.title,
+			message: saved.pendingApproval.request.message,
+			toolInput: { query: raw },
+		});
+		notifyExtUi(sessionId, "\u001b[33mnotice\u001b[0m\n\tkeep spacing", "warning");
+		expect(displays.at(-1)).toMatchObject({
+			kind: "notify",
+			message: "notice\n\tkeep spacing",
+			level: "warning",
+		});
+		if (!display) throw new Error("Missing projected approval");
+		resolveExtUi(approvalResponse(display, true));
+		await settled(sessionId);
+		expect(executed).toBe(raw);
+		expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+		expect(readSessionRecord(sessionId)?.messages).toContainEqual(
+			expect.objectContaining({
+				role: "toolResult",
+				toolCallId: "ansi-approval",
+				content: [{ type: "text", text: rawOutput }],
+			}),
+		);
+		expect((await getSessionMessages(sessionId, "workspace", worktree)).messages).toContainEqual(
+			expect.objectContaining({
+				role: "toolResult",
+				toolCallId: "ansi-approval",
+				content: [{ type: "text", text: rawOutput }],
+			}),
+		);
+	} finally {
+		factory.mockRestore();
+		setSessionStatePublisher(() => {});
+	}
+});
+
 test("SDK approval display projects argument images while checkpoint and restored canonical results keep bytes", async () => {
 	let executions = 0;
 	const factory = spyOn(sdkToolsModule, "workspaceTools").mockImplementation(() => [
@@ -1621,9 +1815,20 @@ test("SDK approval display projects argument images while checkpoint and restore
 		expect(JSON.stringify(readSessionRecord(sessionId)?.pendingApproval)).toContain(IMAGE_PAYLOAD);
 		await removeSession(sessionId);
 		await pending;
+		const savedApproval = readSessionRecord(sessionId);
+		if (!savedApproval?.pendingApproval) throw new Error("Missing image approval record");
+		savedApproval.pendingApproval.request.title = "\u001b[31mImage approval\u001b[0m";
+		if (savedApproval.state.needsInput?.kind === "dialog")
+			savedApproval.state.needsInput.request = savedApproval.pendingApproval.request;
+		writeSessionRecord(savedApproval);
 		const resumed = new ScriptedModel([done()]);
 		configureAgentModelFactory(() => resumed);
 		await getSessionMessages(sessionId, "workspace", worktree);
+		expect(pendingExtUiDialog(sessionId)?.title).toBe("Image approval");
+		expect(JSON.stringify(pendingExtUiDialog(sessionId))).toContain(`/images/${sessionId}/`);
+		expect(readSessionRecord(sessionId)?.pendingApproval?.request.title).toBe(
+			savedApproval.pendingApproval.request.title,
+		);
 		const request = getSessionState(sessionId).needsInput;
 		if (request?.kind !== "dialog") throw new Error("Missing restored approval");
 		resolveExtUi(approvalResponse(request.request, true));
