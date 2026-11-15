@@ -40,6 +40,10 @@ private browser/server deployment requires stage 5 checks.
 The Resources dock can fold while work continues. Its inspector shows command logs, child transcripts
 and each MCP server's state and calls from the current chat.
 
+Workbench focus stays local to each window. The focused region remains at full contrast while others
+dim; one chord table supplies explicit region, composer, Projects, Files and terminal navigation and
+the corresponding palette commands. Desktop zoom remains owned by the native bridge.
+
 ## Product identity and data
 
 The product is RailDesign, identifier `io.github.bouchee.raildesign`, CLI `raildesign`.

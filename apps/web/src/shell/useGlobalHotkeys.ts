@@ -1,57 +1,74 @@
 import { useEffect, useInsertionEffect, useRef } from "react";
-import { hasPlatformModifier } from "../lib";
+import { type KeybindingId, matchKeybinding } from "../keybindings";
 import { createDoubleShiftDetector } from "../search";
 import { useAppStore } from "../store";
 import { openChatHistory } from "./chordActions";
+import { cancelPendingRegionFocus } from "./regions";
 import { hasLayer, isInTerminal, MODAL_LAYER_SELECTOR } from "./shortcutLayers";
 
+type ChordHandler = (binding: KeybindingId) => void;
+
 type GlobalHotkeyActions = {
-	onProjects: () => void;
-	onWorkspace?: () => void;
-	onBottom?: () => void;
-	onNewWorkspace?: () => void;
-	onSearch?: () => void;
-	onFindInFiles?: () => void;
+	onProjects: ChordHandler;
+	onWorkspace?: ChordHandler;
+	onBottom?: ChordHandler;
+	onNewWorkspace?: ChordHandler;
+	onSearch?: ChordHandler;
+	onFindInFiles?: ChordHandler;
+	onNextRegion?: ChordHandler;
+	onPreviousRegion?: ChordHandler;
+	onComposer?: ChordHandler;
+	onFocusProjects?: ChordHandler;
+	onFocusGroup?: ChordHandler;
+	onTerminal?: ChordHandler;
+	onFiles?: ChordHandler;
+	onChanges?: ChordHandler;
 };
 
-type GlobalHotkeyCommand =
-	| "projects"
-	| "workspace"
-	| "bottom"
-	| "new-workspace"
-	| "search"
-	| "find-in-files";
+const CHORD_ACTIONS = {
+	"view.toggleLeft": "onProjects",
+	"view.toggleRight": "onWorkspace",
+	"view.toggleBottom": "onBottom",
+	"view.files": "onFiles",
+	"view.changes": "onChanges",
+	"workspace.new": "onNewWorkspace",
+	"search.open": "onSearch",
+	"files.findInFiles": "onFindInFiles",
+	"region.next": "onNextRegion",
+	"region.previous": "onPreviousRegion",
+	"focus.composer": "onComposer",
+	"focus.projects": "onFocusProjects",
+	"focus.terminal": "onTerminal",
+	"focus.group1": "onFocusGroup",
+	"focus.group2": "onFocusGroup",
+	"focus.group3": "onFocusGroup",
+	"focus.group4": "onFocusGroup",
+	"focus.group5": "onFocusGroup",
+	"focus.group6": "onFocusGroup",
+	"focus.group7": "onFocusGroup",
+	"focus.group8": "onFocusGroup",
+	"focus.group9": "onFocusGroup",
+} as const satisfies Record<Exclude<KeybindingId, "chat.history">, keyof GlobalHotkeyActions>;
 
-type GlobalHotkeyAvailability = {
-	projects: boolean;
-	workspace: boolean;
-	bottom: boolean;
-	newWorkspace: boolean;
-	search: boolean;
-	findInFiles?: boolean;
-};
+type GlobalHotkeyCommand = keyof typeof CHORD_ACTIONS;
 
 type GlobalHotkeyEvent = Pick<
 	KeyboardEvent,
-	"altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
+	"altKey" | "code" | "ctrlKey" | "isComposing" | "metaKey" | "shiftKey"
 >;
 
 export function globalHotkeyCommand(
 	event: GlobalHotkeyEvent,
-	available: GlobalHotkeyAvailability,
+	actions: GlobalHotkeyActions,
 	modalOpen: boolean,
 	platform?: string,
+	inTerminal = false,
 ): GlobalHotkeyCommand | null {
-	if (modalOpen || !hasPlatformModifier(event, platform)) return null;
-	if (!event.shiftKey && event.code === "KeyN" && available.newWorkspace) return "new-workspace";
-	if (!event.shiftKey && !event.altKey && event.code === "KeyK" && available.search)
-		return "search";
-	if (event.altKey) return null;
-	if (event.shiftKey && event.code === "KeyF" && available.findInFiles) return "find-in-files";
-	if (!event.shiftKey && event.code === "KeyB" && available.projects) return "projects";
-	if (!event.shiftKey && event.code === "KeyJ" && available.workspace) return "workspace";
-	if (event.shiftKey && event.code === "KeyJ" && available.bottom) return "bottom";
-	return null;
+	if (modalOpen || event.isComposing) return null;
+	const id = matchKeybinding(event, platform);
+	if (id === null || id === "chat.history") return null;
+	if (id === "focus.composer" && inTerminal && event.ctrlKey) return null;
+	return actions[CHORD_ACTIONS[id]] ? id : null;
 }
 
 function hasOpenModal(): boolean {
@@ -75,71 +92,66 @@ export function useGlobalHotkeys(actions: GlobalHotkeyActions): void {
 		actionsRef.current = actions;
 	});
 
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const command = globalHotkeyCommand(
-				event,
-				{
-					projects: true,
-					workspace: actionsRef.current.onWorkspace !== undefined,
-					bottom: actionsRef.current.onBottom !== undefined,
-					newWorkspace: actionsRef.current.onNewWorkspace !== undefined,
-					search: actionsRef.current.onSearch !== undefined,
-					findInFiles: actionsRef.current.onFindInFiles !== undefined,
-				},
-				hasOpenModal(),
-			);
-			if (command) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (!event.repeat) {
-					if (command === "projects") actionsRef.current.onProjects();
-					else if (command === "workspace") actionsRef.current.onWorkspace?.();
-					else if (command === "bottom") actionsRef.current.onBottom?.();
-					else if (command === "search") actionsRef.current.onSearch?.();
-					else if (command === "find-in-files") actionsRef.current.onFindInFiles?.();
-					else actionsRef.current.onNewWorkspace?.();
-				}
-				return;
-			}
+	useEffect(() => installGlobalHotkeys(() => actionsRef.current), []);
+}
 
-			if (
-				event.code !== "KeyR" ||
-				!event.ctrlKey ||
-				event.metaKey ||
-				event.altKey ||
-				event.shiftKey
-			) {
-				return;
-			}
-			if (isInTerminal(event.target)) return;
+export function installGlobalHotkeys(readActions: () => GlobalHotkeyActions): () => void {
+	const onKeyDown = (event: KeyboardEvent) => {
+		const current = readActions();
+		const command = globalHotkeyCommand(
+			event,
+			current,
+			hasOpenModal(),
+			undefined,
+			isInTerminal(event.target),
+		);
+		if (command) {
 			event.preventDefault();
 			event.stopPropagation();
-			if (!useAppStore.getState().searchOpen) openChatHistory();
-		};
-		const detector = createDoubleShiftDetector();
-		const onDoubleShiftKeyDown = (event: KeyboardEvent) => detector.keydown(event);
-		const onDoubleShiftKeyUp = (event: KeyboardEvent) => {
-			if (!detector.keyup(event)) return;
-			const state = useAppStore.getState();
-			if (!state.doubleShiftSearch || hasModalOtherThanSearch()) return;
-			if (state.searchOpen) state.closeSearch();
-			else state.openSearch();
-		};
-		const reset = () => detector.reset();
-		window.addEventListener("keydown", onKeyDown, true);
-		window.addEventListener("keydown", onDoubleShiftKeyDown, true);
-		window.addEventListener("keyup", onDoubleShiftKeyUp, true);
-		window.addEventListener("pointerdown", reset, true);
-		window.addEventListener("blur", reset);
-		document.addEventListener("visibilitychange", reset);
-		return () => {
-			window.removeEventListener("keydown", onKeyDown, true);
-			window.removeEventListener("keydown", onDoubleShiftKeyDown, true);
-			window.removeEventListener("keyup", onDoubleShiftKeyUp, true);
-			window.removeEventListener("pointerdown", reset, true);
-			window.removeEventListener("blur", reset);
-			document.removeEventListener("visibilitychange", reset);
-		};
-	}, []);
+			if (!event.repeat) {
+				cancelPendingRegionFocus();
+				current[CHORD_ACTIONS[command]]?.(command);
+			}
+			return;
+		}
+
+		if (matchKeybinding(event) !== "chat.history") return;
+		if (isInTerminal(event.target)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (
+			!event.isComposing &&
+			!event.repeat &&
+			!hasOpenModal() &&
+			!useAppStore.getState().searchOpen
+		) {
+			cancelPendingRegionFocus();
+			openChatHistory();
+		}
+	};
+	const detector = createDoubleShiftDetector();
+	const onDoubleShiftKeyDown = (event: KeyboardEvent) => detector.keydown(event);
+	const onDoubleShiftKeyUp = (event: KeyboardEvent) => {
+		if (!detector.keyup(event)) return;
+		const state = useAppStore.getState();
+		if (!state.doubleShiftSearch || hasModalOtherThanSearch()) return;
+		if (state.searchOpen) state.closeSearch();
+		else state.openSearch();
+	};
+	const reset = () => detector.reset();
+	window.addEventListener("keydown", onKeyDown, true);
+	window.addEventListener("keydown", onDoubleShiftKeyDown, true);
+	window.addEventListener("keyup", onDoubleShiftKeyUp, true);
+	window.addEventListener("pointerdown", reset, true);
+	window.addEventListener("blur", reset);
+	document.addEventListener("visibilitychange", reset);
+	return () => {
+		cancelPendingRegionFocus();
+		window.removeEventListener("keydown", onKeyDown, true);
+		window.removeEventListener("keydown", onDoubleShiftKeyDown, true);
+		window.removeEventListener("keyup", onDoubleShiftKeyUp, true);
+		window.removeEventListener("pointerdown", reset, true);
+		window.removeEventListener("blur", reset);
+		document.removeEventListener("visibilitychange", reset);
+	};
 }

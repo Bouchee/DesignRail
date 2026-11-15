@@ -90,8 +90,8 @@ the palette ranks with — kept here so host-side search can rank with the same 
 - **Public surface (`index.ts`):** `export type *` of `sessionProtocol` + `domain` + `nativeClient`
   (`NativeUpdateState` / `NativeUpdateBridge`, `NativeWindowState` / `NativeWindowControlsBridge`,
   `NativeQuitHint` / `NativeCommand` / `NativeShortcutsBridge`, and
-  `NativeNotificationInput` / `NativeNotificationBridge`, and `NativeMenuBridge` (translated native menu
-  labels), the optional shell-local desktop capabilities);
+  `NativeNotificationInput` / `NativeNotificationBridge`, `NativePageZoomAction` / `NativePageZoomBridge`,
+  and `NativeMenuBridge` (translated native menu labels), the optional shell-local desktop capabilities);
   `QUIT_CONFIRMATION` + **`createQuitConfirmation`** + `QuitConfirmationDependencies` from `quitConfirmation`;
   **`matchFields`** + `parseMatchTerms` + `foldMatchText` + `MATCH_TIER` and the `Match*` types from
   `match` (the one search matcher: fixed tiers exact > prefix > word start/camel hump/acronym > substring >
@@ -171,7 +171,9 @@ the palette ranks with — kept here so host-side search can rank with the same 
   native menu commands, and offer `quit()` for a client that confirms the quit gesture itself;
   `NativeNotificationInput` and `NativeNotificationBridge` carry `show({ title, subtitle?, body,
   silent? })` (fire-and-forget OS notification, no callback or id) and an optional `isWindowFocused()`
-  that reports OS-level window focus (true even when DevTools has renderer focus). The
+  that reports OS-level window focus (true even when DevTools has renderer focus);
+  `NativePageZoomAction` and `NativePageZoomBridge` carry `request("in" | "out" | "reset")`, a
+  fire-and-forget step of the native page zoom. The
   same web bundle discovers these capabilities without importing a native SDK. An optional
   `HostUpdateNotice` carries a closed CLI-host update lifecycle; protocol-gated `host.update` is an empty
   request that can start only the launcher's pre-bound updater. The browser never supplies a command, path,
@@ -624,7 +626,7 @@ the palette ranks with — kept here so host-side search can rank with the same 
   `NativeOpenFileRequest` (`file`, `line`, optional `column`) from an OS `raildesign://` URL; it is a
   desktop-only subscription seam, not host-wire state. `isNativeOpenFileRequest` rejects malformed
   preload payloads using shared `NATIVE_OPEN_FILE_LIMITS`: a nonempty file path up to 4,096 characters without controls, and one-based whole
-  line/column numbers up to 2,000,000. URI parsing and host containment remain separate checks. A browser
+  line/column numbers up to 2,000,000. URI parsing and host containment remain separate checks. The page-zoom bridge requests `in`, `out` or `reset` through the native owner; the web keeps no zoom state. A browser
   connection has none of these bridges and renders none of their affordances.
 - **quitConfirmation.ts** — the single home of the quit-confirmation gesture shared by the desktop main
   process (macOS Cmd+Q, key state polled through CoreGraphics) and the web shell (Linux Ctrl+Q, key state

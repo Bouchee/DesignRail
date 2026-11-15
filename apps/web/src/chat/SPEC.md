@@ -702,7 +702,10 @@ both message orders. *Rejected:* keeping the modal for non-MCP extensions — ev
   store/transport/highlighter.
 - **Composer focus on arrival** (`composerFocusRequest`, see `store/SPEC.md`): `ChatView` subscribes to
   `selectComposerFocusRequested` for its own chat. When it holds, the view clears the request and refocuses
-  its composer, so typing goes straight to the chat a palette pick opened.
+  its composer, so typing goes straight to the chat a palette pick opened. A request with `dismissHistory`
+  (the shell's `Mod+L`) first closes this chat's history overlay and drops a pending open of it. The shell
+  locates the mounted composer through this view's `data-chat-workspace` / `data-chat-session` markers;
+  the consuming effect rechecks the current request before clearing it and refocusing.
 - **Jump-to-message** (`chatLocationRequest` — set by `useHistorySearch.ts`'s `openMessage` on Enter over
   a mapped message hit; see `store/SPEC.md` for the store-level request/clear contract and
   the workbench shell integration's open/reopen/hydrate half) — `ChatTranscript` is the sole consumer. Once

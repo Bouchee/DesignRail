@@ -11,6 +11,10 @@ system trash. File-tree menus and file or Diff tabs also offer Copy path.
 Chat prose defaults to 80 columns and file views to 120. Wide code, tables, diagrams and tool results
 can grow past the prose column within the pane. Saved width choices keep their values.
 Images in chat history and tool results load on demand, with a Retry action when unavailable.
+The focused workbench region stays at full contrast while others dim. F6 cycles regions; Mod+L focuses
+the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
+palette offers these actions and desktop zoom controls.
+
 The development build connects agent tasks to selected worktrees, with file edits, bounded commands,
 streaming output, tool approval and Stop. Sessions save conversation history, input queues and pending
 approvals or questions. Steering reaches the next eligible model call; follow-ups wait for normal task

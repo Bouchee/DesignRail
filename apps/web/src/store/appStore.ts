@@ -359,6 +359,7 @@ export interface ComposerFocusRequest {
 	workspaceId: string;
 	sessionId: string | null;
 	navTick: number;
+	dismissHistory?: true;
 }
 
 export interface LayoutOpenOptions {
@@ -1279,7 +1280,11 @@ interface AppState {
 	) => void;
 	validateRouteChatTarget: (sessionId: string) => void;
 	clearRouteChatTarget: () => void;
-	requestComposerFocus: (workspaceId: string, sessionId?: string) => void;
+	requestComposerFocus: (
+		workspaceId: string,
+		sessionId?: string,
+		options?: { dismissHistory?: boolean },
+	) => void;
 	clearComposerFocusRequest: () => void;
 	hydrateLocalLayoutState: (payload: LocalLayoutStatePayload) => void;
 	applyLocalLayoutState: (payload: LocalLayoutStatePayload, invalidateProjection?: boolean) => void;
@@ -3036,12 +3041,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 		}),
 	clearRouteChatTarget: () =>
 		set((state) => (state.routeChatTarget ? { routeChatTarget: null } : state)),
-	requestComposerFocus: (workspaceId, sessionId) =>
+	requestComposerFocus: (workspaceId, sessionId, options) =>
 		set((state) => ({
 			composerFocusRequest: {
 				workspaceId,
 				sessionId: sessionId ?? null,
 				navTick: selectWorkspaceNavTick(state, workspaceId),
+				...(options?.dismissHistory ? { dismissHistory: true as const } : {}),
 			},
 		})),
 	clearComposerFocusRequest: () =>

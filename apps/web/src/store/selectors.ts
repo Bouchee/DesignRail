@@ -754,11 +754,12 @@ export function selectChatAttended(
 	state: ChatAttentionState,
 	workspaceId: string,
 	sessionId: string,
+	{ ignoreHistory = false }: { ignoreHistory?: boolean } = {},
 ): boolean {
 	if (
 		state.activeWorkspaceId !== workspaceId ||
-		state.obscuredChatSessions[sessionId] ||
-		state.historyOpenRequest?.sessionId === sessionId
+		(!ignoreHistory &&
+			(state.obscuredChatSessions[sessionId] || state.historyOpenRequest?.sessionId === sessionId))
 	)
 		return false;
 	const tab = selectAttentionCenterTab(state, workspaceId);
@@ -779,7 +780,9 @@ export function selectComposerFocusRequested(
 		request.workspaceId === workspaceId &&
 		(request.sessionId === null || request.sessionId === sessionId) &&
 		selectWorkspaceNavTick(state, workspaceId) === request.navTick &&
-		selectChatAttended(state, workspaceId, sessionId)
+		selectChatAttended(state, workspaceId, sessionId, {
+			ignoreHistory: request.dismissHistory === true,
+		})
 	);
 }
 

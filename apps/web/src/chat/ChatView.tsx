@@ -713,9 +713,16 @@ export default function ChatView({
 	);
 	useEffect(() => {
 		if (!composerFocusRequested) return;
-		useAppStore.getState().clearComposerFocusRequest();
+		const store = useAppStore.getState();
+		if (!selectComposerFocusRequested(store, workspaceId, sessionId)) return;
+		const dismissHistory = store.composerFocusRequest?.dismissHistory === true;
+		store.clearComposerFocusRequest();
+		if (dismissHistory) {
+			if (store.historyOpenRequest?.sessionId === sessionId) store.clearHistoryOpen();
+			if (historyOverlayOpen) closeHistory();
+		}
 		composerRef.current?.refocus();
-	}, [composerFocusRequested]);
+	}, [composerFocusRequested, workspaceId, sessionId, historyOverlayOpen, closeHistory]);
 
 	const widgetEntries = Object.entries(extUiWidget);
 	const focusComposer = useCallback(() => composerRef.current?.refocus(), []);
@@ -731,6 +738,8 @@ export default function ChatView({
 		<div
 			ref={chatViewRef}
 			data-testid="chat-view"
+			data-chat-workspace={workspaceId}
+			data-chat-session={sessionId}
 			data-line-width-bounded={chatLineWidthBounded}
 			data-message-order={chatMessageOrder}
 			className="flex h-full min-h-0 min-w-0 flex-col bg-container-workspace-bg [container-type:size]"
