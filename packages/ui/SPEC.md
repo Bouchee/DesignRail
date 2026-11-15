@@ -19,7 +19,8 @@ Primitives expose per-file `@thinkrail/ui/<primitive>` subpaths, not a root comp
 lazy chunks independent and preserves the shadcn convention. `./utils` exposes `cn`; `./keyboard` exposes
 `isImeComposing`, `yieldEscapeToIme` and the platform modifier (`isApplePlatform`, `hasPlatformModifier`:
 Cmd on Apple, Ctrl elsewhere — shared so the app's shortcuts and an extension's card read one definition); `./focus` exposes
-the one tabbable-control selector (`TABBABLE_SELECTOR`) and `focusFirstControl(container)` (the first
+the one tabbable-control selector (`TABBABLE_SELECTOR`, which includes a `<details>` element's own
+`<summary>`, natively tabbable) and `focusFirstControl(container)` (the first
 control, focused with `preventScroll`), shared by the app's focus recovery and reveal moves and the
 resource renderers' reveal of a comment card. `whenFocusReady(attempt, frames, request)` shares a bounded
 DOM-only wait controlled by the caller's `AbortController`; `watchFocusIntent(request)` protects a

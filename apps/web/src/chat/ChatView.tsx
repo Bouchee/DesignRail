@@ -614,6 +614,7 @@ export default function ChatView({
 	};
 
 	const onAbort = () => {
+		composerRef.current?.refocus();
 		void getTransport()
 			.request("session.abort", { sessionId })
 			.catch((error: unknown) => toast.error(errorText(error)));
@@ -798,6 +799,9 @@ export default function ChatView({
 							<ResourcesInspector
 								open={inspectorOpen}
 								onOpenChange={setInspectorOpen}
+								onEscapeKeyDown={(event) => {
+									if (composerRef.current?.ownsEscape()) event.preventDefault();
+								}}
 								onCloseAutoFocus={(event) => {
 									event.preventDefault();
 									focusComposer();
@@ -945,6 +949,8 @@ export default function ChatView({
 					onSelectThinking={onSelectThinking}
 					onSubmit={onSubmit}
 					onAbort={onAbort}
+					onEnterTranscript={() => transcriptRef.current?.focusNewest()}
+					onScrollTranscript={(direction) => transcriptRef.current?.scrollPage(direction)}
 					onHistoryOpen={onHistoryOpen}
 					onPickTemplate={onPickTemplate}
 					onManageTemplates={onManageTemplates}

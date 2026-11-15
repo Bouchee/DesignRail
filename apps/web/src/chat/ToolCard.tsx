@@ -69,6 +69,7 @@ export function ToolCard({
 				ref={toggleRef}
 				type="button"
 				data-testid="tool-card-toggle"
+				data-chat-item-toggle
 				aria-expanded={expanded}
 				onClick={toggle}
 				className={cn(

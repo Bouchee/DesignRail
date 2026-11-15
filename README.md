@@ -21,6 +21,8 @@ palette offers these actions and desktop zoom controls. Controls that disappear 
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
 Mod+? opens a filterable keyboard reference, also available from the left rail and Settings → Keyboard.
 Tooltips show each button’s shortcut; the reference starts with the surface you were using.
+From the chat input, Mod+Up enters transcript navigation; arrows or H/J/K/L walk messages and tools,
+C copies, O opens a tool’s file, and Escape returns to the input. History entries offer keyboard menus.
 Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command
 palette and keyboard shortcuts share the same split, move, close and arrangement actions.
 
