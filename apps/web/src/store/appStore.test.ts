@@ -50,6 +50,7 @@ import {
 	selectFilesTreeView,
 	selectReadyCompletionAck,
 	selectSkillsStale,
+	selectUnnamedChatFirstPrompts,
 	selectWorkspaceNavTick,
 	selectWorkspaceSessionIds,
 	selectWorkspaceTick,
@@ -2046,6 +2047,65 @@ test("setTitle refreshes shared chat metadata without requesting activation", ()
 		kind: "open",
 		tab: { id: placementId, name: "Migration plan", sessionId: "a" },
 	});
+});
+
+test("setTitle without a string title falls back to the untitled name", () => {
+	const store = useAppStore.getState();
+	const cacheId = chatTabId("ws1", "a");
+	store.openChatSession("ws1", "a", null, "medium");
+
+	for (const title of [undefined, null, 42]) {
+		store.applyExtUi({
+			id: `named-${title}`,
+			sessionId: "a",
+			kind: "setTitle",
+			title: "Migration plan",
+		});
+		store.applyExtUi({ id: `title-${title}`, sessionId: "a", kind: "setTitle", title } as never);
+		const tab = useAppStore.getState().tabsByWorkspace.ws1?.find((t) => t.id === cacheId);
+		expect(tab?.name).toBe("");
+		expect(() => selectUnnamedChatFirstPrompts(useAppStore.getState(), "ws1")).not.toThrow();
+	}
+});
+
+test("setTitle orphan replay normalizes its original non-string frame through both runtime installers", () => {
+	const store = useAppStore.getState();
+	for (const installer of ["open", "hydrate"] as const) {
+		const sessionId = `unlisted-${installer}`;
+		const request = { id: sessionId, sessionId, kind: "setTitle", title: 42 } as never;
+		store.applyExtUi(request);
+		expect(useAppStore.getState().extUiOrphans.at(-1)).toBe(request);
+		if (installer === "open") store.openChatSession("ws1", sessionId, null, "medium");
+		else
+			store.hydrateSession(
+				{
+					sessionId,
+					workspaceId: "ws1",
+					title: "Named",
+					model: null,
+					thinkingLevel: "medium",
+					isStreaming: false,
+					messageCount: 0,
+					updatedAt: 0,
+					live: true,
+				},
+				emptyHydration(),
+			);
+		const tab = useAppStore
+			.getState()
+			.tabsByWorkspace.ws1?.find((entry) => entry.kind === "chat" && entry.sessionId === sessionId);
+		expect(tab?.name).toBe("");
+		expect(useAppStore.getState().extUiOrphans).toEqual([]);
+		store.applyExtUi({
+			id: `valid-${installer}`,
+			sessionId,
+			kind: "setTitle",
+			title: "Valid title",
+		});
+		expect(
+			useAppStore.getState().tabsByWorkspace.ws1?.find((entry) => entry.id === tab?.id)?.name,
+		).toBe("Valid title");
+	}
 });
 
 test("setTitle cannot restore a cache whose structural close is already accepted", () => {
