@@ -203,6 +203,7 @@ interface ComposerProps {
 
 export interface ComposerHandle {
 	insertText: (text: string) => void;
+	pasteText: (text: string) => void;
 	insertAndSubmit: (text: string, behavior: SubmitBehavior) => void;
 	insertTemplate: (parsed: ParsedTemplate) => void;
 	restoreAttachments: (attachments: ChatAttachment[]) => void;
@@ -404,6 +405,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
 	useImperativeHandle(handleRef, () => ({
 		insertText: (text: string) => replaceDraft(text),
+		pasteText: (text: string) => {
+			const start = ref.current?.selectionStart ?? value.length;
+			const end = ref.current?.selectionEnd ?? start;
+			replaceDraft(`${value.slice(0, start)}${text}${value.slice(end)}`, start + text.length);
+		},
 		insertAndSubmit: (text: string, behavior: SubmitBehavior) =>
 			canSubmit(text) ? submitText(text, behavior) : replaceDraft(text),
 		insertTemplate: (parsed: ParsedTemplate) => {

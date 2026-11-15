@@ -10,6 +10,7 @@
 		"./version": "./src/version.ts",
 		"./windowsIdentity": "./src/windowsIdentity.ts",
 		"./paths": "./src/paths.ts",
+		"./artifactsDir": "./src/artifactsDir.ts",
 		"./codedError": "./src/codedError.ts",
 		"./removeTree": "./src/removeTree.ts",
 		"./spawn": "./src/spawn.ts",

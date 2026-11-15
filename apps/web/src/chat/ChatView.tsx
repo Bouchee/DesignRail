@@ -715,13 +715,15 @@ export default function ChatView({
 		if (!composerFocusRequested) return;
 		const store = useAppStore.getState();
 		if (!selectComposerFocusRequested(store, workspaceId, sessionId)) return;
-		const dismissHistory = store.composerFocusRequest?.dismissHistory === true;
+		const request = store.composerFocusRequest;
+		const dismissHistory = request?.dismissHistory === true;
 		store.clearComposerFocusRequest();
 		if (dismissHistory) {
 			if (store.historyOpenRequest?.sessionId === sessionId) store.clearHistoryOpen();
 			if (historyOverlayOpen) closeHistory();
 		}
-		composerRef.current?.refocus();
+		if (request?.pasteText !== undefined) composerRef.current?.pasteText(request.pasteText);
+		else composerRef.current?.refocus();
 	}, [composerFocusRequested, workspaceId, sessionId, historyOverlayOpen, closeHistory]);
 
 	const widgetEntries = Object.entries(extUiWidget);

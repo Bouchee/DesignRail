@@ -20,7 +20,12 @@ function describeEntry({ extension }: ServerExtensionEntry): ExtensionDescriptio
 		cwd: "",
 		assertActive: unavailable,
 		toolResponse: unavailable,
-		workspaceFiles: { check: async () => unavailable(), scratchDir: "" },
+		workspaceFiles: {
+			check: async () => unavailable(),
+			scratchDir: "",
+			artifactsDir: "",
+			createArtifact: async () => unavailable(),
+		},
 		setting(key) {
 			const setting = extension.settings?.[key];
 			if (!setting) throw new Error("Unknown extension setting");

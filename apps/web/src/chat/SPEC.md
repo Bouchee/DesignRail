@@ -1896,3 +1896,5 @@ footer; its approval or question card shows the waiting state, including after s
 Command log polling keeps the wire request scoped to the visible parent chat. Its response check binds
 both command ID and the actual owner session ID from the selected authoritative resource summary.
 The owner participates in the polling/cache key, so changing selections cannot reuse another child's log.
+
+Artifacts Mention carries optional pasteText on the existing composerFocusRequest. ChatView consumes the same guarded request once and calls Composer.pasteText, which inserts at the current selection without replacing the draft. Existing insertText keeps its history-replacement semantics. Cold mounting cannot paste or focus after a newer key, pointer, navigation or modal intent cancels that request.

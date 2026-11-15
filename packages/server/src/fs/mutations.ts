@@ -10,15 +10,18 @@ import {
 	lstatSync,
 	mkdirSync,
 	openSync,
+	readdirSync,
 	readlinkSync,
 	realpathSync,
+	renameSync,
 	symlinkSync,
 } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { CodedError } from "@thinkrail/shared/codedError";
+import { DELETE_CLAIM_PREFIX } from "@thinkrail/shared/paths";
 import { claimAndTrashFile } from "../trash";
 import { isWorktreeContent, posixRelative, resolveInWorktree } from "./files";
 
@@ -302,9 +305,109 @@ export async function deleteWorktreeEntry(
 	const token = randomUUID();
 	await claimAndTrashFile(
 		abs,
-		join(dirname(abs), `.thinkrail-delete-${token}`),
+		join(dirname(abs), `${DELETE_CLAIM_PREFIX}${token}`),
 		join(dirname(abs), `.thinkrail-recovery-${token}`),
 		{ parent: real, dev: stats.dev, ino: stats.ino },
 	);
 	return { path: posixRelative(root, abs), directory: stats.isDirectory() };
+}
+
+const UNUSABLE_NAME = /[/\\\0]/;
+
+function usableName(name: string): boolean {
+	return (
+		name.length > 0 &&
+		name.length <= 255 &&
+		!UNUSABLE_NAME.test(name) &&
+		name !== "." &&
+		name !== ".." &&
+		name.toLowerCase() !== ".git"
+	);
+}
+
+function taken(name: string): CodedError {
+	return new CodedError("ENTRY_EXISTS", `${name} already exists in this folder`);
+}
+
+export interface MovedEntry {
+	from: string;
+	path: string;
+	directory: boolean;
+	written: string[];
+}
+
+export function renameWorktreeEntry(workspaceId: string, path: string, name: string): MovedEntry {
+	if (!usableName(name)) throw new Error(`${name} can't be used as a name`);
+	const { root, abs, real } = resolveInWorktree(workspaceId, path, false);
+	const realRoot = realpathSync(root);
+	const from = join(real, basename(abs));
+	const stats = lstatSync(from, { bigint: true });
+	if (basename(abs) === name) throw taken(name);
+	const parent = trackDirectory(realRoot, real, path);
+	const target = join(real, name);
+	const existing = lstatSync(target, { bigint: true, throwIfNoEntry: false });
+	if (
+		existing &&
+		!(
+			sameEntry(existing, stats) &&
+			basename(abs).toLowerCase() === name.toLowerCase() &&
+			readdirSync(real).filter((entry) => entry.toLowerCase() === name.toLowerCase()).length === 1
+		)
+	)
+		throw taken(name);
+	verifiedDirectory(parent, path);
+	if (!sameEntry(lstatSync(from, { bigint: true }), stats)) throw changed(path);
+	renameSync(from, target);
+	const moved = posixRelative(realRoot, target);
+	return {
+		from: posixRelative(realRoot, from),
+		path: moved,
+		directory: stats.isDirectory(),
+		written: [moved],
+	};
+}
+
+export function moveWorktreeEntry(params: CopyWorktreeEntryParams): MovedEntry {
+	const source = resolveInWorktree(params.sourceWorkspaceId, params.sourcePath, false);
+	const destination = resolveInWorktree(
+		params.destinationWorkspaceId,
+		params.destinationDirectory,
+		true,
+	);
+	const sourceRoot = realpathSync(source.root);
+	const destinationRoot = realpathSync(destination.root);
+	const folder = lstatSync(destination.real, { bigint: true });
+	if (folder.isSymbolicLink()) throw changed(params.destinationDirectory);
+	if (!folder.isDirectory()) throw new Error("The paste destination is not a folder");
+	const name = basename(source.abs);
+	const sourceParent = trackDirectory(sourceRoot, source.real, params.sourcePath);
+	const destinationParent = trackDirectory(
+		destinationRoot,
+		destination.real,
+		params.destinationDirectory,
+	);
+	const from = join(source.real, name);
+	const stats = lstatSync(from, { bigint: true });
+	const directory = stats.isDirectory();
+	const fromPath = posixRelative(sourceRoot, from);
+	const target = join(destination.real, name);
+	if (target === from) throw taken(name);
+	if (directory && (destination.real === from || destination.real.startsWith(`${from}${sep}`)))
+		throw new Error("A folder can't be moved into itself");
+	if (lstatSync(target, { throwIfNoEntry: false })) throw taken(name);
+	verifiedDirectory(sourceParent, params.sourcePath);
+	verifiedDirectory(destinationParent, params.destinationDirectory);
+	if (!sameEntry(lstatSync(from, { bigint: true }), stats)) throw changed(params.sourcePath);
+	if (lstatSync(target, { throwIfNoEntry: false })) throw taken(name);
+	try {
+		renameSync(from, target);
+	} catch (error) {
+		if (errorCode(error) !== "EXDEV") throw error;
+		throw new CodedError(
+			"MOVE_ACROSS_DEVICES",
+			`${name} is on another file system than the destination, so it was not moved`,
+		);
+	}
+	const moved = posixRelative(destinationRoot, target);
+	return { from: fromPath, path: moved, directory, written: [moved] };
 }

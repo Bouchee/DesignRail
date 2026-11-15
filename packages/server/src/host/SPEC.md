@@ -244,3 +244,9 @@ findings and compensation contracts live in [planReview.SPEC.md](planReview.SPEC
 
 The host publishes owned resource lifecycle changes and routes parent-addressed child approvals through
 `attachApprovalOwner` before applying the original interaction receipt.
+
+## Workspace artifacts
+
+The composition root maps canonical SessionEvent start/settled/tool boundaries to artifacts, retaining producer IDs while using getSessionOwnerId for openable parent-chat attribution. Agent start prewarms the existing watcher. Filesystem nudges feed the same artifacts owner, which publishes pathless workspace.artifactsChanged at capability125. No extra watcher or execution loop is created.
+
+artifacts.list/restore/discard require live open workspace ownership; restore/discard and fs.rename use the existing workspace change lock. Cross-workspace fs.move locks both IDs in sorted order, emits source subtree/destination invalidations and marks successful user removal. Workspace/chat record deletion precedes kept-store cleanup. New mutation parameters are validated before side effects.

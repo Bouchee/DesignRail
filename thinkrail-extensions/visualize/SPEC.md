@@ -4,7 +4,7 @@ type: module-design
 status: active
 title: SDK visualization extension
 parent: module-thinkrail-extensions
-depends-on: [module-ui, module-extension-api, module-pi-visualize, module-locales]
+depends-on: [module-ui, module-extension-api, module-visualize, module-locales]
 references: [submodule-web-chat, submodule-server-extensions]
 ---
 
@@ -46,3 +46,5 @@ keep their fixed frame in the column.
 It uses public extension, UI, resource-renderer and locale interfaces.
 It does not import server code or SDK execution.
 The server and web halves share only the tool name and pure argument shape.
+
+Successful diagram and comparison calls save the validated Markdown through the run-scoped WorkspaceFiles.createArtifact capability, under context/visualize with a timestamp/slug and exclusive collision suffixes. The host rechecks grant and workspace identity after asynchronous preparation; Stop cannot authorize later writes. Saving is best effort: I/O failure preserves the valid preview without claiming a saved path, while the final active-run check still rejects a stopped run. Saved-to text names the actual created relative path and original renderer details remain unchanged. File previews continue reading existing files and do not save a duplicate.

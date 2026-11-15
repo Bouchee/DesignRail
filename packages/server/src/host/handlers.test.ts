@@ -27,6 +27,7 @@ import type {
 	TemplateInfo,
 	WireModel,
 	Workspace,
+	WorkspaceArtifactsSnapshot,
 	WorkspaceCreation,
 	WorkspaceCreationRemoved,
 	WorkspaceFsChangedPayload,
@@ -48,6 +49,7 @@ import {
 	sessionRecordPath,
 	setExtUiPublisher,
 } from "../agent";
+import { reconcileArtifacts } from "../artifacts";
 import { sessionDirFor, writeFixtureSession } from "../history/testFixtures";
 import { saveProjects, saveWorkspaces } from "../persistence";
 import { addComment, getReviewSnapshot } from "../reviews";
@@ -1191,4 +1193,140 @@ test("workspace mutation handlers reject the Default before any side effect", as
 	const after = (await handleRequest("workspace.list", { projectId: "p1" }, CTX)) as Workspace[];
 	expect(after.filter((w) => w.kind === "default")).toHaveLength(1);
 	expect(after[0]?.id).toBe(def.id);
+});
+
+test("user file mutations keep the artifact index honest", async () => {
+	const context = join(repo, ".raildesign", "context");
+	mkdirSync(join(context, "mockups"), { recursive: true });
+	writeFileSync(join(context, "a.md"), "a");
+	writeFileSync(join(context, "b.md"), "b");
+	writeFileSync(join(context, "c.md"), "c");
+	writeFileSync(
+		join(dataDir, "workspaces.json"),
+		JSON.stringify([{ id: "wa", projectId: "p1", name: "a", worktreePath: repo, createdAt: 1 }]),
+	);
+	setTrashImplementationForTests(async (input) => {
+		if (typeof input !== "string") throw new Error("expected one path");
+		reconcileArtifacts("wa");
+		rmSync(input, { recursive: true });
+	});
+	const list = async () =>
+		(
+			(await handleRequest(
+				"artifacts.list",
+				{ workspaceId: "wa" },
+				CTX,
+			)) as WorkspaceArtifactsSnapshot
+		).artifacts
+			.map((artifact) => `${artifact.state} ${artifact.path}`)
+			.sort();
+	expect(await list()).toEqual([
+		"live .raildesign/context/a.md",
+		"live .raildesign/context/b.md",
+		"live .raildesign/context/c.md",
+	]);
+
+	await handleRequest("fs.delete", { workspaceId: "wa", path: ".raildesign/context/a.md" }, CTX);
+	expect(
+		await handleRequest(
+			"fs.rename",
+			{ workspaceId: "wa", path: ".raildesign/context/b.md", name: "renamed.md" },
+			CTX,
+		),
+	).toEqual({ path: ".raildesign/context/renamed.md" });
+	expect(
+		await handleRequest(
+			"fs.move",
+			{
+				sourceWorkspaceId: "wa",
+				sourcePath: ".raildesign/context/c.md",
+				destinationWorkspaceId: "wa",
+				destinationDirectory: ".",
+			},
+			CTX,
+		),
+	).toEqual({ path: "c.md" });
+	expect(await list()).toEqual(["live .raildesign/context/renamed.md"]);
+
+	rmSync(join(context, "renamed.md"));
+	expect(await list()).toEqual(["deleted .raildesign/context/renamed.md"]);
+	await handleRequest(
+		"artifacts.restore",
+		{ workspaceId: "wa", path: ".raildesign/context/renamed.md" },
+		CTX,
+	);
+	expect(readFileSync(join(context, "renamed.md"), "utf8")).toBe("b");
+	rmSync(join(context, "renamed.md"));
+	await list();
+	await handleRequest(
+		"artifacts.discard",
+		{ workspaceId: "wa", path: ".raildesign/context/renamed.md" },
+		CTX,
+	);
+	expect(await list()).toEqual([]);
+});
+
+test("a paste into the artifacts folder seeds it first when it does not exist yet", async () => {
+	writeFileSync(join(repo, "notes.md"), "notes\n");
+	writeFileSync(join(repo, "todo.md"), "todo\n");
+	writeFileSync(
+		join(dataDir, "workspaces.json"),
+		JSON.stringify([{ id: "wa", projectId: "p1", name: "a", worktreePath: repo, createdAt: 1 }]),
+	);
+	expect(existsSync(join(repo, ".raildesign"))).toBe(false);
+	expect(
+		await handleRequest(
+			"fs.copy",
+			{
+				sourceWorkspaceId: "wa",
+				sourcePath: "notes.md",
+				destinationWorkspaceId: "wa",
+				destinationDirectory: ".raildesign/context",
+			},
+			CTX,
+		),
+	).toEqual({ path: ".raildesign/context/notes.md" });
+	expect(readFileSync(join(repo, ".raildesign", "context", ".gitignore"), "utf8")).toBe("*\n");
+	rmSync(join(repo, ".raildesign"), { recursive: true });
+	expect(
+		await handleRequest(
+			"fs.move",
+			{
+				sourceWorkspaceId: "wa",
+				sourcePath: "todo.md",
+				destinationWorkspaceId: "wa",
+				destinationDirectory: ".raildesign/context",
+			},
+			CTX,
+		),
+	).toEqual({ path: ".raildesign/context/todo.md" });
+	expect(readFileSync(join(repo, ".raildesign", "context", ".gitignore"), "utf8")).toBe("*\n");
+	expect(gitText(repo, "status", "--porcelain", "--untracked-files=all")).not.toContain(
+		".raildesign",
+	);
+});
+
+test("malformed artifact and move requests fail before any filesystem mutation", async () => {
+	writeFileSync(join(repo, "safe.md"), "safe");
+	writeFileSync(
+		join(dataDir, "workspaces.json"),
+		JSON.stringify([{ id: "w", projectId: "p1", name: "W", worktreePath: repo }]),
+	);
+	for (const [method, params] of [
+		["fs.rename", { workspaceId: "w", path: "safe.md", name: 123 }],
+		[
+			"fs.move",
+			{
+				sourceWorkspaceId: "w",
+				sourcePath: "safe.md",
+				destinationWorkspaceId: [],
+				destinationDirectory: ".",
+			},
+		],
+		["artifacts.list", { workspaceId: null }],
+		["artifacts.restore", { workspaceId: "w", path: {} }],
+		["artifacts.discard", { workspaceId: "w", path: [] }],
+	] as const)
+		await expect(handleRequest(method, params, CTX)).rejects.toThrow();
+	expect(readFileSync(join(repo, "safe.md"), "utf8")).toBe("safe");
 });

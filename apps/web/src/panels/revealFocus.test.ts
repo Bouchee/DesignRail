@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { useAppStore } from "../store";
-import { clearOwnedReviewFocus, focusWhenRevealed, guardReviewFocus } from "./revealFocus";
+import { selectComposerFocusRequested, useAppStore } from "../store";
+import { mentionArtifact, selectArtifactMentionTarget } from "./artifactActions";
+import {
+	clearOwnedReviewFocus,
+	focusWhenRevealed,
+	guardComposerFocus,
+	guardReviewFocus,
+} from "./revealFocus";
 
 class NodeFixture {
 	isConnected = true;
@@ -227,4 +233,77 @@ test("release of an older passive reveal preserves a new same-comment owner", ()
 	expect(useAppStore.getState().reviewFocusRequest).toBe(newer);
 	clearOwnedReviewFocus(newer);
 	expect(useAppStore.getState().reviewFocusRequest).toBeNull();
+});
+
+function attendedChat() {
+	useAppStore.setState({
+		activeWorkspaceId: "w",
+		layoutDocumentsByWorkspace: {
+			w: {
+				version: 2,
+				center: {
+					kind: "group",
+					id: "center",
+					tabs: [{ kind: "chat", id: "chat", name: "Chat", sessionId: "s" }],
+				},
+				left: { visible: false, width: 0.2, groups: [] },
+				right: { visible: false, width: 0.2, groups: [] },
+				bottom: { visible: false, height: 0.3, alignment: "center", groups: [] },
+				toolRestoreTargets: {},
+			},
+		},
+		layoutAttentionByWorkspace: {
+			w: {
+				selectedByGroup: { center: "chat" },
+				lastFocusedCenterGroupId: "center",
+				lastFocusedSideGroupId: {},
+				navigationClockByGroup: {},
+			},
+		},
+	});
+}
+
+test("Mention waits as one guarded paste/focus request, preserving its target until normal consumption", () => {
+	attendedChat();
+	mentionArtifact("w", ".raildesign/context/plan.md");
+	expect(useAppStore.getState().composerFocusRequest).toMatchObject({
+		workspaceId: "w",
+		sessionId: "s",
+		dismissHistory: true,
+		pasteText: "@.raildesign/context/plan.md ",
+	});
+	expect(selectComposerFocusRequested(useAppStore.getState(), "w", "s")).toBe(true);
+	useAppStore.getState().clearComposerFocusRequest();
+	expect(observers.size).toBe(0);
+});
+
+for (const event of ["pointerdown", "keydown", "blur"])
+	test(`a cold Mention cancelled by ${event} leaves no late paste or focus payload`, () => {
+		attendedChat();
+		mentionArtifact("w", ".raildesign/context/plan.md");
+		gesture(event);
+		expect(useAppStore.getState().composerFocusRequest).toBeNull();
+		expect(selectComposerFocusRequested(useAppStore.getState(), "w", "s")).toBe(false);
+	});
+
+test("Mention only targets the currently active workspace and a newer request survives old cleanup", () => {
+	attendedChat();
+	expect(
+		selectArtifactMentionTarget({ ...useAppStore.getState(), activeWorkspaceId: "other" }, "w"),
+	).toBeNull();
+	mentionArtifact("w", "first.md");
+	const old = useAppStore.getState().composerFocusRequest;
+	if (!old) throw new Error("Missing Mention request");
+	useAppStore.getState().requestComposerFocus("w", "s", { pasteText: "new" });
+	guardComposerFocus(old);
+	expect(useAppStore.getState().composerFocusRequest?.pasteText).toBe("new");
+	useAppStore.getState().clearComposerFocusRequest();
+});
+
+test("navigation away and back permanently cancels a cold Mention", () => {
+	attendedChat();
+	mentionArtifact("w", "plan.md");
+	useAppStore.setState({ activeWorkspaceId: "other" });
+	useAppStore.setState({ activeWorkspaceId: "w" });
+	expect(useAppStore.getState().composerFocusRequest).toBeNull();
 });

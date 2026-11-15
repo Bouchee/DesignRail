@@ -11,6 +11,7 @@ import {
 } from "@thinkrail/visualize";
 import { Value } from "typebox/value";
 import { strictMermaidValidator } from "./mermaid";
+import { saveVisualization } from "./save";
 
 export default defineServerExtension({
 	name: "visualize",
@@ -20,7 +21,7 @@ export default defineServerExtension({
 	sdkTools: (session) => [
 		tool({
 			name: "visualize",
-			description: `Show a rich visualization. Use type 'diagram' with raw Mermaid source, 'comparison' with named options and pros/cons, or 'file' with an existing workspace-relative path. Set 'before' to another file for a before/after comparison. For UI proposals, write self-contained HTML mockups under \`${session.workspaceFiles.scratchDir}\` with inline CSS and data images only. Draw controls as styled elements. File previews use the current file contents; copy a file to preserve an earlier proposal.`,
+			description: `Show a rich visualization. Use type 'diagram' with raw Mermaid source, 'comparison' with named options and pros/cons, or 'file' with an existing workspace-relative path. Set 'before' to another file for a before/after comparison. For UI proposals, write self-contained HTML mockups under \`${session.workspaceFiles.scratchDir}\` with inline CSS and data images only. Draw controls as styled elements. Diagrams and comparisons are also saved as Markdown artifacts in \`${session.workspaceFiles.artifactsDir}visualize/\`. File previews use the current file contents; copy a file to preserve an earlier proposal.`,
 			strict: false,
 			parameters: {
 				...VisualizeSchema,
@@ -58,7 +59,19 @@ export default defineServerExtension({
 						: params.type === "file"
 							? fileMarkdown(params)
 							: comparisonMarkdown(params.title, params.options ?? []);
-				return { content: [{ type: "text", text }], details: params };
+				let savedPath: string | null = null;
+				if (params.type !== "file") {
+					try {
+						savedPath = await saveVisualization(session.workspaceFiles, params, text);
+					} catch {}
+				}
+				session.assertActive();
+				return {
+					content: [
+						{ type: "text", text: savedPath ? `${text}\n\nSaved to \`${savedPath}\`.` : text },
+					],
+					details: params,
+				};
 			},
 		}),
 	],

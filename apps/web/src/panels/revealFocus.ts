@@ -52,3 +52,19 @@ export function guardReviewFocus(
 	if (useAppStore.getState().reviewFocusRequest !== owned) request.abort();
 	return () => request.abort();
 }
+
+export function guardComposerFocus(
+	owned: NonNullable<ReturnType<typeof useAppStore.getState>["composerFocusRequest"]>,
+): void {
+	const request = focusRequest(() => useAppStore.getState().composerFocusRequest === owned);
+	request.signal.addEventListener(
+		"abort",
+		() => {
+			const state = useAppStore.getState();
+			if (state.composerFocusRequest === owned) state.clearComposerFocusRequest();
+		},
+		{ once: true },
+	);
+	watchFocusIntent(request);
+	if (useAppStore.getState().composerFocusRequest !== owned) request.abort();
+}

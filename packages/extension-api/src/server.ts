@@ -8,6 +8,8 @@ export type ToolResponse =
 export interface WorkspaceFiles {
 	check(path: string, cwd: string): Promise<void>;
 	scratchDir: string;
+	artifactsDir: string;
+	createArtifact(name: string, content: string): Promise<string>;
 }
 
 export interface ExtensionBooleanSetting {

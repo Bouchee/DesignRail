@@ -56,11 +56,11 @@ import { createTodoTools, TODO_RULE } from "@thinkrail/todos";
 import { WORKFLOW_RULE } from "@thinkrail/workflow";
 import { z } from "zod";
 import {
+	createWorkspaceFiles,
 	interactiveTools,
 	registrySdkTools,
 	type SdkExtensionSnapshot,
 	snapshotSdkExtensions,
-	workspaceFiles,
 } from "../extensions";
 import { findImageBlock, type ImageSource, projectImages } from "../images";
 import { logger } from "../log";
@@ -369,6 +369,9 @@ function mustGet(sessionId: string): Entry {
 	if (!entry) throw new Error(`Unknown session: ${sessionId}`);
 	return entry;
 }
+const ARTIFACTS_RULE =
+	"Keep documents, plans, reports, mockups and other deliverables in .raildesign/context/. Update the same artifact path when revising it; do not delete or move deliverables out of this folder yourself. Keep completed task-specs with status: done instead of deleting them. Regular project edits still belong at their assigned project paths.";
+
 function assertActive(entry: Entry, run: ActiveRun): void {
 	const child = entry.store.record.childRun;
 	if (child) {
@@ -2401,7 +2404,7 @@ async function buildSessionAgent(
 		instructions: (context) => {
 			assertWorkspaceContext(context.context, entry);
 			assertActive(entry, run);
-			return `${childDefinition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}`;
+			return `${childDefinition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
 		},
 		model: sdkModel,
 		tools: [
@@ -2429,7 +2432,11 @@ async function buildSessionAgent(
 							return result;
 						},
 					},
-					workspaceFiles,
+					workspaceFiles: createWorkspaceFiles(
+						entry.store.record.workspaceId,
+						entry.store.record.cwd,
+						() => assertActive(entry, run),
+					),
 					assertActive: () => assertActive(entry, run),
 					toolResponse: (callId) => {
 						const answer = Object.values(entry.store.record.toolResponses).find(
@@ -3535,6 +3542,10 @@ export async function abortSession(
 }
 export function hasSession(sessionId: string): boolean {
 	return sessions.has(sessionId);
+}
+export function getSessionOwnerId(sessionId: string): string | undefined {
+	const entry = sessions.get(sessionId);
+	return entry ? imageOwner(entry) : undefined;
 }
 export function getSessionWorkspaceId(sessionId: string): string | undefined {
 	return sessions.get(sessionId)?.store.record.workspaceId;

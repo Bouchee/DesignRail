@@ -15,7 +15,7 @@ The host owns sessions, grants, interactions and settings.
 Extensions receive session services and return public SDK tools.
 They do not create an execution engine.
 
-- **Public surface (barrel):** `serverExtensions`, `ServerExtensionEntry`, `listExtensionCatalog`, `snapshotSdkExtensions`, `registrySdkTools`, `SdkExtensionSnapshot`, `SdkExtensionKind`, `interactiveTools`, `InteractiveTools`, `ExtensionDisabled`, `SdkToolServices`, `InteractiveTool`, `ToolResponse`, `checkWorkspaceFile`, `workspaceFiles`, `MOCKUP_DIR`, `resolveExtensionSkillRoots`, `extensionSkillRoots`, `STAGED_HOST_SKILLS_ROUTE`, `stagedExtensionSkillRoute`.
+- **Public surface (barrel):** `serverExtensions`, `ServerExtensionEntry`, `listExtensionCatalog`, `snapshotSdkExtensions`, `registrySdkTools`, `SdkExtensionSnapshot`, `SdkExtensionKind`, `interactiveTools`, `InteractiveTools`, `ExtensionDisabled`, `SdkToolServices`, `InteractiveTool`, `ToolResponse`, `checkWorkspaceFile`, `createWorkspaceFiles`, `MOCKUP_DIR`, `resolveExtensionSkillRoots`, `extensionSkillRoots`, `STAGED_HOST_SKILLS_ROUTE`, `stagedExtensionSkillRoute`.
 
 ## SDK composition
 
@@ -57,3 +57,5 @@ The extension contract remains independent from the implementation of these chec
 Allow extension server entries, extension-api server contracts, application contracts and Node built-ins.
 Do not import host handlers or settings state.
 The caller supplies current session services and snapshots.
+
+The workspace file service binds artifact creation to the captured live workspace and active run. It rechecks authorization after awaits, seeds real context directories, and creates exclusively below context/visualize. It never accepts arbitrary write paths from extensions.

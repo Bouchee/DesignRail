@@ -7,12 +7,14 @@ import type {
 	ServerWelcome,
 	SessionCreatedPayload,
 	SessionDeletedPayload,
+	SessionEvent,
 	SessionStateRecord,
 	TerminalTabsPush,
 	WorkspaceFsChangedPayload,
 	WsChannel,
 } from "@thinkrail/contracts";
 import {
+	ARTIFACTS_PROTOCOL_VERSION,
 	CONTINUATION_PROTOCOL_VERSION,
 	FONTS_PROTOCOL_VERSION,
 	IMAGES_ROUTE,
@@ -37,6 +39,7 @@ import {
 	closeAllMcpConnections,
 	closeSessionMcpConnections,
 	disposeAllSessions,
+	getSessionOwnerId,
 	getSessionWorkspaceId,
 	initializeSessionStates,
 	isProjectSkillPath,
@@ -64,6 +67,12 @@ import {
 	setWorkspaceToolsHost,
 	watchUserMcpConfig,
 } from "../agent";
+import {
+	type ArtifactSessionEvent,
+	noteArtifactPathsChanged,
+	observeArtifactSessionEvent,
+	setArtifactsPublisher,
+} from "../artifacts";
 import { forgetOpenBranchReview } from "../branch-review";
 import { watchUserFonts } from "../fonts";
 import { ignoredPaths } from "../git";
@@ -104,6 +113,7 @@ import { watchUserThemes } from "../themes";
 import { isTodoToolEnd, maybeAttachChangeArtifacts } from "../todos";
 import { setTurnPublisher, TurnTracker } from "../turns";
 import {
+	ensureWatch,
 	setIgnoredPathsResolver,
 	setRepoMetaPublisher,
 	setSkillPathClassifier,
@@ -205,6 +215,25 @@ const warnSlowConsumer = (message: string, error: SlowConsumerError): void =>
 	log.warn(message, error);
 
 const isRequestId = (id: unknown): id is string => typeof id === "string";
+
+function artifactSessionEvent(event: SessionEvent): ArtifactSessionEvent | null {
+	switch (event.type) {
+		case "agent_start":
+		case "agent_settled":
+			return { type: event.type };
+		case "tool_execution_start":
+			return {
+				type: event.type,
+				toolCallId: event.toolCallId,
+				toolName: event.toolName,
+				args: event.args,
+			};
+		case "tool_execution_end":
+			return { type: event.type, toolCallId: event.toolCallId, toolName: event.toolName };
+		default:
+			return null;
+	}
+}
 
 const onScratchDirPath = (path: string) =>
 	path === WORKSPACE_CONTEXT_DIR ||
@@ -461,6 +490,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 					ws.subscribe(WS_CHANNELS.workspaceUpdated);
 					ws.subscribe(WS_CHANNELS.workspaceRemoved);
 					ws.subscribe(WS_CHANNELS.workspaceFsChanged);
+					ws.subscribe(WS_CHANNELS.workspaceArtifactsChanged);
 					if (ws.data.protocolVersion >= WORKSPACE_CREATION_PROTOCOL_VERSION) {
 						ws.subscribe(WS_CHANNELS.workspaceCreationChanged);
 						ws.subscribe(WS_CHANNELS.workspaceCreationRemoved);
@@ -838,6 +868,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 		}
 		publishScoped(WS_CHANNELS.workspaceFsChanged, payload, { workspaceId: payload.workspaceId });
 		reanchorWorkspace(payload.workspaceId);
+		noteArtifactPathsChanged(payload.workspaceId, payload.paths, payload.truncated);
 		const changedRoot = loadWorkspaces().find((w) => w.id === payload.workspaceId)?.worktreePath;
 		if (changedRoot) hostSearch().invalidateRoot(changedRoot);
 	};
@@ -908,7 +939,26 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 			workspaceId: resources.workspaceId,
 		}),
 	);
+	setArtifactsPublisher((workspaceId) => {
+		publishScoped(
+			WS_CHANNELS.workspaceArtifactsChanged,
+			{ workspaceId },
+			{ workspaceId, belowProtocol: ARTIFACTS_PROTOCOL_VERSION },
+		);
+	});
 	setSessionPublisher((payload, workspaceId) => {
+		const artifactEvent = artifactSessionEvent(payload.event);
+		if (artifactEvent) {
+			if (artifactEvent.type === "agent_start") void ensureWatch(workspaceId, { prewarm: true });
+			const ownerId = getSessionOwnerId(payload.sessionId);
+			if (ownerId)
+				void observeArtifactSessionEvent(
+					workspaceId,
+					payload.sessionId,
+					artifactEvent,
+					ownerId,
+				).catch((error) => log.warn("artifacts observation failed", error));
+		}
 		observeContinuation(payload.sessionId, payload.event);
 		if (isTodoToolEnd(payload.event))
 			void maybeAttachChangeArtifacts(workspaceId, payload.sessionId)
@@ -1069,6 +1119,7 @@ function restoreSeamDefaults(): void {
 	setSessionStatePublisher(() => {});
 	setSessionDeletedPublisher(() => {});
 	setTurnPublisher(() => {});
+	setArtifactsPublisher(null);
 	setSessionPublisher(() => {});
 	setExtUiPublisher(() => {});
 }

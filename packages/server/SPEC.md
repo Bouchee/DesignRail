@@ -66,10 +66,11 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `github` | read-only local `gh` auth status (shell-out) for the New-Workspace surface | [github/SPEC.md](src/github/SPEC.md) |
 | `branch-review` | best-effort GitHub PR / GitLab MR for a workspace branch, with an open PR's checks, review decision, and merge state | [branch-review/SPEC.md](src/branch-review/SPEC.md) |
 | `pr` | `pr.open` / `workspace.push`: push the workspace branch + open/update its GitHub PR, body from the plan, commits, or a template; ready / merge / reopen it and delete its remote branch | [pr/SPEC.md](src/pr/SPEC.md) |
-| `fs` | read dirs/files inside a worktree (path-contained), the Files tree's copy + delete-to-trash, and the one byte classification (text/mime/sha-256) | [fs/SPEC.md](src/fs/SPEC.md) |
+| `fs` | read dirs/files inside a worktree (path-contained), the Files tree's copy, rename, move + delete-to-trash, and the one byte classification (text/mime/sha-256) | [fs/SPEC.md](src/fs/SPEC.md) |
 | `changes` | host-owned revert of a hunk or a file's whole change in the worktree, with undo receipts | [changes/SPEC.md](src/changes/SPEC.md) |
 | `turns` | per-agent-run worktree snapshots → the change set each run produced (`workspace.turns`, `turn.changed`) | [turns/SPEC.md](src/turns/SPEC.md) |
 | `trash` | move a path to the OS trash through the bundled helpers (never `unlink`) | [trash/SPEC.md](src/trash/SPEC.md) |
+| `artifacts` | the workspace's agent artifacts (`.raildesign/context/` files with hard-linked kept copies, attribution to the writing chat) and the ignored outputs of its agent runs | [artifacts/SPEC.md](src/artifacts/SPEC.md) |
 | `resourceHistory` | the durable per-chat archive of background commands and subagents behind Resources (records + command log tails) | [resourceHistory/SPEC.md](src/resourceHistory/SPEC.md) |
 | `spec` | the worktree's spec-graph snapshot (`spec.graph`) + project-level `projectHasSpecs`, via `@thinkrail/spec-graph/core` | [spec/SPEC.md](src/spec/SPEC.md) |
 | `todos` | a chat's per-session TODO plan read/write (`todo.*`), via `@thinkrail/todos/core` | [todos/SPEC.md](src/todos/SPEC.md) |
@@ -103,6 +104,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 - `git` -> `subprocess`, `fs`; `branch-review` -> `git`, `subprocess`; `github` -> `subprocess`.
 - `pr` -> `workspaces`, `git`, `todos`, `branch-review`, `github`. The host composes PR-description
   generation with assist so PR does not gain an assist edge.
+- `artifacts` -> `persistence`, `fs`, `git`, `trash`, `log`; `extensions` -> `persistence`.
 - `fs` -> `persistence`, `trash` (shared claim-and-trash service).
 - `changes` -> `git`, `fs`, `persistence`, `trash`; `turns` -> `git`, `persistence`, `log`.
   Host supplies agent events to turns; turns never imports agent.

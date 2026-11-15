@@ -651,3 +651,5 @@ commands retained by completed children and all three Stop controls.
 The child-owned command browser fixture seeds real child/session archive records and checks the parent's
 command row and log through reload, including the absence of Stop authority for settled history.
 Actual parent, child and stop-all process termination is covered by SDK tests with live OS processes.
+
+Artifacts coverage uses ordinary workspace files and public list/restore/file APIs. The no-agent suite covers kept restore, user deletion/rename/cut, arrival markers and local preferences, Mention preserving draft/selection, and keyboard landing/recovery. artifacts.live.spec uses a fresh SDK UI chat with two explicit turns, exact approvals and new completion IDs: real apply_patch v1→v2, two saved visualizations, ignored output and explicit latest-byte Restore. No private Pi history or kept-store fixture supplies execution evidence; browser reload is not host restart acceptance.

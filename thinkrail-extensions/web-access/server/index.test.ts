@@ -13,7 +13,12 @@ function fixture() {
 		},
 		toolResponse: () => ({ kind: "deferred" }),
 		setting: () => false,
-		workspaceFiles: { check: async () => {}, scratchDir: "" },
+		workspaceFiles: {
+			check: async () => {},
+			scratchDir: "",
+			artifactsDir: "",
+			createArtifact: async () => "",
+		},
 		webAccess: {
 			async search(...args) {
 				calls.push(["search", ...args]);

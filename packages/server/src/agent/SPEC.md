@@ -446,3 +446,7 @@ Clearing the visible input queue withdraws only user-authored inputs, preserving
 MCP resource listing, template listing and reads share current MCP connections, trust checks and exact
 configuration fingerprints. They use public SDK resource APIs and the existing output store; they do
 not start another transport owner. Stale grants or removed access prevent subsequent resource calls.
+
+Artifacts use canonical application session events, attributed through the existing child parentSessionId. The SDK instructions put deliverables in the workspace context, retaining the same path for updates; atomic apply_patch remains unchanged. No second runtime or Pi guard is installed. Checkpoint context stays exactly `{ workspaceId }`. Visualize receives a run-scoped host file capability, not a serialized service.
+
+getSessionOwnerId(sessionId) exposes the current attached session's openable parent ID for host-owned artifact attribution. Runtime services remain closures; checkpoint context remains exactly {workspaceId}.

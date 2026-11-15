@@ -24,6 +24,8 @@ const session: SdkToolServices = {
 			if (path === "missing.html") throw new Error("no such file");
 		},
 		scratchDir: ".raildesign/context/mockups/",
+		artifactsDir: ".raildesign/context/",
+		createArtifact: async (name) => `.raildesign/context/visualize/${name}`,
 	},
 };
 
@@ -153,4 +155,54 @@ describe("visualize server half", () => {
 	test("points the mockup guideline at the gitignored scratch directory", () => {
 		expect(loadTool().description).toContain("`.raildesign/context/mockups/`");
 	});
+});
+
+test("a save failure preserves a valid visualization without claiming a saved path", async () => {
+	const services = {
+		...session,
+		workspaceFiles: {
+			...session.workspaceFiles,
+			createArtifact: async () => {
+				throw new Error("disk full");
+			},
+		},
+	};
+	const tool = extension.sdkTools(services)[0];
+	if (!tool) throw new Error("Missing tool");
+	const output = await tool.invoke(
+		new RunContext({}),
+		JSON.stringify({
+			type: "comparison",
+			title: "Visible",
+			options: [{ name: "One" }, { name: "Two" }],
+		}),
+	);
+	const result = typeof output === "string" ? JSON.parse(output) : output;
+	expect(result.content[0].text).toContain("Visible");
+	expect(result.content[0].text).not.toContain("Saved to");
+	expect(result.details.title).toBe("Visible");
+});
+test("Stop during a save still rejects the late tool result", async () => {
+	let active = true;
+	const services = {
+		...session,
+		assertActive: () => {
+			if (!active) throw new Error("Stopped");
+		},
+		workspaceFiles: {
+			...session.workspaceFiles,
+			createArtifact: async () => {
+				active = false;
+				throw new Error("Stopped");
+			},
+		},
+	};
+	const tool = extension.sdkTools(services)[0];
+	if (!tool) throw new Error("Missing tool");
+	await expect(
+		tool.invoke(
+			new RunContext({}),
+			JSON.stringify({ type: "comparison", options: [{ name: "One" }, { name: "Two" }] }),
+		),
+	).rejects.toThrow("Stopped");
 });

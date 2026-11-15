@@ -53,7 +53,12 @@ function compose(
 			return response;
 		},
 		setting: () => richPreviews,
-		workspaceFiles: { check, scratchDir: ".raildesign/context/mockups/" },
+		workspaceFiles: {
+			check,
+			scratchDir: ".raildesign/context/mockups/",
+			artifactsDir: ".raildesign/context/",
+			createArtifact: async (name) => `.raildesign/context/visualize/${name}`,
+		},
 	};
 	const tool = askUserQuestion.sdkTools(services)[0];
 	if (!tool) throw new Error("Missing question tool");

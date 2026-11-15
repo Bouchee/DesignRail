@@ -1,7 +1,10 @@
+import { lstatSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { WorkspaceFiles } from "@thinkrail/extension-api/server";
+import { seedArtifactsDir } from "@thinkrail/shared/artifactsDir";
 import { WORKSPACE_CONTEXT_DIR } from "@thinkrail/shared/paths";
+import { loadProjects, loadWorkspaces } from "../persistence";
 
 export const MOCKUP_DIR = `${WORKSPACE_CONTEXT_DIR}/mockups/`;
 
@@ -16,7 +19,8 @@ export async function checkWorkspaceFile(path: string, cwd: string): Promise<voi
 	const rel = isAbsolute(path) ? null : inside(resolve(cwd), absolute);
 	if (rel === null)
 		throw new Error("the path must be relative to the workspace and stay inside it");
-	if (rel.split(sep).includes(".git")) throw new Error("the .git directory is not shown");
+	if (rel.split(sep).some((part) => part.toLowerCase() === ".git"))
+		throw new Error("the .git directory is not shown");
 	const info = await stat(absolute).catch(() => undefined);
 	if (!info) throw new Error("no such file");
 	if (!info.isFile()) throw new Error("not a regular file");
@@ -25,4 +29,48 @@ export async function checkWorkspaceFile(path: string, cwd: string): Promise<voi
 	}
 }
 
-export const workspaceFiles: WorkspaceFiles = { check: checkWorkspaceFile, scratchDir: MOCKUP_DIR };
+export function createWorkspaceFiles(
+	workspaceId: string,
+	cwd: string,
+	assertActive: () => void,
+): WorkspaceFiles {
+	const root = realpathSync(cwd);
+	const identity = statSync(root, { bigint: true });
+	const assertCurrent = () => {
+		assertActive();
+		const workspace = loadWorkspaces().find((item) => item.id === workspaceId);
+		const project = loadProjects().find((item) => item.id === workspace?.projectId);
+		const current = statSync(cwd, { bigint: true, throwIfNoEntry: false });
+		if (
+			!workspace ||
+			workspace.deletionPending ||
+			resolve(workspace.worktreePath) !== resolve(cwd) ||
+			!project ||
+			project.closed ||
+			realpathSync(cwd) !== root ||
+			current?.dev !== identity.dev ||
+			current.ino !== identity.ino
+		)
+			throw new Error("The artifact workspace is no longer available");
+	};
+	return {
+		check: checkWorkspaceFile,
+		scratchDir: MOCKUP_DIR,
+		artifactsDir: `${WORKSPACE_CONTEXT_DIR}/`,
+		async createArtifact(name, content) {
+			assertCurrent();
+			if (!name || basename(name) !== name || /[/\\\0]/.test(name) || !name.endsWith(".md"))
+				throw new Error("Invalid artifact name");
+			await realpath(cwd);
+			assertCurrent();
+			const context = seedArtifactsDir(root);
+			const dir = join(context, "visualize");
+			if (!lstatSync(dir, { throwIfNoEntry: false })) mkdirSync(dir);
+			if (!lstatSync(dir).isDirectory() || realpathSync(dir) !== dir)
+				throw new Error("The visualization folder must be a real directory");
+			assertCurrent();
+			writeFileSync(join(dir, name), content, { flag: "wx" });
+			return `${WORKSPACE_CONTEXT_DIR}/visualize/${name}`;
+		},
+	};
+}

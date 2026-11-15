@@ -73,6 +73,7 @@ import type {
 	UserFontsSnapshot,
 	UserThemesSnapshot,
 	Workspace,
+	WorkspaceArtifactsSnapshot,
 	WorkspacePathMatch,
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
@@ -128,7 +129,8 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 124;
+export const PROTOCOL_VERSION = 125;
+export const ARTIFACTS_PROTOCOL_VERSION = 125;
 export const AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION = 124;
 export const IMAGE_REFS_PROTOCOL_VERSION = 123;
 export const IMAGES_ROUTE = "/images/";
@@ -434,6 +436,11 @@ export const WS_METHODS = {
 	fsReadFile: "fs.readFile",
 	fsCopy: "fs.copy",
 	fsDelete: "fs.delete",
+	fsRename: "fs.rename",
+	fsMove: "fs.move",
+	artifactsList: "artifacts.list",
+	artifactsRestore: "artifacts.restore",
+	artifactsDiscard: "artifacts.discard",
 	specGraph: "spec.graph",
 	todoList: "todo.list",
 	todoAdd: "todo.add",
@@ -572,6 +579,7 @@ export const WS_CHANNELS = {
 	workspaceUpdated: "workspace.updated",
 	workspaceRemoved: "workspace.removed",
 	workspaceFsChanged: "workspace.fsChanged",
+	workspaceArtifactsChanged: "workspace.artifactsChanged",
 	workspaceCreationChanged: "workspace.creationChanged",
 	workspaceCreationRemoved: "workspace.creationRemoved",
 	chatContinuation: "chat.continuation",
@@ -1002,6 +1010,22 @@ export interface WsMethodMap {
 		result: { path: string };
 	};
 	"fs.delete": { params: { workspaceId: string; path: string }; result: Ack };
+	"fs.rename": {
+		params: { workspaceId: string; path: string; name: string };
+		result: { path: string };
+	};
+	"fs.move": {
+		params: {
+			sourceWorkspaceId: string;
+			sourcePath: string;
+			destinationWorkspaceId: string;
+			destinationDirectory: string;
+		};
+		result: { path: string };
+	};
+	"artifacts.list": { params: { workspaceId: string }; result: WorkspaceArtifactsSnapshot };
+	"artifacts.restore": { params: { workspaceId: string; path: string }; result: Ack };
+	"artifacts.discard": { params: { workspaceId: string; path: string }; result: Ack };
 	"spec.graph": { params: { workspaceId: string }; result: SpecGraphSnapshot };
 	"todo.list": {
 		params: { workspaceId: string; sessionId: string; opened?: "page" | "rail" };
@@ -1445,6 +1469,9 @@ export type WsErrorCode =
 	| "FILE_TOO_LARGE"
 	| "COPY_TOO_LARGE"
 	| "ENTRY_CHANGED"
+	| "ENTRY_EXISTS"
+	| "MOVE_ACROSS_DEVICES"
+	| "ARTIFACT_UNKNOWN"
 	| "CHATS_CONTAINER"
 	| "CHAT_WORKSPACE"
 	| "CHATS_STORE_UNAVAILABLE"

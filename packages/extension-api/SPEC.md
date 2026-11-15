@@ -110,3 +110,5 @@ public SDK interruptions for interactive calls and recreates the factories befor
 The SDK import is server-only and type-only in this contract package; browser entries stay SDK-free.
 
 SDK tool factories use `errorFunction: null`; the host public invocation boundary owns failure projection with the original tool-call identity. `SdkToolServices` does not expose a parallel failure-marker callback. Stop and revoked grants propagate instead of becoming successful fallback text.
+
+`WorkspaceFiles.createArtifact(name, content)` is a run-scoped host capability: it creates only an exclusive Markdown file below the current live workspace context/visualize directory, rechecking the run grant and workspace identity after asynchronous preparation. The host owns its destination; extension arguments cannot choose another cwd. `artifactsDir` names the workspace-relative artifacts root. Services remain outside checkpoint context.
