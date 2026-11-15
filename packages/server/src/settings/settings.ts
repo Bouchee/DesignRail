@@ -5,6 +5,7 @@ import {
 	COMPOSER_GROWTH_LIMITS,
 	type ExtensionSettingValues,
 	FONT_WEIGHT_OFFSET,
+	isAutoSummaryThresholdPercent,
 	isCodeFontSize,
 	isComposerGrowthLimit,
 	isFontChoice,
@@ -34,6 +35,7 @@ type RuntimeAppConfigUpdate = AppConfigUpdate & {
 };
 
 const ACCEPTED_UPDATE_KEYS = {
+	autoSummaryThresholdPercent: true,
 	theme: true,
 	themeMode: true,
 	systemThemePair: true,
@@ -260,6 +262,12 @@ export function updateConfig(partial: AppConfigUpdate): AppConfig {
 	}
 	if (subagentsEnabled !== undefined && typeof subagentsEnabled !== "boolean") {
 		throw new Error("subagentsEnabled must be a boolean");
+	}
+	if (
+		runtimeUpdate.autoSummaryThresholdPercent !== undefined &&
+		!isAutoSummaryThresholdPercent(runtimeUpdate.autoSummaryThresholdPercent)
+	) {
+		throw new Error("autoSummaryThresholdPercent must be 50, 75, or 90");
 	}
 	if (
 		runtimeUpdate.subagentMaxConcurrent !== undefined &&

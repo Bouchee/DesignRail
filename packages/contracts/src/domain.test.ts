@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	ACCEPTED_IMAGE_TYPES,
+	AUTO_SUMMARY_THRESHOLDS,
 	base64EncodedLength,
 	CODE_FONT_SIZE,
 	clampToCodePoints,
@@ -12,6 +13,7 @@ import {
 	hasControlCharacter,
 	IMAGE_MAX_BASE64_BYTES,
 	interruptedResource,
+	isAutoSummaryThresholdPercent,
 	isCodeFontSize,
 	isDelegationRunDetails,
 	isFontChoice,
@@ -527,4 +529,13 @@ describe("template names", () => {
 			expect(isValidTemplateName(name)).toBe(true);
 		});
 	}
+});
+
+test("automatic summary thresholds are closed and preserve the default timing", () => {
+	expect(AUTO_SUMMARY_THRESHOLDS).toEqual([50, 75, 90]);
+	expect(DEFAULT_CONFIG.autoSummaryThresholdPercent).toBe(75);
+	for (const value of AUTO_SUMMARY_THRESHOLDS)
+		expect(isAutoSummaryThresholdPercent(value)).toBe(true);
+	for (const value of [undefined, null, 0, 49, 51, 74, 76, 89, 91, 75.5, "75", true, [], {}])
+		expect(isAutoSummaryThresholdPercent(value)).toBe(false);
 });

@@ -17,6 +17,9 @@ Queue snapshots and live events carry the same stable entry IDs, pending/staged 
 The store does not move a queued entry into the transcript optimistically. The host's user message is the
 admission receipt, joined by ID. Distinct equal-text inputs remain distinct.
 
+`autoSummaryThresholdPercent` mirrors the host config on welcome and `settings.changed`, with the
+contracts default 75 and closed-value guard. Settings UI never applies an optimistic value.
+
 ## Responsibility
 
 The single Zustand store: connection status, projects/workspaces, one frontend-local workbench frame plus

@@ -128,7 +128,8 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 123;
+export const PROTOCOL_VERSION = 124;
+export const AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION = 124;
 export const IMAGE_REFS_PROTOCOL_VERSION = 123;
 export const IMAGES_ROUTE = "/images/";
 export const DURABLE_SESSION_PROTOCOL_VERSION = 116;
@@ -139,7 +140,6 @@ export const WORKSPACE_PATH_RESOLVE_PROTOCOL_VERSION = 122;
 export const QUESTION_PANEL_PROTOCOL_VERSION = 114;
 export const SPEC_SECTIONS_PROTOCOL_VERSION = 113;
 export const TEXT_SEARCH_PROTOCOL_VERSION = 112;
-export const CACHE_WARMING_SETTINGS_PROTOCOL_VERSION = 111;
 export const CONTINUATION_PROTOCOL_VERSION = 110;
 export const CHATS_PROTOCOL_VERSION = 109;
 export const OTHER_AGENT_SKILLS_PROTOCOL_VERSION = 108;
@@ -172,7 +172,6 @@ export const TURN_CHANGES_PROTOCOL_VERSION = 80;
 export const SUBAGENT_CONCURRENCY_PROTOCOL_VERSION = 79;
 export const WORKSPACE_SETTLE_PROTOCOL_VERSION = 78;
 export const MODEL_PICKER_PROTOCOL_VERSION = 77;
-export const CONTEXT_WINDOW_SETTINGS_PROTOCOL_VERSION = 76;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
 export const RESOURCE_META_PROTOCOL_VERSION = 75;
 export const REVIEW_RICH_ANCHORS_PROTOCOL_VERSION = 74;
@@ -508,10 +507,6 @@ export const WS_METHODS = {
 	modelList: "model.list",
 	modelRefresh: "model.refresh",
 	modelDefault: "model.default",
-	modelContextSettings: "model.contextSettings",
-	modelSetContextWindow: "model.setContextWindow",
-	cacheWarmingGet: "cacheWarming.get",
-	cacheWarmingSet: "cacheWarming.set",
 	customEndpointsList: "customEndpoints.list",
 	customEndpointsProbe: "customEndpoints.probe",
 	customEndpointsSave: "customEndpoints.save",
@@ -752,38 +747,6 @@ export interface ModelDefault {
 	thinkingLevel: ThinkingLevel;
 }
 
-export const MODEL_CONTEXT_WINDOW_LIMITS = { min: 272_000, max: 1_000_000 } as const;
-
-export function isModelContextWindow(value: unknown): value is number {
-	return (
-		typeof value === "number" &&
-		Number.isSafeInteger(value) &&
-		value >= MODEL_CONTEXT_WINDOW_LIMITS.min &&
-		value <= MODEL_CONTEXT_WINDOW_LIMITS.max
-	);
-}
-
-export type ModelContextTarget = "available" | Pick<WireModel, "provider" | "id">;
-
-export interface ModelContextSetting
-	extends Pick<WireModel, "provider" | "id" | "name" | "contextWindow"> {
-	override: number | null;
-}
-
-/** Pi's `cacheWarming` setting: `off`, `streaming` (only while a run is active) or `idle` (also between runs). */
-export const CACHE_WARMING_MODES = ["off", "streaming", "idle"] as const;
-export type CacheWarmingMode = (typeof CACHE_WARMING_MODES)[number];
-
-export function isCacheWarmingMode(value: unknown): value is CacheWarmingMode {
-	return typeof value === "string" && (CACHE_WARMING_MODES as readonly string[]).includes(value);
-}
-
-/** The effective mode and whether pi's `settings.json` names it (`user`) or ThinkRail's default applies. */
-export interface CacheWarmingSetting {
-	mode: CacheWarmingMode;
-	source: "user" | "default";
-}
-
 /** Provider ids the custom-endpoint form owns in pi's `models.json`; every other provider is left alone. */
 export const CUSTOM_ENDPOINT_ID_PREFIX = "custom-";
 
@@ -842,12 +805,6 @@ export interface CustomEndpointDraft {
 	/** Omitted to keep the saved key; an empty string removes it. */
 	apiKey?: string;
 	models: CustomEndpointModel[];
-}
-
-export function isSharedModelContextTarget(
-	setting: Pick<ModelContextSetting, "override">,
-): boolean {
-	return setting.override === null || isModelContextWindow(setting.override);
 }
 
 /**
@@ -1270,13 +1227,6 @@ export interface WsMethodMap {
 	};
 	"model.refresh": { params: { force?: boolean }; result: RefreshedModels };
 	"model.default": { params: Record<string, never>; result: ModelDefault };
-	"model.contextSettings": { params: Record<string, never>; result: ModelContextSetting[] };
-	"model.setContextWindow": {
-		params: { target: ModelContextTarget; contextWindow: number | null };
-		result: ModelContextSetting[];
-	};
-	"cacheWarming.get": { params: Record<string, never>; result: CacheWarmingSetting };
-	"cacheWarming.set": { params: { mode: CacheWarmingMode }; result: CacheWarmingSetting };
 	"customEndpoints.list": { params: Record<string, never>; result: CustomEndpoint[] };
 	"customEndpoints.probe": { params: CustomEndpointProbeRequest; result: CustomEndpointProbe };
 	"customEndpoints.save": { params: CustomEndpointDraft; result: CustomEndpoint[] };
@@ -1485,7 +1435,6 @@ export type WsErrorCode =
 	| "SURVEY_CHANGED"
 	| "SURVEY_INVALID"
 	| "SURVEY_NOT_SENT"
-	| "CACHE_WARMING_WRITE_FAILED"
 	| "REQUEST_REPLAY_OVERFLOW"
 	| "INSTALLED_FONTS_UNAVAILABLE"
 	| "GIT_TIMEOUT"

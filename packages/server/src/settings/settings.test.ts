@@ -950,3 +950,37 @@ test("invalid font updates are rejected before persistence or broadcast", () => 
 	expect(published).toEqual([]);
 	expect(existsSync(join(dataDir, "config.json"))).toBe(false);
 });
+
+test("summary timing persists and publishes only closed values; invalid mixed updates are atomic", () => {
+	const published: AppConfig[] = [];
+	setSettingsPublisher((config) => published.push(config));
+	expect(getConfig().autoSummaryThresholdPercent).toBe(75);
+	for (const value of [50, 90, 75] as const) {
+		updateConfig({ autoSummaryThresholdPercent: value });
+		resetConfigCache();
+		expect(getConfig().autoSummaryThresholdPercent).toBe(value);
+	}
+	const bytes = readFileSync(join(dataDir, "config.json"), "utf8");
+	const before = getConfig();
+	for (const value of [null, "50", 60, 75.5, false, {}]) {
+		expect(() =>
+			updateConfig({
+				autoSummaryThresholdPercent: value,
+				theme: "never-saved",
+			} as unknown as AppConfigUpdate),
+		).toThrow("50, 75, or 90");
+		expect(getConfig()).toEqual(before);
+		expect(readFileSync(join(dataDir, "config.json"), "utf8")).toBe(bytes);
+	}
+	expect(published.map((config) => config.autoSummaryThresholdPercent)).toEqual([50, 90, 75]);
+});
+
+test("summary timing failed writes preserve live config and emit no broadcast", () => {
+	const published: AppConfig[] = [];
+	setSettingsPublisher((config) => published.push(config));
+	expect(getConfig().autoSummaryThresholdPercent).toBe(75);
+	mkdirSync(join(dataDir, "config.json"));
+	expect(() => updateConfig({ autoSummaryThresholdPercent: 50 })).toThrow();
+	expect(getConfig().autoSummaryThresholdPercent).toBe(75);
+	expect(published).toEqual([]);
+});

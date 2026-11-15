@@ -1,4 +1,5 @@
 import type { AgentInputItem } from "@openai/agents";
+import type { AutoSummaryThresholdPercent } from "@thinkrail/contracts";
 import type { PersistentSession, SummaryReceipt } from "./sessionStore";
 
 export interface CompactOptions {
@@ -8,6 +9,7 @@ export interface CompactOptions {
 	tokensBefore?: number | undefined;
 	usage?: SummaryReceipt["usage"];
 	tokenBudget: number;
+	thresholdPercent: AutoSummaryThresholdPercent;
 	signal: AbortSignal;
 	summarize: (prefix: AgentInputItem[], signal: AbortSignal) => Promise<string>;
 }
@@ -63,6 +65,7 @@ export async function compactSession(
 		tokensBefore: measuredTokensBefore,
 		usage,
 		tokenBudget,
+		thresholdPercent,
 		signal,
 		summarize,
 	}: CompactOptions,
@@ -100,7 +103,7 @@ export async function compactSession(
 		throw new Error("Summary requires a settled run without a resumable checkpoint");
 	const beforeTokens = estimateSessionTokens(original.history);
 	const skipped: CompactResult = { status: "skipped", beforeTokens, afterTokens: beforeTokens };
-	if (!force && beforeTokens < Math.floor(tokenBudget * 0.75)) return skipped;
+	if (!force && beforeTokens < Math.floor((tokenBudget * thresholdPercent) / 100)) return skipped;
 	let split = original.history.length - 2;
 	while (split >= 0 && !isUser(original.history[split])) split -= 1;
 	if (split <= 0) return skipped;

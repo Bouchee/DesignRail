@@ -55,6 +55,7 @@ import {
 	customMessageText,
 	DEFAULT_CONFIG,
 	type ExtensionSettingValues,
+	isAutoSummaryThresholdPercent,
 	isBackgroundCommandCompletionMessage,
 	isChatHandoffMessage,
 	isContinueInWorkspaceRequestMessage,
@@ -1201,6 +1202,7 @@ interface AppState {
 	terminalReplayKb: number;
 	terminalWindowsShell: TerminalWindowsShell;
 	composerGrowthLimit: ComposerGrowthLimit;
+	autoSummaryThresholdPercent: AppConfig["autoSummaryThresholdPercent"];
 	questionPanelHeight: number;
 	chatLineWidth: number;
 	fileLineWidth: number;
@@ -1624,6 +1626,9 @@ function configPatch(config: AppConfig) {
 			? config.terminalWindowsShell
 			: DEFAULT_CONFIG.terminalWindowsShell,
 		composerGrowthLimit: config.composerGrowthLimit ?? DEFAULT_CONFIG.composerGrowthLimit,
+		autoSummaryThresholdPercent: isAutoSummaryThresholdPercent(config.autoSummaryThresholdPercent)
+			? config.autoSummaryThresholdPercent
+			: DEFAULT_CONFIG.autoSummaryThresholdPercent,
 		questionPanelHeight: isQuestionPanelHeight(config.questionPanelHeight)
 			? config.questionPanelHeight
 			: DEFAULT_CONFIG.questionPanelHeight,
@@ -2574,6 +2579,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 	terminalReplayKb: DEFAULT_CONFIG.terminalReplayKb,
 	terminalWindowsShell: DEFAULT_CONFIG.terminalWindowsShell,
 	composerGrowthLimit: DEFAULT_CONFIG.composerGrowthLimit,
+	autoSummaryThresholdPercent: DEFAULT_CONFIG.autoSummaryThresholdPercent,
 	questionPanelHeight: DEFAULT_CONFIG.questionPanelHeight,
 	chatLineWidth: DEFAULT_CONFIG.chatLineWidth,
 	fileLineWidth: DEFAULT_CONFIG.fileLineWidth,

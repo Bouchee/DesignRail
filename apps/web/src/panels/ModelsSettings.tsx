@@ -1,4 +1,12 @@
-import type { ModelDefault, ThinkingLevel, WireModel } from "@thinkrail/contracts";
+import {
+	AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION,
+	AUTO_SUMMARY_THRESHOLDS,
+	type AutoSummaryThresholdPercent,
+	type ModelDefault,
+	type ThinkingLevel,
+	type WireModel,
+} from "@thinkrail/contracts";
+import type { MessageKey } from "@thinkrail/locales";
 import { useT } from "@thinkrail/locales/react";
 import { Button } from "@thinkrail/ui/button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,12 +17,23 @@ import { useModelPreferences } from "@/chat/useModelPreferences";
 import { selectCatalogModel, selectPickerModels, toast, useAppStore } from "@/store";
 import { getTransport } from "@/transport";
 import { SettingsGroup, SettingsPageContainer } from "./SettingsGroup";
+import { SettingsRadioCards } from "./SettingsRadioCards";
+import { saveSettings } from "./saveSettings";
 import { useSettingsDialogContainer } from "./settingsDialogContainer";
 import { VisibleModelsSettings } from "./VisibleModelsSettings";
+
+const SUMMARY_LABELS: Record<AutoSummaryThresholdPercent, MessageKey> = {
+	50: "settings.models.summary.earlier",
+	75: "settings.models.summary.default",
+	90: "settings.models.summary.later",
+};
 
 export function ModelsSettings() {
 	const t = useT();
 	const container = useSettingsDialogContainer();
+	const threshold = useAppStore((s) => s.autoSummaryThresholdPercent);
+	const protocolVersion = useAppStore((s) => s.protocolVersion);
+	const [savingSummary, setSavingSummary] = useState(false);
 	const defaultModel = useAppStore((s) => s.defaultModel);
 	const defaultEffort = useAppStore((s) => s.defaultEffort);
 	const { models: allModels, refreshing, refresh } = useModelCatalog(true);
@@ -115,6 +134,36 @@ export function ModelsSettings() {
 				) : null}
 				<VisibleModelsSettings models={allModels} />
 			</SettingsGroup>
+			{protocolVersion !== null && protocolVersion >= AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION ? (
+				<SettingsGroup
+					title={t("settings.models.summary.title")}
+					description={t("settings.models.summary.description")}
+					testId="settings-auto-summary"
+				>
+					<SettingsRadioCards
+						name="auto-summary"
+						label={t("settings.models.summary.title")}
+						value={String(threshold)}
+						disabled={savingSummary}
+						choices={AUTO_SUMMARY_THRESHOLDS.map((percent) => ({
+							id: String(percent),
+							label: t(SUMMARY_LABELS[percent]),
+							description: t("settings.models.summary.threshold", { percent }),
+							testId: `auto-summary-${percent}`,
+						}))}
+						onSelect={(value) => {
+							if (savingSummary) return;
+							const percent = AUTO_SUMMARY_THRESHOLDS.find((item) => String(item) === value);
+							if (percent === undefined || percent === threshold) return;
+							setSavingSummary(true);
+							void saveSettings(
+								{ autoSummaryThresholdPercent: percent },
+								t("settings.models.summary.saveFailed"),
+							).finally(() => setSavingSummary(false));
+						}}
+					/>
+				</SettingsGroup>
+			) : null}
 		</SettingsPageContainer>
 	);
 }

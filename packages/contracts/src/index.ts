@@ -1,6 +1,7 @@
 export type * from "./domain";
 export {
 	ACCEPTED_IMAGE_TYPES,
+	AUTO_SUMMARY_THRESHOLDS,
 	base64EncodedLength,
 	CODE_FONT_SIZE,
 	COMPOSER_GROWTH_LIMITS,
@@ -20,6 +21,7 @@ export {
 	hasControlCharacter,
 	IMAGE_MAX_BASE64_BYTES,
 	interruptedResource,
+	isAutoSummaryThresholdPercent,
 	isCodeFontSize,
 	isComposerGrowthLimit,
 	isControlMessage,

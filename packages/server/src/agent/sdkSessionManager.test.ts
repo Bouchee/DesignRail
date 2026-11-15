@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyDiff, tool, Usage } from "@openai/agents";
+import { Agent, applyDiff, tool, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
@@ -24,6 +24,7 @@ import { TODO_NUDGE_PREFIX } from "@thinkrail/contracts";
 import { TodoStore } from "@thinkrail/todos/core";
 import { z } from "zod";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
+import { resetConfigCache, updateConfig } from "../settings";
 import { setTrashImplementationForTests } from "../trash";
 import * as modelConfigurationModule from "./modelConfiguration";
 import { configureAgentModelFactory, saveCustomEndpoint } from "./modelConfiguration";
@@ -1642,4 +1643,125 @@ test("SDK approval display projects argument images while checkpoint and restore
 	} finally {
 		factory.mockRestore();
 	}
+});
+
+test("settings saves request nothing; the next settled check uses the new choice and in-flight summary keeps it", async () => {
+	const budget = spyOn(modelConfigurationModule, "modelContextBudget").mockReturnValue(10000);
+	const replyStarted = Promise.withResolvers<void>();
+	const finishReply = Promise.withResolvers<void>();
+	const started = Promise.withResolvers<void>();
+	const finish = Promise.withResolvers<void>();
+	const model = new ScriptedModel([
+		done(),
+		done(),
+		modelResponder(async () => {
+			replyStarted.resolve();
+			await finishReply.promise;
+			return [assistantMessage("done")];
+		}),
+		modelResponder(async () => {
+			started.resolve();
+			await finish.promise;
+			return [assistantMessage("ORBIT is blue.")];
+		}),
+		modelResponder(({ request }) => {
+			expect(JSON.stringify(request.input)).toContain("ORBIT is blue.");
+			return [assistantMessage("continued")];
+		}),
+	]);
+	configureAgentModelFactory(() => model);
+	resetConfigCache();
+	try {
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		await promptSession(sessionId, "ORBIT ".repeat(1000));
+		await promptSession(sessionId, "newest exchange");
+		expect(model.calls).toHaveLength(2);
+		const running = promptSession(sessionId, "One more reply");
+		await replyStarted.promise;
+		updateConfig({ autoSummaryThresholdPercent: 50 });
+		expect(model.calls).toHaveLength(3);
+		finishReply.resolve();
+		await started.promise;
+		const before = readSessionRecord(sessionId);
+		updateConfig({ autoSummaryThresholdPercent: 90 });
+		expect(model.calls).toHaveLength(4);
+		finish.resolve();
+		await running;
+		const after = readSessionRecord(sessionId);
+		const operationId = Object.keys(after?.summaryOperations ?? {})[0];
+		if (!operationId) throw new Error("Missing automatic summary receipt");
+		expect(after?.messages.filter((message) => message.role !== "compactionSummary")).toEqual(
+			before?.messages.filter((message) => message.role !== "compactionSummary"),
+		);
+		await compactSession(sessionId, { operationId, force: false });
+		expect(model.calls).toHaveLength(4);
+		await promptSession(sessionId, "Recall the fact");
+		model.assertComplete();
+	} finally {
+		budget.mockRestore();
+		resetConfigCache();
+	}
+});
+
+test("dynamic instructions reject mismatched workspace context and revoked authority before requests", async () => {
+	for (const invalid of ["identity", "grant"] as const) {
+		const model = new ScriptedModel([done()]);
+		configureAgentModelFactory(() => model);
+		const original = Agent.prototype.getSystemPrompt;
+		const consumer = spyOn(Agent.prototype, "getSystemPrompt").mockImplementation(function (
+			this: Agent,
+			context,
+		) {
+			if (invalid === "identity") context.context = { workspaceId: "foreign-workspace" };
+			else saveWorkspaces([]);
+			return original.call(this, context);
+		});
+		try {
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			await promptSession(sessionId, "Must fail before a request");
+			expect(model.calls).toHaveLength(0);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+		} finally {
+			consumer.mockRestore();
+		}
+	}
+});
+
+test("identity-only context checkpoints exclude closure services and credentials while admitted instructions reach requests", async () => {
+	const sentinel = "closure-service-private-sentinel-7b42";
+	const credential = "credential-private-sentinel-c835";
+	process.env.OPENAI_API_KEY = credential;
+	setSessionResourceCleanup(async () => {
+		expect(sentinel).toContain("private-sentinel");
+	});
+	writeFileSync(join(worktree, "AGENTS.md"), "Approved project instruction: preserve ORBIT.");
+	const skill = join(root, "data/skills/private-boundary");
+	mkdirSync(skill, { recursive: true });
+	writeFileSync(
+		join(skill, "SKILL.md"),
+		"---\nname: private-boundary\ndescription: Boundary procedure\n---\nApproved Skill instruction: preserve blue.",
+	);
+	const model = new ScriptedModel([command("private-pause", "true"), done()]);
+	configureAgentModelFactory(() => model);
+	const ready = Promise.withResolvers<ExtUiRequest>();
+	setExtUiPublisher((request) => {
+		if (request.kind === "confirm") ready.resolve(request);
+	});
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	const running = promptSession(sessionId, "/skill:private-boundary Remember ORBIT.");
+	const card = await ready.promise;
+	const snapshot = await getSessionMessages(sessionId, "workspace", worktree);
+	const checkpoint = readSessionRecord(sessionId)?.runCheckpoint?.checkpoint;
+	if (!checkpoint) throw new Error("Missing checkpoint");
+	const context = JSON.parse(checkpoint) as { context: { context: unknown } };
+	expect(context.context.context).toEqual({ workspaceId: "workspace" });
+	const requests = JSON.stringify(model.calls);
+	expect(requests).toContain("Approved project instruction: preserve ORBIT.");
+	expect(requests).toContain("Approved Skill instruction: preserve blue.");
+	for (const value of [requests, checkpoint, JSON.stringify(snapshot), JSON.stringify(card)]) {
+		expect(value).not.toContain(sentinel);
+		expect(value).not.toContain(credential);
+	}
+	await abortSession(sessionId);
+	await running;
 });

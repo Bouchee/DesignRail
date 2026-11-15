@@ -191,3 +191,25 @@ posixOnly("a new registry file is created owner-only whatever the umask", () => 
 		expect(permissions(file)).toBe(0o600);
 	}
 });
+
+test("summary timing loads fieldwise without discarding valid siblings or inventing overrides", () => {
+	for (const value of [undefined, null, "90", 60, [], {}]) {
+		writeFileSync(
+			join(root, "config.json"),
+			JSON.stringify({
+				autoSummaryThresholdPercent: value,
+				theme: "retained",
+				notificationsEnabled: false,
+			}),
+		);
+		expect(loadConfig()).toMatchObject({
+			autoSummaryThresholdPercent: 75,
+			theme: "retained",
+			notificationsEnabled: false,
+		});
+	}
+	for (const value of [50, 75, 90] as const) {
+		saveConfig({ ...DEFAULT_CONFIG, autoSummaryThresholdPercent: value });
+		expect(loadConfig().autoSummaryThresholdPercent).toBe(value);
+	}
+});

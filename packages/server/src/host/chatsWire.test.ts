@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, modelResponse, ScriptedModel } from "@openai/agents/testing";
 import type { ChatCreateResult } from "@thinkrail/contracts";
-import { CHATS_PROTOCOL_VERSION, WS_CHANNELS } from "@thinkrail/contracts";
+import { CHATS_PROTOCOL_VERSION, PROTOCOL_VERSION, WS_CHANNELS } from "@thinkrail/contracts";
 import { configureAgentModelFactory, notifyExtUi, promptSession } from "../agent";
 import { resetChatsStoreForTests } from "../persistence";
 import { resetConfigCache } from "../settings";
@@ -166,5 +166,51 @@ test("an older socket hears nothing of a chat: not its records, its extension UI
 	} finally {
 		older.close();
 		current.close();
+	}
+}, 30_000);
+
+test("summary settings use real dispatch, broadcast to both clients and survive host restart", async () => {
+	const owner = await connect("summary-owner", PROTOCOL_VERSION);
+	const peer = await connect("summary-peer", PROTOCOL_VERSION);
+	try {
+		const applied = await owner.request("settings.update", {
+			config: { autoSummaryThresholdPercent: 50 },
+		});
+		expect(applied).toMatchObject({ autoSummaryThresholdPercent: 50 });
+		for (const client of [owner, peer]) {
+			const frame = await client.next((frame) => frame.channel === WS_CHANNELS.settingsChanged);
+			expect(frame.data).toMatchObject({ autoSummaryThresholdPercent: 50 });
+		}
+		const pushes = owner.frames.filter(
+			(frame) => frame.channel === WS_CHANNELS.settingsChanged,
+		).length;
+		await expect(
+			owner.request("settings.update", {
+				config: { autoSummaryThresholdPercent: 60, theme: "forbidden" },
+			}),
+		).rejects.toThrow("50, 75, or 90");
+		expect(
+			owner.frames.filter((frame) => frame.channel === WS_CHANNELS.settingsChanged),
+		).toHaveLength(pushes);
+		for (const method of [
+			"model.contextSettings",
+			"model.setContextWindow",
+			"cacheWarming.get",
+			"cacheWarming.set",
+		])
+			await expect(owner.request(method, {})).rejects.toThrow("Unknown method");
+	} finally {
+		owner.close();
+		peer.close();
+	}
+	await server.shutdown();
+	resetConfigCache();
+	server = await createServer({ port: 0, host: "127.0.0.1" });
+	const reopened = await connect("summary-reopened", PROTOCOL_VERSION);
+	try {
+		const welcome = await reopened.next((frame) => frame.channel === WS_CHANNELS.serverWelcome);
+		expect(welcome.data).toMatchObject({ config: { autoSummaryThresholdPercent: 50 } });
+	} finally {
+		reopened.close();
 	}
 }, 30_000);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Usage } from "@openai/agents";
+import { Agent, type RunContext, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
@@ -1120,4 +1120,50 @@ test("a child command completes visibly in its parent without restarting the com
 		available: true,
 		output: { text: "CHILD_DONE" },
 	});
+});
+
+test("root and detached context are separate while foreground children share parent identity and usage", async () => {
+	for (const background of [false, true]) {
+		const parent = new ScriptedModel([
+			agentCall(background),
+			done("parent complete"),
+			done("completion received"),
+		]);
+		const child = new ScriptedModel([done("CHILD_REPORT")]);
+		const created = await createSession({ cwd, workspaceId: "workspace" });
+		const contexts: { name: string; context: RunContext }[] = [];
+		const original = Agent.prototype.getSystemPrompt;
+		const consumer = spyOn(Agent.prototype, "getSystemPrompt").mockImplementation(function (
+			this: Agent,
+			context,
+		) {
+			contexts.push({ name: this.name, context });
+			return original.call(this, context);
+		});
+		configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+		try {
+			await promptSession(created.sessionId, "Delegate the task");
+			await until(() =>
+				listSessionRecords().some(
+					(record) =>
+						record.childRun?.parentSessionId === created.sessionId &&
+						record.childRun.status === "completed",
+				),
+			);
+			const root = contexts.find((item) => item.name === "RailDesign")?.context;
+			const delegated = contexts.find((item) => item.name === "worker")?.context;
+			if (!root || !delegated) throw new Error("Missing SDK context consumer");
+			expect(root.context).toEqual({ workspaceId: "workspace" });
+			expect(delegated.context).toEqual({ workspaceId: "workspace" });
+			if (background) {
+				expect(delegated.context).not.toBe(root.context);
+				expect(delegated.usage).not.toBe(root.usage);
+			} else {
+				expect(delegated.context).toBe(root.context);
+				expect(delegated.usage).toBe(root.usage);
+			}
+		} finally {
+			consumer.mockRestore();
+		}
+	}
 });

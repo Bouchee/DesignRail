@@ -687,22 +687,18 @@ the palette ranks with — kept here so host-side search can rank with the same 
   **`model.default`** (the host-resolved model and compatible effort: AppConfig's default model when
   available, otherwise the first model in the host's settled available list, otherwise `null`; effort is
   `defaultEffort ?? "medium"`, clamped with Pi's `clampThinkingLevel` when a model exists) /
-  **`model.contextSettings`** / **`model.setContextWindow`** (v76; both return
-  **`ModelContextSetting[]`** — the eligible OpenAI models' `provider`/`id`/`name`, pi's effective
-  `contextWindow`, and the explicit models.json `override` or `null` for pi's default. The mutation takes
-  `{target: "available" | {provider,id}, contextWindow: number | null}`: `null` removes the override;
-  a number must satisfy **`isModelContextWindow`** within **`MODEL_CONTEXT_WINDOW_LIMITS`**
-  (272,000–1,000,000), the app's editing policy rather than a verified provider capacity, enforced on
-  both sides. External values outside it are read without clamping, and the `available` target covers
-  only settings **`isSharedModelContextTarget`** accepts (no override, or one inside the range): an
-  override the app could not have written is changed only by naming its `{provider,id}`. Saves emit the
-  existing `provider.changed` invalidation; no AppConfig state or raw configuration crosses the wire) /
-  **`cacheWarming.get`** / **`cacheWarming.set`** (v111, `CACHE_WARMING_SETTINGS_PROTOCOL_VERSION`; both
-  return a **`CacheWarmingSetting`** — pi's `cacheWarming` mode, one of **`CACHE_WARMING_MODES`** `off` /
-  `streaming` / `idle` tested by `isCacheWarmingMode`, and `source`: `user` when pi's global `settings.json`
-  names it, `default` when the host's own default applies. The mutation takes `{mode}`; a write pi's
-  settings loader would silently skip fails with **`CACHE_WARMING_WRITE_FAILED`**. The value lives only in
-  pi's file; no AppConfig field mirrors it) /
+  **`settings.update`** carries `autoSummaryThresholdPercent` at protocol v124
+  (`AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION`): the closed `50 | 75 | 90` host summary-timing choice,
+  default 75, validated by `isAutoSummaryThresholdPercent`. It changes eligibility against estimated
+  history length, not provider capacity. The method signature remains
+  `settings.update({ config: AppConfigUpdate }): AppConfig`; for example,
+  `{config:{autoSummaryThresholdPercent:50}}` selects Earlier, an omitted field keeps the current
+  choice (75 on a fresh host), and `{config:{autoSummaryThresholdPercent:60,theme:"changed"}}`
+  rejects the entire update. Missing or malformed stored values default to 75. The full config travels
+  in `server.welcome` and `settings.changed`; no provider-context or cache-warming RPC is exposed.
+  Assertions: `src/domain.test.ts` — "automatic summary thresholds are closed and preserve the default
+  timing"; `src/wsProtocol.test.ts` — "summary timing uses the existing settings method at v124 and
+  retires orphan RPCs". /
   **`customEndpoints.list`** / **`customEndpoints.probe`** / **`customEndpoints.save`** /
   **`customEndpoints.remove`** (v101, `CUSTOM_ENDPOINTS_PROTOCOL_VERSION`; the user's OpenAI-compatible
   servers stored as pi `models.json` providers whose ids carry **`CUSTOM_ENDPOINT_ID_PREFIX`** (`custom-`,

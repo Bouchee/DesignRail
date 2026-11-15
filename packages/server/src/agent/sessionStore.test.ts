@@ -239,6 +239,7 @@ const compactOptions = (operationId = "summary", force = true) => ({
 	operationId,
 	force,
 	tokenBudget: 8192,
+	thresholdPercent: 75 as const,
 	signal: new AbortController().signal,
 	summarize: async () => "Project ORBIT uses a blue label.",
 });
@@ -505,4 +506,32 @@ test("persisted canonical transcript images require bytes and never accept a wir
 		}),
 	).toThrow();
 	expect(readFileSync(sessionRecordPath("safe-session-id"), "utf8")).toBe(saved);
+});
+
+test("Earlier summarizes complete history Default skips, and Later defers Default-eligible history", async () => {
+	for (const [ratio, thresholdPercent, expected] of [
+		[0.6, 50, "compacted"],
+		[0.6, 75, "skipped"],
+		[0.6, 90, "skipped"],
+		[0.8, 75, "compacted"],
+		[0.8, 90, "skipped"],
+	] as const) {
+		const store = new PersistentSession(record());
+		await store.addItems(completeHistory());
+		const original = structuredClone(store.record);
+		let requests = 0;
+		const result = await store.compact({
+			...compactOptions("timing", false),
+			tokenBudget: Math.ceil(estimateSessionTokens(original.history) / ratio),
+			thresholdPercent,
+			summarize: async () => {
+				requests++;
+				return "ORBIT is blue.";
+			},
+		});
+		expect(result.status).toBe(expected);
+		expect(requests).toBe(expected === "compacted" ? 1 : 0);
+		expect(store.record.messages).toEqual(original.messages);
+		if (expected === "skipped") expect(store.record).toEqual(original);
+	}
 });

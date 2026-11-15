@@ -19,7 +19,9 @@ completion. Pending input stays visible until admission succeeds.
 Restart restores saved conversations and pending interactions. Interrupted side effects are marked
 unknown and require a new user decision. `/compact` summarizes model memory while retaining the full
 conversation for display and search. Automatic summaries use the selected verified model's context
-budget; summary failures preserve the previous memory.
+budget. Models settings offers Earlier / Default / Later summary timing based on estimated history
+length; summary failures preserve the previous memory. Pending runs from before workspace identity
+checkpoints must be finished or explicitly stopped before updating; completed conversations stay readable.
 
 The SDK tool graph includes admitted Skills and workspace instructions, questions, visualization,
 Plan and Spec Graph, configured MCP tools, and foreground or background child tasks. Resources retains

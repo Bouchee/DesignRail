@@ -46,6 +46,18 @@ clamps `terminalReplayKb`, so a hand-edited config cannot exhaust memory. Settin
 
 ## Get right
 
+- `autoSummaryThresholdPercent` is the host-wide automatic-summary choice: 50 (Earlier), 75 (Default),
+  or 90 (Later). Invalid mutations reject atomically; malformed/absent stored values use 75.
+  Save only persists and broadcasts; the agent captures it at the next summary check. No model call
+  starts from a settings write. `updateConfig({ autoSummaryThresholdPercent: 90 })` returns the full
+  saved `AppConfig`; `updateConfig({})` retains the current choice. A value such as `60`, `"50"`, or
+  `null` rejects the whole partial, including valid siblings. A failed disk write leaves saved bytes,
+  the live cache and broadcasts unchanged. Assertions in `settings.test.ts`: "summary timing persists
+  and publishes only closed values; invalid mixed updates are atomic" and "summary timing failed writes
+  preserve live config and emit no broadcast"; real dispatch, two-client broadcast and restarted welcome
+  are covered by `../host/chatsWire.test.ts` — "summary settings use real dispatch, broadcast to both
+  clients and survive host restart".
+
 - `sdkTracingEnabled` defaults to `false`; only a boolean update is accepted. The agent reads it for new
   Runner instances, writes only local trace records and excludes sensitive trace data. No trace is
   exported to OpenAI. Settings owns persistence and broadcast.

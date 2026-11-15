@@ -2,9 +2,10 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Agent, Runner } from "@openai/agents";
+import { Agent, Runner, RunState, tool } from "@openai/agents";
 import { assistantMessage, modelResponse, ScriptedModel } from "@openai/agents/testing";
 import type { CustomEndpointDraft } from "@thinkrail/contracts";
+import { z } from "zod";
 import {
 	configureAgentModelFactory,
 	createConfiguredModel,
@@ -249,5 +250,97 @@ test("model discovery identifies RailDesign without inventing a model conversati
 		expect(request.headers.get("x-opencode-session")).toBeNull();
 	} finally {
 		mockedFetch.mockRestore();
+	}
+});
+
+test("public Responses adapter preserves existing output caps and headers through approval continuation", async () => {
+	for (const [configured, expected] of [
+		[512, 512],
+		[32000, 8192],
+	]) {
+		const endpoint = draft();
+		const existing = (await listCustomEndpoints())[0];
+		if (existing) endpoint.id = existing.id;
+		const first = endpoint.models[0];
+		if (!first) throw new Error("Missing fixture model");
+		first.maxTokens = configured ?? null;
+		await saveCustomEndpoint(endpoint);
+		const model = (await listAvailableModels())[0];
+		if (!model) throw new Error("No model");
+		const requests: Request[] = [];
+		let effects = 0;
+		const mock = spyOn(globalThis, "fetch").mockImplementation(
+			offlineFetch((request) => {
+				requests.push(request);
+				return Response.json({
+					id: `response-${requests.length}`,
+					object: "response",
+					created_at: 1,
+					status: "completed",
+					model: model.id,
+					output:
+						requests.length === 1
+							? [
+									{
+										type: "function_call",
+										name: "fixture_effect",
+										call_id: "cap-call",
+										arguments: "{}",
+										status: "completed",
+									},
+								]
+							: [
+									{
+										id: "answer",
+										type: "message",
+										role: "assistant",
+										status: "completed",
+										content: [{ type: "output_text", text: "complete", annotations: [] }],
+									},
+								],
+					usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+				});
+			}),
+		);
+		try {
+			const build = () =>
+				new Agent({
+					name: "Output fixture",
+					model: createConfiguredModel(model, "cap-conversation"),
+					modelSettings: { ...responsesClientSettings, maxTokens: modelOutputBudget(model) },
+					tools: [
+						tool({
+							name: "fixture_effect",
+							description: "Test effect",
+							parameters: z.object({}),
+							needsApproval: true,
+							execute: () => {
+								effects++;
+								return "once";
+							},
+						}),
+					],
+				});
+			const runner = new Runner({ tracingDisabled: true });
+			const pending = await runner.run(build(), "perform the effect");
+			expect(effects).toBe(0);
+			const state = await RunState.fromString(build(), pending.state.toString());
+			const approval = state.getInterruptions()[0];
+			if (!approval) throw new Error("Missing interruption");
+			state.approve(approval);
+			expect((await runner.run(build(), state)).finalOutput).toBe("complete");
+			expect(effects).toBe(1);
+			expect(requests).toHaveLength(2);
+			for (const request of requests) {
+				expect(request.headers.get("User-Agent")).toBe("RailDesign/0.1");
+				expect(request.headers.get("x-opencode-session")).toBe("cap-conversation");
+				const body = (await request.json()) as Record<string, unknown>;
+				expect(body.max_output_tokens).toBe(expected);
+				for (const key of ["reasoning", "prompt_cache_retention", "prompt_cache_key"])
+					expect(body).not.toHaveProperty(key);
+			}
+		} finally {
+			mock.mockRestore();
+		}
 	}
 });

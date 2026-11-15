@@ -1190,7 +1190,17 @@ export function isLineWidth(value: unknown): value is number {
 	);
 }
 
+export const AUTO_SUMMARY_THRESHOLDS = [50, 75, 90] as const;
+export type AutoSummaryThresholdPercent = (typeof AUTO_SUMMARY_THRESHOLDS)[number];
+
+export function isAutoSummaryThresholdPercent(
+	value: unknown,
+): value is AutoSummaryThresholdPercent {
+	return AUTO_SUMMARY_THRESHOLDS.some((threshold) => threshold === value);
+}
+
 export interface AppConfig extends ThemePreference {
+	autoSummaryThresholdPercent: AutoSummaryThresholdPercent;
 	/** When true, the client may raise out-of-app attention notifications (still gated by browser permission). */
 	notificationsEnabled: boolean;
 	terminalReplayKb: number;
@@ -1495,6 +1505,7 @@ export function isSubagentMaxConcurrent(value: unknown): value is number {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
+	autoSummaryThresholdPercent: 75,
 	theme: "dark",
 	themeMode: "fixed",
 	notificationsEnabled: true,

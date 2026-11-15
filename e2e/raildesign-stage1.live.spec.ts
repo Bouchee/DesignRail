@@ -263,3 +263,80 @@ test(
 		}
 	},
 );
+
+test(
+	"the accepted Go target completes a short request with the existing 512 output cap",
+	{ tag: "@agent" },
+	async ({ page }, testInfo) => {
+		test.setTimeout(90_000);
+		await openFixtureProject(page);
+		const workspace = await createWorkspaceViaDialog(page);
+		const wire = await E2eWire.connect();
+		const model = await wire.request("model.default", {});
+		const endpoints = await wire.request("customEndpoints.list", {});
+		const endpoint = endpoints.find((item) => item.id === model.model?.provider);
+		if (!endpoint) throw new Error("Missing configured fixture endpoint");
+		const draft = {
+			id: endpoint.id,
+			name: endpoint.name,
+			baseUrl: endpoint.baseUrl,
+			models: endpoint.models,
+		};
+		try {
+			const saved = await wire.request("customEndpoints.save", {
+				...draft,
+				models: draft.models.map((item) =>
+					item.id === model.model?.id ? { ...item, maxTokens: 512 } : item,
+				),
+			});
+			expect(
+				saved
+					.find((item) => item.id === endpoint.id)
+					?.models.find((item) => item.id === model.model?.id)?.maxTokens,
+			).toBe(512);
+			const sessions = await wire.request("session.list", { workspaceId: workspace.id });
+			const sessionId = sessions[0]?.sessionId;
+			if (!sessionId) throw new Error("Missing fixture session");
+			await page.getByTestId("chat-input").fill("Reply with exactly MC_CAP_512. Do not use tools.");
+			await page.getByTestId("chat-send").click();
+			await expect
+				.poll(
+					async () =>
+						(await wire.request("session.getMessages", { workspaceId: workspace.id, sessionId }))
+							.summary.state?.completion?.outcome,
+					{ timeout: 60_000 },
+				)
+				.toBe("succeeded");
+			const snapshot = await wire.request("session.getMessages", {
+				workspaceId: workspace.id,
+				sessionId,
+			});
+			const assistant = snapshot.messages.findLast((message) => message.role === "assistant");
+			if (assistant?.role !== "assistant") throw new Error("No completed assistant output");
+			const output = assistant.content
+				.flatMap((part) => (part.type === "text" ? [part.text] : []))
+				.join("");
+			expect(assistant.stopReason).toBe("stop");
+			expect(output.trim()).toBe("MC_CAP_512");
+			await testInfo.attach("output-cap-512-proof", {
+				contentType: "application/json",
+				body: Buffer.from(
+					JSON.stringify({
+						sessionId,
+						model: model.model,
+						outputCap: 512,
+						savedModel: saved
+							.find((item) => item.id === endpoint.id)
+							?.models.find((item) => item.id === model.model?.id),
+						output,
+						state: snapshot.summary.state,
+						messages: snapshot.messages,
+					}),
+				),
+			});
+		} finally {
+			await wire.request("customEndpoints.save", draft);
+			wire.close();
+		}
+	},
+);

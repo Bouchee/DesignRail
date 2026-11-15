@@ -10,6 +10,9 @@ tags: [pi, compatibility]
 
 ## Responsibility
 
+Historical Pi-era checklist. Its engine, context-control and cache-warming statements describe the
+former runtime; current RailDesign uses the Agents SDK and the active agent/settings specs govern it.
+
 The upgrade checklist for host code that compensates for a missing pi API, a pi defect, or a
 packaging constraint. Pi remains the engine and state owner. Module specs own detailed rationale;
 this index records what an upgrade must re-check and what would let us delete the adaptation.

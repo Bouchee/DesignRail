@@ -1041,68 +1041,15 @@ a project picker, the prompt hero, and the reused
   if persistence fails. The host's `model.default` result is the displayed effective choice, including the
   first-available fallback when a saved model is missing; supported effort levels and the displayed effort
   come from that same resolved, Pi-clamped model. Both triggers are disabled, and choices in an already-open
-  picker are ignored, while a save or re-read is in flight. At v76, **`ModelContextSettings`** adds
-  one Default / 1M / Custom selector over every eligible GPT model the host returns as
-  `ModelContextSetting[]`; a collapsed **By each model** disclosure reveals one selector per provider/model
-  pair, so the same model on
-  different providers stays independently editable. Selection is keyed on the explicit `override`
-  (Default = `null`, the catalog value pi reports). The shared control summarizes only the rows the
-  contracts' `isSharedModelContextTarget` admits — it shows "Customized by model" when their overrides
-  differ, counts the external rows it leaves alone, and is omitted when it would govern none — and
-  choosing a shared preset replaces those rows' overrides in one `model.setContextWindow` call. Custom reveals a whole-number field bounded by the contracts' 272K–1M
-  range that saves on Enter or blur — except a blur onto a sibling preset of the same control, so picking
-  Default/1M never first commits a half-typed value; the copy labels it an app policy, not a verified provider limit, and
-  external values outside it stay visible but cannot be re-applied. Drafts are UI-local and are dropped
-  when their authoritative override changes; inputs are not remounted, and after a disabled save focus
-  returns only to the control that initiated it. Pi's shared configuration is authoritative — there is
-  no optimistic value or AppConfig field; reads follow catalog/provider invalidation, fence stale
-  replies, disable controls while pending, and replace controls with Retry on failure. The props-driven
-  `ModelContextControls` owns presentation; older hosts get neither the block nor its requests.
-  At v111, **`CacheWarmingSettings`** adds a **Prompt cache** group: three `SettingsRadioCards` (Off /
-  While a run is active / Also between runs) over pi's `cacheWarming` setting, read through
-  `cacheWarming.get` and written through `cacheWarming.set` — pi's `settings.json` is the only state, there
-  is no AppConfig field. The reply's `source` drives the **ThinkRail default** hint on the streaming card
-  (shown only while pi's file names no mode, since ThinkRail's default differs from pi's `idle`), and the
-  `data-cache-warming-source` attribute on `cache-warming`. Reads fence stale replies, disable the cards
-  while pending, and replace them with Retry on failure; a failed write toasts. The props-driven
-  `CacheWarmingControls` owns presentation; older hosts get neither the group nor its requests.
-  `ModelsSettings` organizes its controls into four visual groups:
-
-  **DEFAULT MODEL** — a **Chat model** row (`defaultModel`, `defaultEffort`) and the **Visible models**
-  disclosure. **REVIEW** (`models-review-group`) — everything that configures review in one place, because
-  users look for it by that word: the **Review model** row (`review-model-row`; `reviewModel`,
-  `reviewEffort`), independent of the Chat model row's loading state, then the two automation toggles
-  below. Both model rows use `ModelSelector`/`ThinkingSelector` over `useModelCatalog`; the review selector carries an
-  **explicit default-model row** (`model-option-default`, labelled with the host's `model.default` result)
-  that writes `{ reviewModel: null, reviewEffort: null }` — the null-clears wire form, see
-  `submodule-server-settings` — so a chosen reviewer model can be restored to the host's new-chat default
-  without hand-editing host state; while unset, the effort control runs on the default model's supported
-  levels (fetched once from `model.default`) instead of an empty list. **`VisibleModelsSettings`** is a
-  collapsed disclosure (its summary counts hidden models) listing every catalog provider/model pair with a
-  search field and a switch; hidden models leave every model picker (pinned, recent, provider groups,
-  search) through `store`'s `selectPickerModels`, which always keeps the caller's current selection even
-  when hidden, and new models are shown by default. Hiding is a **client-local** preference, not host
-  config: `chat/modelVisibility`'s `initModelVisibilityPersistence` (called once from `main.tsx`)
-  hydrates `store.hiddenModels` and writes changes back — through the native shell's stable
-  `clientPreferences` adapter under key `hidden-models` when one is injected, else browser localStorage
-  `${STORAGE_PREFIX}hidden-models:<httpBase>`, whose `storage` events sync other tabs. The full catalog
-  remains available here for configuration.
-
-  The REVIEW group's toggles: an **agent-review toggle**
-  (`agent-review-toggle`, `agent-review-row`, a switch over `store.agentReviewEnabled` →
-  `settings.update { agentReviewEnabled }`) — off withholds the worker's in-session `request_review` tool
-  so review happens only via the Review button (the host live-toggles the tool's active set on it, see
-  `submodule-server-host-plan-review`); the row is hidden below `AGENT_REVIEW_SETTING_PROTOCOL_VERSION`
-  (v68), where a host could store the field while still registering the tool. And an **auto-fix toggle** (`review-autofix-toggle`,
-  `review-autofix-row`, a switch over `store.reviewAutoFix` → `settings.update { reviewAutoFix }`) — off
-  means a `request_changes` verdict records findings and waits (the host gates its auto-fix cycle on it,
-  see `submodule-server-todos`).
-
-  **GPT CONTEXT WINDOW** — the `ModelContextSettings` block described above.
-
-  **PROMPT CACHE** (`cache-warming-group`) — the `CacheWarmingSettings` block described above.
-
-  There is **no separate Review navigation section**; all review-related controls live in Models' REVIEW group.
+  picker are ignored, while a save or re-read is in flight.
+  `VisibleModelsSettings` keeps the current client-local visible-model disclosure.
+  At protocol v124 (`AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION`), Models mounts an **Automatic summary**
+  group with owned radio cards: Earlier (50), Default (75), Later (90). The description says serialized
+  history length is estimated, not measured provider tokens or an exact context limit. It reads the
+  host-backed store, writes only `settings.update { autoSummaryThresholdPercent }`, disables pending
+  writes, reports save errors through the existing toast, and converges only on `settings.changed`.
+  There is no provider-context override or background cache-warming control/RPC. Review controls remain
+  absent from this accepted Models page.
   **`ExtensionsSettings`** lists the host SDK extension catalog through `extension.list`. Bundled tool
   switches use `disabledExtensions`; declared boolean settings use `extensionSettings` and remain disabled
   when their extension is off. The page also keeps the separate DeepSeek key controls and the existing

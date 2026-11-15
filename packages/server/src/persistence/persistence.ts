@@ -19,6 +19,7 @@ import {
 	DEFAULT_CONFIG,
 	type ExtensionSettingValues,
 	type HostEnvironment,
+	isAutoSummaryThresholdPercent,
 	isComposerGrowthLimit,
 	isLineWidth,
 	isLocalePreference,
@@ -653,6 +654,9 @@ export function loadConfig(): AppConfig {
 		composerGrowthLimit: isComposerGrowthLimit(value.composerGrowthLimit)
 			? value.composerGrowthLimit
 			: DEFAULT_CONFIG.composerGrowthLimit,
+		autoSummaryThresholdPercent: isAutoSummaryThresholdPercent(value.autoSummaryThresholdPercent)
+			? value.autoSummaryThresholdPercent
+			: DEFAULT_CONFIG.autoSummaryThresholdPercent,
 		questionPanelHeight: isQuestionPanelHeight(value.questionPanelHeight)
 			? value.questionPanelHeight
 			: DEFAULT_CONFIG.questionPanelHeight,

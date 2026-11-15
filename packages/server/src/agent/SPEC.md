@@ -72,12 +72,37 @@ Summary generation receives a detached older prefix only after full settlement w
 pending interaction. Retain the whole newest exchange and paired ordinary FunctionTool records. A paired
 result that Stop or a run error closed as `incomplete` (the SDK 0.21.0 abort marker, as in its internal
 `buildFunctionAbortResult`) can be summarized; only an `in_progress` result blocks. The Go
-model's published context budget minus output/system headroom sets the automatic threshold at 75%; UTF-8
+model's published context budget minus output/system headroom uses the host's captured
+`autoSummaryThresholdPercent` (50/75/90, default 75) for eligibility; a save affects the next check and
+starts no request. Manual force still bypasses eligibility. UTF-8
 serialized bytes provide a conservative internal token upper bound. User-visible counts use actual SDK
 request usage, never that byte estimate. A nonempty bounded summary must reduce model history. Commit model
 memory, retired IDs, the summary marker and operation receipt against the unchanged revision. Generation,
 cancellation, validation and write failures preserve committed history. Replay never regenerates or restores
 an old window. New input cancels the summary and waits for cleanup before its Runner starts.
+
+SDK local context is the private JSON-only `Readonly<{ workspaceId: string }>` identity. Root and
+background child runs supply it; foreground `Agent.asTool` inherits the parent context and shared usage.
+Dynamic instructions validate matching identity and the active grant before returning admitted context.
+Services, functions and credentials remain in fresh host closures. Recovery retains public
+`RunState.fromString` and checks `state.toJSON().context.context` before approval continuation or any
+model/tool effect. Missing, malformed or mismatched identities fail through normal settlement, dismiss
+interactions, keep transcript/history/queued input/effect receipts and never automatically replay or
+drain the queue. No old checkpoint migration or context override discards restored usage.
+
+`compactSession(sessionId, { operationId?, instructions?, force? })` captures the threshold once before
+the existing asynchronous transaction; `force: false` uses that choice and manual force bypasses it.
+For example, complete history at 60% of the host budget compacts at 50 and skips at 75 or 90. A matching
+`{ workspaceId: "assigned-workspace" }` is the entire local DTO; `{}`, another workspace, or extra keys
+fail identity validation. These values never replace a grant. Assertions: `sessionStore.test.ts` —
+"Earlier summarizes complete history Default skips, and Later defers Default-eligible history";
+`sdkSessionManager.test.ts` — "settings saves request nothing; the next settled check uses the new choice
+and in-flight summary keeps it", "dynamic instructions reject mismatched workspace context and revoked
+authority before requests", and "identity-only context checkpoints exclude closure services and
+credentials while admitted instructions reach requests"; `sdkExecution.test.ts` — "root and detached
+context are separate while foreground children share parent identity and usage";
+`sessionRecoveryAudit.test.ts` — "unsupported checkpoint identity" cases and "current-format approval
+recovery retains identity, original usage and once-only effects".
 
 ## Model configuration
 

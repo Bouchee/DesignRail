@@ -5406,3 +5406,17 @@ test("a reveal the view handled is cleared, and only for its own tick, so a remo
 	s().clearFileTabReveal("ws1", "ws1:src/a.ts", 2);
 	expect(s().tabsByWorkspace.ws1?.[0]).not.toHaveProperty("reveal");
 });
+
+test("summary timing adopts host config and defaults malformed fields", () => {
+	for (const value of [50, 90, 75] as const) {
+		useAppStore.getState().applyConfig({ ...DEFAULT_CONFIG, autoSummaryThresholdPercent: value });
+		expect(useAppStore.getState().autoSummaryThresholdPercent).toBe(value);
+	}
+	for (const value of [undefined, null, 60, "50"]) {
+		useAppStore.getState().applyConfig({
+			...DEFAULT_CONFIG,
+			autoSummaryThresholdPercent: value,
+		} as unknown as AppConfig);
+		expect(useAppStore.getState().autoSummaryThresholdPercent).toBe(75);
+	}
+});

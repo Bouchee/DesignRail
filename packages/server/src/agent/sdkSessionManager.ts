@@ -5,7 +5,7 @@ import {
 	Agent,
 	type AgentInputItem,
 	MaxTurnsExceededError,
-	RunContext,
+	type RunContext,
 	Runner,
 	RunState,
 	type RunStreamEvent,
@@ -122,8 +122,12 @@ import { createWorkspaceActions } from "./workspaceActions";
 
 const log = logger("agent");
 
+type SessionContext = Readonly<{ workspaceId: string }>;
+
+type SessionAgent = Agent<SessionContext>;
+
 interface ActiveRun {
-	state?: RunState<unknown, Agent>;
+	state?: RunState<SessionContext, SessionAgent>;
 	suspended?: boolean;
 	inputId?: string;
 	enabledExtensions: SdkExtensionSnapshot[];
@@ -636,7 +640,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 async function waitForApproval(
 	entry: Entry,
 	run: ActiveRun,
-	state: RunState<unknown, Agent<unknown, "text">>,
+	state: RunState<SessionContext, SessionAgent>,
 	call: { callId: string; name: string; arguments: string },
 ): Promise<boolean> {
 	assertActive(entry, run);
@@ -689,7 +693,7 @@ function isSupersededAnswer(response: unknown): boolean {
 async function waitForToolResponse(
 	entry: Entry,
 	run: ActiveRun,
-	state: RunState<unknown, Agent>,
+	state: RunState<SessionContext, SessionAgent>,
 	call: { callId: string; name: string; arguments: string },
 ): Promise<void> {
 	assertActive(entry, run);
@@ -918,14 +922,15 @@ export function notifyExtUi(
 
 function startStream(
 	runner: Runner,
-	agent: Agent,
-	input: AgentInputItem[] | RunState<unknown, Agent>,
+	agent: SessionAgent,
+	input: AgentInputItem[] | RunState<SessionContext, SessionAgent>,
 	session: PersistentSession,
 	signal: AbortSignal,
 ) {
 	return runner.run(agent, input, {
 		stream: true,
 		session,
+		context: { workspaceId: session.record.workspaceId },
 		signal,
 		maxTurns: session.record.childRun ? (session.record.childRun.definition.maxTurns ?? 20) : 50,
 	});
@@ -1251,7 +1256,7 @@ function finishChild(child: Entry, status: ChildRunRecord["status"], reason?: st
 		if (owner) flushChildCompletions(owner);
 	}
 }
-async function childTools(entry: Entry, run: ActiveRun): Promise<Tool[]> {
+async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionContext>[]> {
 	if (entry.store.record.childRun) return [];
 	const project = loadProjects().find(
 		(item) => item.id === projectOf(entry.store.record.workspaceId),
@@ -1279,7 +1284,9 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool[]> {
 				model: z.string().nullable().optional(),
 				run_in_background: z.boolean().optional(),
 			}),
-			execute: async (args, context, details) => {
+			execute: async (args, context: RunContext<SessionContext> | undefined, details) => {
+				if (!context) throw new Error("Child execution requires its parent SDK context");
+				assertWorkspaceContext(context.context, entry);
 				assertActive(entry, run);
 				if (!subagentsAllowed(entry)) throw new Error("Child agents are disabled");
 				if (!details?.toolCall) throw new Error("Child call identity is required");
@@ -1468,6 +1475,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool[]> {
 					let childInvocationDetails = details;
 					if (details.resumeState) {
 						const resumed = await RunState.fromString(agent, details.resumeState);
+						assertWorkspaceContext(resumed.toJSON().context.context, child);
 						for (const interruption of resumed.getInterruptions()) {
 							if (interruption.rawItem.type !== "function_call")
 								throw new Error("Unsupported child approval");
@@ -1481,7 +1489,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool[]> {
 						childInvocationDetails = { ...details, resumeState: resumed.toString() };
 					}
 					const invocation = childTool.invoke(
-						context ?? new RunContext(),
+						context,
 						JSON.stringify({ input: metadata.task }),
 						childInvocationDetails,
 					);
@@ -2242,7 +2250,7 @@ function reconcileStoredChildren(parent: Entry): void {
 	}
 }
 
-function captureStructuredToolResults(tools: Tool[], run: ActiveRun): void {
+function captureStructuredToolResults(tools: Tool<SessionContext>[], run: ActiveRun): void {
 	run.structuredResults ??= new Map();
 	for (const candidate of tools) {
 		if (candidate.type !== "function") continue;
@@ -2290,12 +2298,26 @@ function captureStructuredToolResults(tools: Tool[], run: ActiveRun): void {
 	}
 }
 
+function assertWorkspaceContext(context: unknown, entry: Entry): asserts context is SessionContext {
+	if (
+		typeof context !== "object" ||
+		context === null ||
+		Array.isArray(context) ||
+		Object.keys(context).length !== 1 ||
+		!("workspaceId" in context) ||
+		context.workspaceId !== entry.store.record.workspaceId
+	)
+		throw new Error(
+			"SDK checkpoint workspace identity is missing or does not match this workspace",
+		);
+}
+
 async function buildSessionAgent(
 	entry: Entry,
 	run: ActiveRun,
 	model: WireModel,
 	sdkModel: Agent["model"] = createConfiguredModel(model, entry.store.record.sessionId),
-): Promise<Agent> {
+): Promise<SessionAgent> {
 	const childDefinition = entry.store.record.childRun?.definition;
 	const skillOptions = {
 		...(childDefinition ? { allowedSkills: childDefinition.skills ?? [] } : {}),
@@ -2374,10 +2396,13 @@ async function buildSessionAgent(
 					},
 				}))),
 	];
-	const agent = new Agent({
+	const agent = new Agent<SessionContext>({
 		name: childDefinition?.name ?? "RailDesign",
-		instructions: () =>
-			`${childDefinition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}`,
+		instructions: (context) => {
+			assertWorkspaceContext(context.context, entry);
+			assertActive(entry, run);
+			return `${childDefinition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}`;
+		},
 		model: sdkModel,
 		tools: [
 			...applicationTools,
@@ -2528,10 +2553,11 @@ async function executeRun(
 				return modelData;
 			},
 		});
-		let next: AgentInputItem[] | RunState<unknown, Agent<unknown, "text">> = recovery
+		let next: AgentInputItem[] | RunState<SessionContext, SessionAgent> = recovery
 			? await RunState.fromString(agent, recovery)
 			: input;
 		if (recovery && next instanceof RunState) {
+			assertWorkspaceContext(next.toJSON().context.context, entry);
 			run.state = next;
 			const pendingIds = new Set(next.pendingInput.map((item) => item.id));
 			if (
@@ -2649,6 +2675,7 @@ async function executeRun(
 			run.controller = new AbortController();
 			agent = await buildAgent();
 			next = await RunState.fromString(agent, checkpoint);
+			assertWorkspaceContext(next.toJSON().context.context, entry);
 			run.state = next;
 		}
 	} catch (error) {
@@ -2720,9 +2747,11 @@ async function executeRun(
 					emit(entry, { type: "message_end", message: lastAssistant });
 				}
 				run.granted = false;
-				if (run.approval) {
+				const interactionId =
+					run.approval?.request.id ?? entry.store.record.state.needsInput?.interactionId;
+				if (interactionId) {
 					publishDialog({
-						id: run.approval.request.id,
+						id: interactionId,
 						sessionId: entry.store.record.sessionId,
 						kind: "dismiss",
 					});
@@ -3176,6 +3205,7 @@ export async function compactSession(
 	} = {},
 ): Promise<void> {
 	const entry = mustGet(sessionId);
+	const thresholdPercent = loadConfig().autoSummaryThresholdPercent;
 	if (
 		entry.active ||
 		entry.store.record.pendingApproval ||
@@ -3203,6 +3233,7 @@ export async function compactSession(
 			force: options.force ?? true,
 			instructions: options.instructions,
 			tokenBudget: modelContextBudget(selected),
+			thresholdPercent,
 			signal: controller.signal,
 			summarize: async (prefix, signal) => {
 				const agent = new Agent({

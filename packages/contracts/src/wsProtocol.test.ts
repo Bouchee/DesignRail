@@ -12,14 +12,12 @@ import {
 import {
 	AGENT_REVIEW_SETTING_PROTOCOL_VERSION,
 	ASK_DISCUSS_PROTOCOL_VERSION,
+	AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION,
 	BRANCH_STATUS_PROTOCOL_VERSION,
-	CACHE_WARMING_MODES,
-	CACHE_WARMING_SETTINGS_PROTOCOL_VERSION,
 	CHANGE_MUTATIONS_PROTOCOL_VERSION,
 	CHAT_RESOURCES_PROTOCOL_VERSION,
 	CHATS_PROTOCOL_VERSION,
 	CLIENT_ERROR_REPORT_PROTOCOL_VERSION,
-	CONTEXT_WINDOW_SETTINGS_PROTOCOL_VERSION,
 	CONTINUATION_PROTOCOL_VERSION,
 	CUSTOM_ENDPOINT_ID_PREFIX,
 	CUSTOM_ENDPOINTS_PROTOCOL_VERSION,
@@ -36,7 +34,6 @@ import {
 	IMAGE_REFS_PROTOCOL_VERSION,
 	IMAGES_ROUTE,
 	isBackgroundCommandCompletionMessage,
-	isCacheWarmingMode,
 	isCustomEndpointId,
 	isTodoReviewFixMessage,
 	isToolResponsePending,
@@ -252,16 +249,6 @@ test("tool responses replace the ask-only answer method at v93", () => {
 	expect(Object.hasOwn(WS_METHODS, "sessionAnswerQuestion")).toBe(false);
 });
 
-test("the cache-warming setting names its two methods at v111", () => {
-	expect(CACHE_WARMING_SETTINGS_PROTOCOL_VERSION).toBe(111);
-	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CACHE_WARMING_SETTINGS_PROTOCOL_VERSION);
-	expect(WS_METHODS.cacheWarmingGet).toBe("cacheWarming.get");
-	expect(WS_METHODS.cacheWarmingSet).toBe("cacheWarming.set");
-	expect(CACHE_WARMING_MODES).toEqual(["off", "streaming", "idle"]);
-	expect(isCacheWarmingMode("idle")).toBe(true);
-	expect(isCacheWarmingMode("always")).toBe(false);
-});
-
 test("voice input is pinned to v107", () => {
 	expect(SPEECH_PROTOCOL_VERSION).toBe(107);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(SPEECH_PROTOCOL_VERSION);
@@ -446,13 +433,6 @@ test("change mutations name their two methods at v75", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CHANGE_MUTATIONS_PROTOCOL_VERSION);
 	expect(WS_METHODS.changeRevert).toBe("change.revert");
 	expect(WS_METHODS.changeUndo).toBe("change.undo");
-});
-
-test("model context settings name their two methods at v76", () => {
-	expect(WS_METHODS.modelContextSettings).toBe("model.contextSettings");
-	expect(WS_METHODS.modelSetContextWindow).toBe("model.setContextWindow");
-	expect(CONTEXT_WINDOW_SETTINGS_PROTOCOL_VERSION).toBe(76);
-	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CONTEXT_WINDOW_SETTINGS_PROTOCOL_VERSION);
 });
 
 test("resource metadata rides the two content reads from v75", () => {
@@ -682,4 +662,17 @@ test("HTTP image references join the wire at v123 without changing earlier featu
 	expect(IMAGE_REFS_PROTOCOL_VERSION).toBe(123);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(IMAGE_REFS_PROTOCOL_VERSION);
 	expect(IMAGES_ROUTE).toBe("/images/");
+});
+
+test("summary timing uses the existing settings method at v124 and retires orphan RPCs", () => {
+	expect(AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION).toBe(124);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION);
+	expect(WS_METHODS.settingsUpdate).toBe("settings.update");
+	for (const method of [
+		"model.contextSettings",
+		"model.setContextWindow",
+		"cacheWarming.get",
+		"cacheWarming.set",
+	])
+		expect(Object.values(WS_METHODS)).not.toContain(method);
 });

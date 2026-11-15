@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Usage } from "@openai/agents";
+import { Agent, Runner, tool, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
@@ -10,6 +10,7 @@ import {
 	ScriptedModel,
 } from "@openai/agents/testing";
 import type { ExtUiRequest, ExtUiResponse } from "@thinkrail/contracts";
+import { z } from "zod";
 import { saveWorkspaces } from "../persistence";
 import { configureAgentModelFactory } from "./modelConfiguration";
 import {
@@ -266,5 +267,144 @@ test("summary SDK usage counts once in session statistics and remains counted af
 	await removeSession(sessionId);
 	await getSessionMessages(sessionId, "workspace", worktree);
 	expect(getSessionStats(sessionId).tokens).toEqual(expected);
+	model.assertComplete();
+});
+
+for (const context of [{}, { workspaceId: "foreign-workspace" }]) {
+	test(`unsupported checkpoint identity ${JSON.stringify(context)} fails before effects and preserves durable work`, async () => {
+		const model = new ScriptedModel([
+			modelResponse([
+				functionCall(
+					"bash",
+					{ command: "printf once >> completed.marker", timeoutMs: 1000 },
+					{ callId: "completed-call" },
+				),
+			]),
+			modelResponse([
+				functionCall(
+					"bash",
+					{ command: "printf forbidden > forbidden.marker", timeoutMs: 1000 },
+					{ callId: "identity-call" },
+				),
+			]),
+			done(),
+		]);
+		configureAgentModelFactory(() => model);
+		const ready = Promise.withResolvers<Extract<ExtUiRequest, { kind: "confirm" }>>();
+		setExtUiPublisher((request) => {
+			if (request.kind !== "confirm") return;
+			if (request.toolCallId === "completed-call") resolveExtUi(reply(request));
+			else ready.resolve(request);
+		});
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		const running = promptSession(sessionId, "Hold the command");
+		const originalCard = await ready.promise;
+		steerSession(sessionId, "Keep queued input", undefined, "identity-queued");
+		await removeSession(sessionId);
+		await running;
+		const record = readSessionRecord(sessionId);
+		if (!record?.pendingApproval || !record.runCheckpoint) throw new Error("Missing checkpoint");
+		const fixture = await new Runner({ tracingDisabled: true }).run(
+			new Agent({
+				name: "RailDesign",
+				model: new ScriptedModel([
+					modelResponse([
+						functionCall(
+							"bash",
+							{ command: "printf forbidden > forbidden.marker", timeoutMs: 1000 },
+							{ callId: "identity-call" },
+						),
+					]),
+				]),
+				tools: [
+					tool({
+						name: "bash",
+						description: "Fixture command",
+						parameters: z.object({ command: z.string(), timeoutMs: z.number() }),
+						needsApproval: true,
+						execute: () => {
+							throw new Error("Fixture effect must not run");
+						},
+					}),
+				],
+			}),
+			"Hold the command",
+			{ context },
+		);
+		record.pendingApproval.checkpoint = fixture.state.toString();
+		record.runCheckpoint.checkpoint = fixture.state.toString();
+		const history = structuredClone(record.history);
+		const messages = structuredClone(record.messages);
+		const decisions = structuredClone(record.decisions);
+		const effects = structuredClone(record.effects);
+		expect(effects["completed-call"]?.status).toBe("completed");
+		expect(Object.keys(decisions)).toHaveLength(1);
+		writeSessionRecord(record);
+		await getSessionMessages(sessionId, "workspace", worktree);
+		await until(() => getSessionState(sessionId).execution === "idle");
+		expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+		expect(getSessionState(sessionId).needsInput).toBeNull();
+		expect(model.calls).toHaveLength(2);
+		expect(existsSync(join(worktree, "forbidden.marker"))).toBe(false);
+		expect(readFileSync(join(worktree, "completed.marker"), "utf8")).toBe("once");
+		const after = readSessionRecord(sessionId);
+		expect(after?.history).toEqual(history);
+		expect(after?.messages.slice(0, messages.length)).toEqual(messages);
+		expect(after?.effects).toEqual(effects);
+		expect(after?.decisions).toEqual(decisions);
+		expect(after?.queue).toMatchObject([{ id: "identity-queued", state: "pending" }]);
+		expect(after?.pendingApproval).toBeUndefined();
+		expect(after?.runCheckpoint).toBeUndefined();
+		expect(() => resolveExtUi(reply(originalCard))).toThrow();
+		await removeSession(sessionId);
+		await getSessionMessages(sessionId, "workspace", worktree);
+		expect(model.calls).toHaveLength(2);
+	});
+}
+
+test("current-format approval recovery retains identity, original usage and once-only effects", async () => {
+	const model = new ScriptedModel([
+		modelResponse({
+			output: [
+				functionCall(
+					"bash",
+					{ command: "printf x >> identity-usage.marker", timeoutMs: 1000 },
+					{ callId: "usage-call" },
+				),
+			],
+			usage: new Usage({ inputTokens: 100, outputTokens: 20, totalTokens: 120 }),
+		}),
+		modelResponse({
+			output: [assistantMessage("done")],
+			usage: new Usage({ inputTokens: 30, outputTokens: 5, totalTokens: 35 }),
+		}),
+	]);
+	configureAgentModelFactory(() => model);
+	const ready = Promise.withResolvers<Extract<ExtUiRequest, { kind: "confirm" }>>();
+	setExtUiPublisher((request) => {
+		if (request.kind === "confirm") ready.resolve(request);
+	});
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	const running = promptSession(sessionId, "Run exactly once");
+	const card = await ready.promise;
+	await removeSession(sessionId);
+	await running;
+	const checkpoint = readSessionRecord(sessionId)?.runCheckpoint?.checkpoint;
+	if (!checkpoint) throw new Error("Missing checkpoint");
+	const saved = JSON.parse(checkpoint) as {
+		context: { context: unknown; usage: { totalTokens: number } };
+	};
+	expect(saved.context.context).toEqual({ workspaceId: "workspace" });
+	expect(saved.context.usage.totalTokens).toBe(120);
+	const snapshot = await getSessionMessages(sessionId, "workspace", worktree);
+	const restored = snapshot.summary.state?.needsInput;
+	if (restored?.kind !== "dialog") throw new Error("Missing approval");
+	expect(restored.request).toEqual(card);
+	resolveExtUi(reply(restored.request));
+	await until(() => getSessionState(sessionId).execution === "idle");
+	expect(getSessionStats(sessionId).tokens.total).toBe(155);
+	expect(readFileSync(join(worktree, "identity-usage.marker"), "utf8")).toBe("x");
+	resolveExtUi(reply(restored.request));
+	expect(readFileSync(join(worktree, "identity-usage.marker"), "utf8")).toBe("x");
 	model.assertComplete();
 });
