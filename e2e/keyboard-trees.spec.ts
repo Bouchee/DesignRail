@@ -89,6 +89,8 @@ test("Enter previews a file, Mod+Enter keeps it, and Delete trashes it after the
 
 	await fileRow(page, "kb").focus();
 	await page.keyboard.press("ArrowRight");
+	await expect(fileRow(page, "kb")).toHaveAttribute("aria-expanded", "true");
+	await expect(alpha).toBeVisible();
 	await page.keyboard.press("ArrowRight");
 	await expect(alpha).toBeFocused();
 	await page.keyboard.press("Enter");

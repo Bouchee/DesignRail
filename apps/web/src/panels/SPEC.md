@@ -1930,7 +1930,16 @@ own section. The kebab menu (`plan-menu`, a
   chat that opens it; no relative age, since the order already says what is newest — the exact change time
   is the row's hover title) and **Other agent files · ignored** (one row per ignored output, a folder lazily
   expandable through `fs.readDir`, with its file count), hidden by the header's eye toggle. A row the host
-  marks `deleted` reads "Deleted, not by you" with Restore; the user restores it explicitly before opening it. The panel
+  marks `deleted` reads "Deleted, not by you" with Restore. Opening it by click, double click or
+  `Mod+Enter` restores it first through `artifactActions.openArtifact`, then uses the normal file open.
+  Capture center navigation before awaiting restore: a later navigation cancels the preview; a kept open
+  may install a background tab without activating it, as in `openTabs`. The name stays enabled.
+  `restoreDeletedArtifact` shares pending and successful promises across opens and both Restore controls
+  for the same workspace, canonical path and deleted `changedAt`, including refreshed row objects.
+  A newer deletion gets a new promise. Disconnect/reconnect, removal or replacement of the workspace
+  root/project invalidates cached results and pending opens. An old failure clears only its own entry.
+  Failures show the existing Restore toast, allow retry and never read/open the path, including when a
+  new file has taken it (`ENTRY_EXISTS`). The panel
   **opens on This chat**: the attended chat's artifacts (`selectArtifactMentionTarget`), following it as the
   center switches chats; with no chat attended it shows all, and All chats is a click away but not
   remembered across mounts. Unattributed artifacts belong to no chat. Whenever the filter hides rows, a
@@ -2267,15 +2276,17 @@ menu has closed, because a closing menu returns focus to its row; disabled
     row label's prefix (a ~500 ms buffer; Space joins only a live buffer, otherwise it activates). Letters
     belong to a focused tree, so the Changes review's `V`/`J`/`N` do not fire from a focused Changes row.
     Enter is the button's own click; `Mod+Enter` is the row's double-click — Files, Specs and Artifacts open
-    kept, Changes opens its kept diff with `claimPreview`; rows without a double-click treat it as Enter.
+    kept (a deleted artifact restores first), Changes opens its kept diff with `claimPreview`; rows without
+    a double-click treat it as Enter.
   - **Row keys live in each row**, through `treeRowKey` (native composing and keyCode229 events are ignored before mutation handlers): Shift+F10 / the Menu key open the row's menu
     (context-menu rows through `openContextMenuFromKeyboard`, dropdown rows through `isContextMenuKey`,
     after which the menu returns focus to the row); **Delete** opens the menu's own confirmation (file,
     Remove workspace except on Default, Delete chat — a pending deletion retries directly —, Close project,
     an artifact's or ignored output's Delete — a deleted artifact discards its kept copy; nothing on Changes
     and Specs rows); **F2** renames a project, managed workspace or artifact where the
-    menu offers Rename (chats and ignored outputs have no rename). A pending chat and a deleted artifact stay
-    focusable (`aria-disabled`) so their Retry / Restore is reachable.
+    menu offers Rename (chats and ignored outputs have no rename). A pending chat stays
+    focusable (`aria-disabled`) so its Retry is reachable; a deleted artifact is enabled, since opening it
+    restores it.
   - **Inner row buttons leave the Tab order and the accessibility tree** (`treeRowControlProps`:
     `tabIndex=-1` and `aria-hidden` — a `tree` may own only treeitems, and these are pointer duplicates:
     chevrons, kebabs, Settle / Keep active, the project's Create workspace `+`, a creation's retry /
