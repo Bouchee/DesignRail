@@ -6,19 +6,23 @@ import { globalHotkeyCommand, installGlobalHotkeys } from "./useGlobalHotkeys";
 const key = (
 	code: string,
 	overrides: Partial<{
+		key: string;
 		ctrlKey: boolean;
 		metaKey: boolean;
 		altKey: boolean;
 		shiftKey: boolean;
 		isComposing: boolean;
+		keyCode: number;
 	}> = {},
 ) => ({
 	code,
+	key: "",
 	ctrlKey: true,
 	metaKey: false,
 	altKey: false,
 	shiftKey: false,
 	isComposing: false,
+	keyCode: 0,
 	...overrides,
 });
 
@@ -209,6 +213,7 @@ describe("installed capture listener", () => {
 	let ready: boolean;
 	let focused: number;
 	let advanced: number;
+	let shortcutsOpened: number;
 	const frames = new Map<number, FrameRequestCallback>();
 	let frameId = 0;
 	const replace = (name: string, value: unknown) => {
@@ -217,7 +222,15 @@ describe("installed capture listener", () => {
 	};
 	const press = (
 		code: string,
-		options: { isComposing?: boolean; repeat?: boolean; ctrlKey?: boolean } = {},
+		options: {
+			isComposing?: boolean;
+			keyCode?: number;
+			key?: string;
+			shiftKey?: boolean;
+			altKey?: boolean;
+			repeat?: boolean;
+			ctrlKey?: boolean;
+		} = {},
 	) => {
 		const event = new Event("keydown", { cancelable: true });
 		Object.assign(event, {
@@ -241,6 +254,7 @@ describe("installed capture listener", () => {
 		ready = false;
 		focused = 0;
 		advanced = 0;
+		shortcutsOpened = 0;
 		frameId = 0;
 		frames.clear();
 		replace("window", browser);
@@ -269,6 +283,10 @@ describe("installed capture listener", () => {
 		});
 		stop = installGlobalHotkeys(() => ({
 			onProjects: noop,
+			onShortcuts: () => {
+				shortcutsOpened++;
+				useAppStore.getState().openShortcuts();
+			},
 			onComposer: () =>
 				whenSettled(
 					() => (ready ? true : null),
@@ -289,6 +307,26 @@ describe("installed capture listener", () => {
 			else Reflect.deleteProperty(globalThis, name);
 		}
 		originals.clear();
+	});
+
+	test("typed Mod+? opens once through the installed listener even on a different physical key", () => {
+		expect(press("KeyM", { key: "?", shiftKey: true }).defaultPrevented).toBe(true);
+		expect(press("KeyM", { key: "?", shiftKey: true, repeat: true }).defaultPrevented).toBe(true);
+		expect(shortcutsOpened).toBe(1);
+		expect(useAppStore.getState().shortcutsOpen).toBe(true);
+	});
+
+	test("the installed shortcuts chord leaves plain question marks, Alt and both IME forms unconsumed", () => {
+		for (const options of [
+			{ key: "?", ctrlKey: false },
+			{ key: "?", altKey: true },
+			{ key: "?", isComposing: true },
+			{ key: "?", keyCode: 229 },
+			{ key: "/", shiftKey: true },
+		])
+			expect(press("Slash", options).defaultPrevented).toBe(false);
+		expect(shortcutsOpened).toBe(0);
+		expect(useAppStore.getState().shortcutsOpen).toBe(false);
 	});
 
 	test("Ctrl+R opens history through the actual listener and swallows reload", () => {
@@ -419,4 +457,18 @@ describe("tab chords", () => {
 			),
 		).toBeNull();
 	});
+});
+
+test("Mod+? opens the shortcuts on the typed question mark, never behind a modal", () => {
+	const withShortcuts = { ...all, onShortcuts: noop };
+	const question = key("Slash", { key: "?", shiftKey: true });
+	expect(globalHotkeyCommand(question, withShortcuts, false, "Linux")).toBe("shortcuts.open");
+	expect(
+		globalHotkeyCommand(key("Digit7", { key: "?", shiftKey: true }), withShortcuts, false, "Linux"),
+	).toBe("shortcuts.open");
+	expect(
+		globalHotkeyCommand(key("Slash", { key: ",", shiftKey: true }), withShortcuts, false, "Linux"),
+	).toBeNull();
+	expect(globalHotkeyCommand(question, withShortcuts, true, "Linux")).toBeNull();
+	expect(globalHotkeyCommand(question, all, false, "Linux")).toBeNull();
 });

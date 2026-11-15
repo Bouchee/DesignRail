@@ -18,6 +18,8 @@ The focused workbench region stays at full contrast while others dim. F6 cycles 
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
 palette offers these actions and desktop zoom controls. Controls that disappear or become disabled
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
+Mod+? opens a filterable keyboard reference, also available from the left rail and Settings → Keyboard.
+Tooltips show each button’s shortcut; the reference starts with the surface you were using.
 Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command
 palette and keyboard shortcuts share the same split, move, close and arrangement actions.
 

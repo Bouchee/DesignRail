@@ -1,3 +1,4 @@
+import { isImeComposing } from "@thinkrail/ui/keyboard";
 import { useEffect, useInsertionEffect, useRef } from "react";
 import { type KeybindingId, matchKeybinding } from "../keybindings";
 import { createDoubleShiftDetector } from "../search";
@@ -26,6 +27,7 @@ type GlobalHotkeyActions = {
 	onCloseTab?: ChordHandler;
 	onSplitRight?: ChordHandler;
 	onMoveTab?: ChordHandler;
+	onShortcuts?: ChordHandler;
 };
 
 const CHORD_ACTIONS = {
@@ -55,13 +57,14 @@ const CHORD_ACTIONS = {
 	"group.splitRight": "onSplitRight",
 	"tab.moveToPreviousGroup": "onMoveTab",
 	"tab.moveToNextGroup": "onMoveTab",
+	"shortcuts.open": "onShortcuts",
 } as const satisfies Record<Exclude<KeybindingId, "chat.history">, keyof GlobalHotkeyActions>;
 
 type GlobalHotkeyCommand = keyof typeof CHORD_ACTIONS;
 
 type GlobalHotkeyEvent = Pick<
 	KeyboardEvent,
-	"altKey" | "code" | "ctrlKey" | "isComposing" | "metaKey" | "shiftKey"
+	"altKey" | "code" | "ctrlKey" | "isComposing" | "keyCode" | "key" | "metaKey" | "shiftKey"
 > &
 	Partial<Pick<KeyboardEvent, "getModifierState">>;
 
@@ -78,7 +81,7 @@ export function globalHotkeyCommand(
 	inTerminal = false,
 	inEditorFind = false,
 ): GlobalHotkeyCommand | null {
-	if (event.isComposing) return null;
+	if (isImeComposing(event)) return null;
 	const id = matchKeybinding(event, platform);
 	if (id === null || id === "chat.history") return null;
 	if (modalOpen && id !== "tab.close") return null;
@@ -137,7 +140,7 @@ export function installGlobalHotkeys(readActions: () => GlobalHotkeyActions): ()
 		event.preventDefault();
 		event.stopPropagation();
 		if (
-			!event.isComposing &&
+			!isImeComposing(event) &&
 			!event.repeat &&
 			!hasOpenModal() &&
 			!useAppStore.getState().searchOpen
