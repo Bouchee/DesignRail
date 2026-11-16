@@ -56,6 +56,7 @@ import {
 	customMessageText,
 	DEFAULT_CONFIG,
 	type ExtensionSettingValues,
+	isAgentTransferMessage,
 	isAutoSummaryThresholdPercent,
 	isBackgroundCommandCompletionMessage,
 	isChatHandoffMessage,
@@ -888,6 +889,22 @@ export function reduceSessionEvent(rt: SessionRuntime, event: SessionEvent): Ses
 							timestamp: event.message.timestamp,
 						},
 					],
+				};
+			}
+			if (isAgentTransferMessage(event.message)) {
+				// Same stable ID as hydration, so a refresh replaces the live row in place.
+				const id = event.message.id ?? randomUuid();
+				const turn: ChatTurn = {
+					kind: "agentTransfer",
+					id,
+					details: event.message.details,
+					timestamp: event.message.timestamp,
+				};
+				return {
+					...rt,
+					turns: rt.turns.some((current) => current.id === id)
+						? rt.turns.map((current) => (current.id === id ? turn : current))
+						: [...rt.turns, turn],
 				};
 			}
 			if (isChatHandoffMessage(event.message)) {

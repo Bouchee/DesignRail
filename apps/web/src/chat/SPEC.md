@@ -18,6 +18,14 @@ and failed/cancelled messages never show an accepted result. Rows, hydration, st
 history-fixture tests compare live correction and restored payload; refresh does not replay effects.
 Copy on this row uses the normalized DTO JSON; canonical transcript/model/checkpoint text stays faithful.
 
+SDK Handoff chats: `agent-transfer` messages become `agentTransfer` turns and rows under the message ID
+in both live `message_end` reduction and hydration, so refresh replaces the row in place. The row reads
+"{from} handed the conversation to {to}" with the reason (`data-testid="agent-transfer"`); it does not
+open a round and is unrelated to the Continue in workspace `HandoffCard`. Markdown rows carry
+`AssistantMessage.agent` and show it as a small author label (`assistant-agent`). `ChatHeader` shows
+`SessionState.activeAgent` from the host state as "Handled by {agent}" (`active-agent`). The browser
+never receives the graph, checkpoints or SDK objects.
+
 The application owns its message, tool, usage and event types in `sessionProtocol.ts`; browser code does not import engine types. `session.event` carries `{sessionId, runId, seq, event}` with increasing per-session sequence numbers. SDK details and checkpoints remain on the host. The initial transcript snapshot carries its event sequence watermark; events arriving before hydration are buffered and only later events are applied. Stable message IDs join streamed snapshots and final messages. Basic tool approvals use the existing confirmation UI with session, run, interaction and revision ownership; failures keep the pending card visible. A declared tool without an execution result state is pending: its card and routine row use a neutral marker, and execution summaries/bodies begin only after `tool_execution_start`.
 
 `ChatView` connects the existing resource hook, header trigger, dock and inspector to the SDK host's owned resource routes. Command output and child transcripts load only for the selected detail. Historical text does not create resource authority. Skills retain catalog, trust and disable controls, manual commands and idle reload. Reload keeps the current watcher baseline and clears its stale badge only after host success. Stop remains available for owned work. Protocol versions gate available routes; they do not replace host ownership checks.

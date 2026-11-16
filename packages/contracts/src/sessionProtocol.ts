@@ -57,6 +57,8 @@ export interface AssistantMessage {
 	stopReason: StopReason;
 	errorMessage?: string;
 	planReview?: PlanReviewOutput;
+	/** The SDK Handoff agent that wrote this message; present only in chats with a Handoff graph. */
+	agent?: string;
 	timestamp: number;
 }
 
@@ -172,6 +174,8 @@ export interface SessionState {
 	completionUnread: boolean;
 	queuedCount: number;
 	backgroundWork: boolean;
+	/** The accepted SDK Handoff owner that answers the next input; present only with a Handoff graph. */
+	activeAgent?: string;
 }
 
 export function isSessionWorking(state: SessionState): boolean {

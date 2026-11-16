@@ -162,6 +162,8 @@ export function estimateChatRowHeight(row: ChatRow): number {
 			return 72;
 		case "handoff":
 			return clampHeight(56 + wrappedLines(row.details.summary) * PROSE_LINE_HEIGHT);
+		case "agentTransfer":
+			return 32;
 		case "tool":
 			return estimateToolHeight(row);
 		case "activity":

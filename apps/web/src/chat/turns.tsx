@@ -15,6 +15,7 @@ import {
 	RiToolsLine as Wrench,
 } from "@remixicon/react";
 import type {
+	AgentTransferDetails,
 	ChatHandoffDetails,
 	ContinueInWorkspaceRequestDetails,
 	GitDiffScope,
@@ -134,6 +135,14 @@ function ChatTurnViewImpl({
 					copyable={isFinalAnswer}
 					getText={() => row.text}
 				>
+					{row.agent ? (
+						<span
+							data-testid="assistant-agent"
+							className={cn("text-text-muted tr-text-metadata", isFinalAnswer && "pl-24")}
+						>
+							{row.agent}
+						</span>
+					) : null}
 					<div
 						className={cn(
 							"tr-text-reading text-text-default",
@@ -163,6 +172,8 @@ function ChatTurnViewImpl({
 			return <ContinuationRequestCard details={row.details} />;
 		case "handoff":
 			return <HandoffCard details={row.details} />;
+		case "agentTransfer":
+			return <AgentTransferRow details={row.details} />;
 		case "tool":
 			return <ToolRow row={row} workspaceRoot={workspaceRoot} onOpenFile={onOpenFile} />;
 		case "activity":
@@ -561,6 +572,19 @@ function ContinuationRequestCard({ details }: { details: ContinueInWorkspaceRequ
 					{t("chat.turn.continuation.retry")}
 				</Button>
 			) : null}
+		</div>
+	);
+}
+
+/** An accepted SDK Handoff inside this chat; unlike `HandoffCard`, nothing moves to another chat. */
+function AgentTransferRow({ details }: { details: AgentTransferDetails }) {
+	const t = useT();
+	return (
+		<div data-testid="agent-transfer" className="tr-text-metadata text-text-muted">
+			<span className="block">
+				{t("chat.turn.agentTransfer.title", { from: details.from, to: details.to })}
+			</span>
+			{details.reason ? <span className="block">{details.reason}</span> : null}
 		</div>
 	);
 }

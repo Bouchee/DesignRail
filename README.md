@@ -45,6 +45,11 @@ dock can fold while work continues; inspect an MCP server for its status and thi
 Plan review uses an independent SDK child with a validated verdict saved in its read-only transcript.
 Plan and Review show the recorded outcome and findings. Finish or stop pending reviews before updating;
 older pending review checkpoints stop explicitly.
+An optional `handoffs.json` (personal, or in a trusted project's `.raildesign/`) declares which agent
+definitions may take over a chat through SDK Handoffs. The chat shows each transfer, who handles the
+conversation and who wrote each reply; the accepted agent answers later messages after refresh and restart.
+A `without_tools` target sees the conversation without earlier tool records. Provider acceptance of a
+live transfer is a separate gate.
 Web search and page reading use DeepSeek Search and Fetch with a separate
 host key configured in Extensions settings. Skill search, content reads, manual `/skill:name` commands
 and idle catalog reload share current trust and enable policy. The Extensions settings page manages bundled SDK

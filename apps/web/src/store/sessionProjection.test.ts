@@ -1,5 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import type {
+	AgentTransferMessage,
 	AssistantMessage,
 	ExtUiRequest,
 	SessionEventPayload,
@@ -9,6 +10,7 @@ import type {
 	WireCompactionSummary,
 } from "@thinkrail/contracts";
 import { messagesToRuntime } from "../chat/hydrate";
+import { deriveRows } from "../chat/rows";
 import { EMPTY_RUNTIME, reduceSessionEvent, useAppStore } from "./appStore";
 
 const assistant = (text: string): AssistantMessage => ({
@@ -339,4 +341,38 @@ test("new ownership replaces an approval and a cleared request cannot return fro
 	store.applyExtUi(request);
 	expect(useAppStore.getState().sessions.session?.pendingExtUi).toBeNull();
 	expect(useAppStore.getState().sessions.session?.hostState?.needsInput).toBeNull();
+});
+
+test("an agent transfer row and attributed messages converge live with restored history", () => {
+	const root: AssistantMessage = { ...assistant("routing"), id: "root-1", agent: "RailDesign" };
+	const transfer: AgentTransferMessage = {
+		id: "transfer:t1",
+		role: "custom",
+		customType: "agent-transfer",
+		content: "",
+		display: true,
+		details: { transferId: "t1", from: "RailDesign", to: "analyst", reason: "needs analysis" },
+		timestamp: 2,
+	};
+	const target: AssistantMessage = { ...assistant("answer"), id: "target-1", agent: "analyst" };
+	let runtime = EMPTY_RUNTIME;
+	for (const message of [root, transfer, transfer, target])
+		runtime = reduceSessionEvent(runtime, { type: "message_end", message });
+	expect(runtime.turns.map((turn) => turn.kind)).toEqual([
+		"assistant",
+		"agentTransfer",
+		"assistant",
+	]);
+	expect(runtime.turns).toEqual(messagesToRuntime([root, transfer, target]).turns);
+	const rows = deriveRows(runtime.turns, {}, false);
+	expect(rows.flatMap((row) => (row.kind === "markdown" ? [[row.agent, row.text]] : []))).toEqual([
+		["RailDesign", "routing"],
+		["analyst", "answer"],
+	]);
+	expect(rows.find((row) => row.kind === "agentTransfer")).toEqual({
+		kind: "agentTransfer",
+		id: "transfer:t1",
+		details: transfer.details,
+	});
+	expect(rows.some((row) => row.kind === "handoff")).toBe(false);
 });

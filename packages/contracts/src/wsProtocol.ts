@@ -325,6 +325,35 @@ export function isChatHandoffMessage(message: unknown): message is ChatHandoffMe
 
 export const CHAT_HANDOFF_SUMMARY_MAX_LENGTH = 4000;
 
+export const AGENT_TRANSFER_CUSTOM_TYPE = "agent-transfer";
+
+/** An accepted SDK Handoff inside one chat — distinct from `chat-handoff` (Continue in workspace). */
+export interface AgentTransferDetails {
+	transferId: string;
+	from: string;
+	to: string;
+	reason: string;
+}
+
+export interface AgentTransferMessage extends WireCustomMessage<AgentTransferDetails> {
+	customType: typeof AGENT_TRANSFER_CUSTOM_TYPE;
+	display: true;
+	details: AgentTransferDetails;
+}
+
+export function isAgentTransferMessage(message: unknown): message is AgentTransferMessage {
+	if (!message || typeof message !== "object") return false;
+	const m = message as { role?: unknown; customType?: unknown; details?: unknown };
+	if (m.role !== "custom" || m.customType !== AGENT_TRANSFER_CUSTOM_TYPE) return false;
+	const d = m.details as Partial<AgentTransferDetails> | undefined;
+	return (
+		typeof d?.transferId === "string" &&
+		typeof d.from === "string" &&
+		typeof d.to === "string" &&
+		typeof d.reason === "string"
+	);
+}
+
 export interface WorkspaceRemoved {
 	projectId: string;
 	id: string;

@@ -14,6 +14,7 @@ const APPLICATION_RESOURCES: ReadonlyArray<[ProjectResourceKind, string]> = [
 	["themes", "themes"],
 	["systemPrompt", "SYSTEM.md"],
 	["systemPrompt", "APPEND_SYSTEM.md"],
+	["handoffs", "handoffs.json"],
 ];
 
 function canonical(path: string): string {

@@ -115,6 +115,7 @@ export default function ChatView({
 	);
 	const commands = useAppStore((s) => s.sessions[sessionId]?.commands ?? EMPTY_RUNTIME.commands);
 	const stats = useAppStore((s) => s.sessions[sessionId]?.stats ?? null);
+	const activeAgent = useAppStore((s) => s.sessions[sessionId]?.hostState?.activeAgent);
 	const statsRefreshTick = useAppStore((s) => s.sessions[sessionId]?.statsRefreshTick ?? 0);
 	const syncedConnectionGeneration = useAppStore(
 		(s) => s.sessions[sessionId]?.syncedConnectionGeneration ?? 0,
@@ -750,6 +751,7 @@ export default function ChatView({
 			<div className="shrink-0">
 				<ChatHeader
 					stats={stats}
+					activeAgent={activeAgent}
 					statusEntries={Object.entries(extUiStatus)}
 					skillsStale={skillsStale}
 					resources={

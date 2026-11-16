@@ -33,6 +33,7 @@ export function deriveMessageActions(
 				break;
 			case "tool":
 			case "activity":
+			case "agentTransfer":
 				sawRespondingRow = true;
 				roundHasLaterContent = true;
 				break;

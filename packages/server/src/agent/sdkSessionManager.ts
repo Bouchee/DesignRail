@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
 	Agent,
 	type AgentInputItem,
+	handoff,
 	MaxTurnsExceededError,
 	type RunContext,
 	Runner,
@@ -45,6 +46,7 @@ import type {
 	WireModel,
 } from "@thinkrail/contracts";
 import {
+	AGENT_TRANSFER_CUSTOM_TYPE,
 	firstPromptOfTexts,
 	isControlMessage,
 	isPlanReviewOutput,
@@ -80,8 +82,16 @@ import {
 	getResourceHistoryPage as resourcePage,
 	getSessionResources as summarizeResources,
 } from "./chatResources";
-import { discoverAgentDefinitions } from "./childDefinitions";
+import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitions";
 import { toSpawnMapping } from "./childMapping";
+import {
+	HANDOFF_ROOT,
+	handoffHistory,
+	handoffTargets,
+	loadHandoffGraph,
+	ROOT_AGENT_NAME,
+	withoutToolHistory,
+} from "./handoffGraph";
 import { configureLocalSdkTracing } from "./localTracing";
 import {
 	applySessionMcpApproval,
@@ -131,6 +141,8 @@ type SessionContext = Readonly<{ workspaceId: string }>;
 
 type SessionAgent = Agent<SessionContext, "text" | typeof planReviewOutput>;
 
+const agentNodes = new WeakMap<object, string>();
+
 interface ActiveRun {
 	state?: RunState<SessionContext, SessionAgent>;
 	suspended?: boolean;
@@ -151,6 +163,9 @@ interface ActiveRun {
 	reviewResponse?: { responseId: string | undefined; status?: unknown };
 	toolCalls: Map<string, { name: string; arguments: Record<string, unknown>; failed: boolean }>;
 	startedTools: Set<string>;
+	pendingTransfer?: { from: string; to: string; reason: string };
+	/** SDK agent currently streaming, for message authorship in Handoff chats. */
+	author?: string;
 	structuredResults?: Map<string, StructuredToolResult>;
 	usage?: {
 		inputTokens: number;
@@ -166,6 +181,7 @@ interface ActiveRun {
 	};
 	approval?: {
 		request: ApprovalRequest;
+		agentNode?: string | undefined;
 		resolve: (approved: boolean) => void;
 		reject: (error: Error) => void;
 	};
@@ -295,6 +311,8 @@ function visibleState(entry: Entry): SessionState {
 	if (state.needsInput?.kind === "dialog") {
 		state.needsInput.request = projectDialog(state.needsInput.request, imageOwner(entry));
 	}
+	const handoffs = entry.store.record.handoffs;
+	if (handoffs) state.activeAgent = agentName(handoffs.activeNode);
 	return state;
 }
 export async function attachApprovalOwner(response: ExtUiResponse): Promise<void> {
@@ -465,8 +483,10 @@ function assistant(
 	id: string,
 	content: AssistantMessage["content"],
 	reason: AssistantMessage["stopReason"] = "stop",
+	author?: string,
 ): AssistantMessage {
 	const previous = entry.store.record.messages.find((message) => message.id === id);
+	const agent = author ?? (previous?.role === "assistant" ? previous.agent : undefined);
 	return {
 		id,
 		role: "assistant",
@@ -486,13 +506,14 @@ function assistant(
 						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 					},
 		stopReason: reason,
+		...(entry.store.record.handoffs && agent ? { agent } : {}),
 		timestamp: previous?.timestamp ?? Date.now(),
 	};
 }
 function startAssistant(entry: Entry, run: ActiveRun): AssistantMessage {
 	if (!run.assistantId) {
 		run.assistantId = randomUUID();
-		const message = assistant(entry, run.assistantId, []);
+		const message = assistant(entry, run.assistantId, [], "stop", run.author);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_start", message });
 		return message;
@@ -505,6 +526,7 @@ function addToolCall(
 	entry: Entry,
 	run: ActiveRun,
 	call: { callId: string; name: string; arguments: string },
+	author?: string,
 ): void {
 	if (run.toolCalls.has(call.callId)) return;
 	let args: Record<string, unknown> = {};
@@ -522,6 +544,7 @@ function addToolCall(
 		`call:${call.callId}`,
 		[{ type: "toolCall", id: call.callId, name: call.name, arguments: args }],
 		"toolUse",
+		author,
 	);
 	appendMessage(entry, message);
 	emit(entry, { type: "message_end", message });
@@ -624,6 +647,10 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 			false,
 		);
 	}
+	// The SDK announces the starting agent and each accepted Handoff target. The transfer row itself is
+	// published by the owner commit (commitHandoffOwner); here the event only selects the author of
+	// later streamed text. Handoff call/output items are represented by that row, not as tool cards.
+	if (event.type === "agent_updated_stream_event") run.author = event.agent.name;
 	if (event.type !== "run_item_stream_event") return;
 	const item = event.item;
 	if (item.type === "message_output_item") {
@@ -638,6 +665,8 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 						? [{ type: "text" as const, text: part.refusal }]
 						: [],
 			),
+			"stop",
+			item.agent.name,
 		);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_end", message });
@@ -648,7 +677,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 		};
 		delete run.assistantId;
 	} else if (item.type === "tool_call_item" && item.rawItem.type === "function_call") {
-		addToolCall(entry, run, item.rawItem);
+		addToolCall(entry, run, item.rawItem, item.agent.name);
 	} else if (
 		item.type === "tool_call_output_item" &&
 		item.rawItem.type === "function_call_result"
@@ -661,9 +690,13 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 			.flatMap((part) => (part.type === "input_text" ? [part.text] : []))
 			.join("\n");
 		if (text) {
-			const message = assistant(entry, item.rawItem.id ?? randomUUID(), [
-				{ type: "thinking", thinking: text },
-			]);
+			const message = assistant(
+				entry,
+				item.rawItem.id ?? randomUUID(),
+				[{ type: "thinking", thinking: text }],
+				"stop",
+				item.agent.name,
+			);
 			appendMessage(entry, message);
 			emit(entry, { type: "message_end", message });
 		}
@@ -675,10 +708,17 @@ async function waitForApproval(
 	run: ActiveRun,
 	state: RunState<SessionContext, SessionAgent>,
 	call: { callId: string; name: string; arguments: string },
+	agentNode?: string,
 ): Promise<boolean> {
 	assertActive(entry, run);
-	addToolCall(entry, run, call);
+	addToolCall(entry, run, call, agentNode && agentName(agentNode));
 	const saved = entry.store.record.pendingApproval?.request;
+	if (
+		saved?.runId === run.id &&
+		saved.toolCallId === call.callId &&
+		entry.store.record.pendingApproval?.agentNode !== agentNode
+	)
+		throw new Error("The pending approval belongs to another agent");
 	const consent = sessionMcpApproval(entry.store.record.sessionId, call.name);
 	if (saved?.policyFingerprint && saved.policyFingerprint !== consent?.fingerprint)
 		throw new Error("MCP approval configuration changed");
@@ -692,15 +732,23 @@ async function waitForApproval(
 					revision: entry.store.record.revision + 1,
 					...(consent
 						? { kind: "select" as const, ...consent, policyFingerprint: consent.fingerprint }
-						: { kind: "confirm" as const, title: `Allow ${call.name}?`, message: call.arguments }),
+						: {
+								kind: "confirm" as const,
+								title: `${agentNode && agentNode !== HANDOFF_ROOT ? `${agentNode}: ` : ""}Allow ${call.name}?`,
+								message: call.arguments,
+							}),
 					toolCallId: call.callId,
 					toolInput: run.toolCalls.get(call.callId)?.arguments ?? {},
 				};
 	const approved = new Promise<boolean>((resolveApproval, reject) => {
-		run.approval = { request, resolve: resolveApproval, reject };
+		run.approval = { request, agentNode, resolve: resolveApproval, reject };
 	});
 	entry.store.update((record) => {
-		record.pendingApproval = { request, checkpoint: state.toString() };
+		record.pendingApproval = {
+			request,
+			checkpoint: state.toString(),
+			...(agentNode !== undefined ? { agentNode } : {}),
+		};
 		record.runCheckpoint = {
 			runId: run.id,
 			checkpoint: state.toString(),
@@ -728,9 +776,10 @@ async function waitForToolResponse(
 	run: ActiveRun,
 	state: RunState<SessionContext, SessionAgent>,
 	call: { callId: string; name: string; arguments: string },
+	agentNode?: string,
 ): Promise<void> {
 	assertActive(entry, run);
-	addToolCall(entry, run, call);
+	addToolCall(entry, run, call, agentNode && agentName(agentNode));
 	const args = z.record(z.string(), z.unknown()).parse(JSON.parse(call.arguments));
 	const policy = interactiveTools(
 		(name) => !run.enabledExtensions.some((extension) => extension.name === name),
@@ -744,6 +793,8 @@ async function waitForToolResponse(
 	)
 		return;
 	const saved = entry.store.record.pendingToolResponse;
+	if (saved?.runId === run.id && saved.toolCallId === call.callId && saved.agentNode !== agentNode)
+		throw new Error("The pending question belongs to another agent");
 	const request: NonNullable<SessionRecord["pendingToolResponse"]> =
 		saved?.runId === run.id && saved.toolCallId === call.callId
 			? saved
@@ -756,6 +807,7 @@ async function waitForToolResponse(
 					toolName: call.name,
 					args: { ...args },
 					checkpoint: state.toString(),
+					...(agentNode !== undefined ? { agentNode } : {}),
 				};
 	const answered = new Promise<void>((resolve, reject) => {
 		run.toolResponse = { request, resolve, reject };
@@ -925,6 +977,7 @@ export function resolveExtUi(response: ExtUiResponse): void {
 			...(pending.request.kind === "select"
 				? { selection: typeof response.value === "string" ? response.value : null }
 				: {}),
+			...(pending.agentNode !== undefined ? { agentNode: pending.agentNode } : {}),
 		};
 		record.runCheckpoint = {
 			runId: run.id,
@@ -1849,7 +1902,7 @@ export async function reloadSessionResources(
 			assertActive(entry, run);
 			await reconcileMcpSessions([sessionId]);
 			assertActive(entry, run);
-			await buildSessionAgent(entry, run, model, model.id);
+			await buildSessionGraph(entry, run, model, false);
 			assertActive(entry, run);
 		} finally {
 			run.granted = false;
@@ -2365,11 +2418,20 @@ async function buildSessionAgent(
 	run: ActiveRun,
 	model: WireModel,
 	sdkModel: Agent["model"] = createConfiguredModel(model, entry.store.record.sessionId),
+	role: { node?: string; target?: AgentDefinition; thinkingLevel?: ThinkingLevel } = {},
 ): Promise<SessionAgent> {
 	const childDefinition = entry.store.record.childRun?.definition;
+	const definition = role.target ?? childDefinition;
+	const active = () => assertActive(entry, run);
+	const assertOwner = () => {
+		assertActive(entry, run);
+		if (role.node !== undefined && entry.store.record.handoffs?.activeNode !== role.node)
+			throw new Error("This agent is not the accepted conversation owner");
+	};
+	const thinkingLevel = role.thinkingLevel ?? entry.store.record.thinkingLevel;
 	const skillOptions = {
-		...(childDefinition ? { allowedSkills: childDefinition.skills ?? [] } : {}),
-		manualSkills: childDefinition
+		...(definition ? { allowedSkills: definition.skills ?? [] } : {}),
+		manualSkills: definition
 			? []
 			: entry.store.record.messages.flatMap((message) =>
 					message.role === "user"
@@ -2386,16 +2448,16 @@ async function buildSessionAgent(
 					?.skillOverrides ?? {},
 				loadConfig().otherAgentSkills,
 			),
-		assertActive: () => assertActive(entry, run),
+		assertActive: active,
 		signal: run.controller.signal,
 	};
 	// Preloaded Skills are read inside the SDK run (dynamic instructions), so a read failure fails that run.
 	const preloadedSkills = () =>
-		childDefinition?.skills
+		definition?.skills
 			?.map((name) => readAdmittedSkill(skillOptions, name, null).text)
 			.join("\n\n");
 	const projectContext =
-		!childDefinition || childDefinition.inheritProjectContext
+		!definition || definition.inheritProjectContext
 			? workspaceInstructions(entry.store.record.cwd)
 			: "";
 	const skillCatalog = skillInstructions(skillOptions, model);
@@ -2403,41 +2465,41 @@ async function buildSessionAgent(
 	const repository =
 		loadWorkspaces().find((item) => item.id === entry.store.record.workspaceId)?.kind !== "chat";
 	const applicationTools = [
-		...(childDefinition
+		...(definition
 			? []
 			: createWorkspaceActions({
 					sessionId: entry.store.record.sessionId,
 					inputId: run.inputId,
 					standalone: !repository,
 					signal: run.controller.signal,
-					assertActive: () => assertActive(entry, run),
+					assertActive: active,
 				})),
-		...(await childTools(entry, run)),
+		...(definition ? [] : await childTools(entry, run)),
 		...backgroundTools(entry, run),
 		...titleTools(entry, run),
 		...reviewTools(entry, run),
 		...createTodoTools({
 			cwd: entry.store.record.cwd,
 			sessionId: entry.store.record.sessionId,
-			assertActive: () => assertActive(entry, run),
+			assertActive: active,
 		}),
 		...(repository
 			? createSpecTools({
 					cwd: entry.store.record.cwd,
-					assertActive: () => assertActive(entry, run),
+					assertActive: active,
 				})
 			: []),
-		...(childDefinition && !childDefinition.extensions && !childDefinition.skills?.length
+		...(definition && !definition.extensions && !definition.skills?.length
 			? []
 			: createSkillTools(skillOptions)),
-		...(await (childDefinition
+		...(await (definition
 			? Promise.resolve([])
 			: sessionMcpTools({
 					sessionId: entry.store.record.sessionId,
 					workspaceId: entry.store.record.workspaceId,
 					cwd: entry.store.record.cwd,
 					signal: run.controller.signal,
-					assertActive: () => assertActive(entry, run),
+					assertActive: active,
 					markToolFailed: (callId: string) => {
 						const call = run.toolCalls.get(callId);
 						if (call) call.failed = true;
@@ -2445,12 +2507,12 @@ async function buildSessionAgent(
 				}))),
 	];
 	const agent = new Agent<SessionContext, "text" | typeof planReviewOutput>({
-		name: childDefinition?.name ?? "RailDesign",
+		name: definition?.name ?? ROOT_AGENT_NAME,
 		outputType: entry.store.record.childRun?.purpose === "review" ? planReviewOutput : "text",
 		instructions: (context) => {
 			assertWorkspaceContext(context.context, entry);
-			assertActive(entry, run);
-			return `${childDefinition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
+			assertOwner();
+			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
 		},
 		model: sdkModel,
 		tools: [
@@ -2459,31 +2521,31 @@ async function buildSessionAgent(
 				workspaceId: entry.store.record.workspaceId,
 				cwd: entry.store.record.cwd,
 				signal: run.controller.signal,
-				assertActive: () => assertActive(entry, run),
+				assertActive: active,
 			}),
 			...registrySdkTools(
 				{
 					cwd: entry.store.record.cwd,
 					webAccess: {
 						search: async (query, count, signal) => {
-							assertActive(entry, run);
+							active();
 							const result = await webSearch(query, count, signal ?? run.controller.signal);
-							assertActive(entry, run);
+							active();
 							return result;
 						},
 						fetch: async (url, signal) => {
-							assertActive(entry, run);
+							active();
 							const result = await webFetch(url, signal ?? run.controller.signal);
-							assertActive(entry, run);
+							active();
 							return result;
 						},
 					},
 					workspaceFiles: createWorkspaceFiles(
 						entry.store.record.workspaceId,
 						entry.store.record.cwd,
-						() => assertActive(entry, run),
+						active,
 					),
-					assertActive: () => assertActive(entry, run),
+					assertActive: active,
 					toolResponse: (callId) => {
 						const answer = Object.values(entry.store.record.toolResponses).find(
 							(receipt) => receipt.runId === run.id && receipt.toolCallId === callId,
@@ -2494,7 +2556,7 @@ async function buildSessionAgent(
 							: { kind: "response", value: answer.response };
 					},
 				},
-				childDefinition && !childDefinition.extensions ? [] : run.enabledExtensions,
+				definition && !definition.extensions ? [] : run.enabledExtensions,
 				childDefinition ? "child" : "parent",
 			),
 		],
@@ -2510,16 +2572,16 @@ async function buildSessionAgent(
 		modelSettings: {
 			...responsesClientSettings,
 			maxTokens: modelOutputBudget(model),
-			...(model.reasoning && entry.store.record.thinkingLevel !== "off"
-				? { reasoning: { effort: entry.store.record.thinkingLevel } }
+			...(model.reasoning && thinkingLevel !== "off"
+				? { reasoning: { effort: thinkingLevel } }
 				: {}),
 		},
 	});
 	agent.on("agent_tool_start", (_context, _tool, details) => {
-		assertActive(entry, run);
+		assertOwner();
 		if (details.toolCall.type !== "function_call") return;
 		const toolCall = details.toolCall;
-		addToolCall(entry, run, toolCall);
+		addToolCall(entry, run, toolCall, agent.name);
 		const previous = entry.store.record.effects[toolCall.callId];
 		if (
 			previous &&
@@ -2557,21 +2619,214 @@ async function buildSessionAgent(
 			run.toolCalls.get(details.toolCall.callId)?.failed,
 		);
 	});
-	if (childDefinition) {
+	if (definition) {
 		const aliases = new Set(
-			childDefinition.tools?.flatMap((name) =>
+			definition.tools?.flatMap((name) =>
 				["grep", "find", "ls"].includes(name) ? ["search"] : [name],
 			),
 		);
+		const excluded = childDefinition
+			? ["Agent", "get_subagent_result", "ask_user_question"]
+			: ["Agent", "get_subagent_result"];
 		agent.tools = agent.tools.filter(
 			(candidate) =>
 				candidate.type !== "function" ||
-				(!["Agent", "get_subagent_result", "ask_user_question"].includes(candidate.name) &&
-					(!childDefinition.tools || aliases.has(candidate.name))),
+				(!excluded.includes(candidate.name) && (!definition.tools || aliases.has(candidate.name))),
 		);
 	}
+	if (role.node !== undefined) agentNodes.set(agent, role.node);
 	captureStructuredToolResults(agent.tools, run);
 	return agent;
+}
+
+function projectResourcesTrusted(workspaceId: string): boolean {
+	return (
+		loadProjects().find((project) => project.id === projectOf(workspaceId))?.resourceTrust ===
+		"granted"
+	);
+}
+
+function assertHandoffGraphCurrent(entry: Entry): void {
+	const saved = entry.store.record.handoffs?.graph;
+	if (!saved) return;
+	let current: unknown;
+	try {
+		current = loadHandoffGraph({
+			cwd: entry.store.record.cwd,
+			agentDir: dataDir(),
+			projectTrusted: projectResourcesTrusted(entry.store.record.workspaceId),
+		});
+	} catch {}
+	if (!isDeepStrictEqual(current, saved))
+		throw new Error(
+			"Handoff configuration or trust changed since this chat started; restore it or start a new chat",
+		);
+}
+
+function assertOwnerAgent(entry: Entry, agent: object): void {
+	const handoffs = entry.store.record.handoffs;
+	if (handoffs && agentNodes.get(agent) !== handoffs.activeNode)
+		throw new Error("The SDK agent is not the accepted conversation owner");
+}
+
+function assertHandoffAuthority(entry: Entry, run: ActiveRun, from: string, to: string): void {
+	assertActive(entry, run);
+	const handoffs = entry.store.record.handoffs;
+	if (!handoffs || handoffs.activeNode !== from)
+		throw new Error("The transferring agent is not the accepted conversation owner");
+	if (!handoffTargets(handoffs.graph, from)?.includes(to))
+		throw new Error("The conversation transfer is not declared");
+	assertHandoffGraphCurrent(entry);
+}
+
+function commitHandoffOwner(entry: Entry, run: ActiveRun, node: string): void {
+	if (entry.store.record.handoffs?.activeNode === node) return;
+	const pending = run.pendingTransfer;
+	delete run.pendingTransfer;
+	if (pending?.to !== node) throw new Error("The conversation transfer was not accepted");
+	assertHandoffAuthority(entry, run, pending.from, node);
+	const transfer = {
+		id: randomUUID(),
+		runId: run.id,
+		from: pending.from,
+		to: node,
+		reason: pending.reason,
+		timestamp: Date.now(),
+	};
+	const message: TranscriptMessage = {
+		id: `transfer:${transfer.id}`,
+		role: "custom",
+		customType: AGENT_TRANSFER_CUSTOM_TYPE,
+		content: "",
+		display: true,
+		details: {
+			transferId: transfer.id,
+			from: agentName(transfer.from),
+			to: agentName(node),
+			reason: transfer.reason,
+		},
+		timestamp: transfer.timestamp,
+	};
+	// Owner, receipt and transcript row commit in one write; the row is published only after it.
+	entry.store.update((record) => {
+		if (record.handoffs?.activeNode !== pending.from)
+			throw new Error("The conversation owner changed during transfer");
+		record.handoffs.activeNode = node;
+		record.handoffs.transfers.push(transfer);
+		record.messages.push(message);
+		record.eventSeq += 1;
+	});
+	assertActive(entry, run);
+	publishEvent(entry, { type: "message_end", message });
+	notifyState(entry);
+}
+
+function agentName(node: string): string {
+	return node === HANDOFF_ROOT ? ROOT_AGENT_NAME : node;
+}
+
+/** Applies the current agent's Handoff history policy to the model request; the Session keeps all. */
+function modelHistoryView(
+	entry: Entry,
+	run: ActiveRun,
+	agent: object,
+	input: AgentInputItem[],
+): AgentInputItem[] {
+	const handoffs = entry.store.record.handoffs;
+	const node = agentNodes.get(agent);
+	if (!handoffs || node === undefined || handoffHistory(handoffs.graph, node) === "all")
+		return input;
+	// The target keeps its own exchanges of this run; RunState attributes each generated item. Before
+	// the first stream of a fresh run there is no state and no generated item yet.
+	const own = new Set(
+		(run.state?.toJSON().generatedItems ?? []).flatMap((item) =>
+			(item.type === "tool_call_item" || item.type === "handoff_call_item") &&
+			item.rawItem.type === "function_call" &&
+			item.agent.name === agentName(node)
+				? [item.rawItem.callId]
+				: [],
+		),
+	);
+	return withoutToolHistory(
+		input,
+		own,
+		(operationId) => entry.store.record.summaryOperations[operationId]?.toolFree === true,
+	);
+}
+
+const handoffReason = z.object({ reason: z.string().max(2000) });
+
+/** Builds every declared node over one run grant; returns the root and the accepted owner. */
+async function buildSessionGraph(
+	entry: Entry,
+	run: ActiveRun,
+	model: WireModel,
+	configured = true,
+): Promise<{ root: SessionAgent; start: SessionAgent }> {
+	const sdkModel = (selected: WireModel) =>
+		configured ? createConfiguredModel(selected, entry.store.record.sessionId) : selected.id;
+	const handoffs = entry.store.record.handoffs;
+	if (!handoffs) {
+		const agent = await buildSessionAgent(entry, run, model, sdkModel(model));
+		return { root: agent, start: agent };
+	}
+	assertHandoffGraphCurrent(entry);
+	const available = await listAvailableModels();
+	assertActive(entry, run);
+	const agents = new Map<string, SessionAgent>([
+		[
+			HANDOFF_ROOT,
+			await buildSessionAgent(entry, run, model, sdkModel(model), { node: HANDOFF_ROOT }),
+		],
+	]);
+	for (const { definition } of handoffs.graph.nodes) {
+		const mapped = toSpawnMapping(definition, {
+			cwd: entry.store.record.cwd,
+			availableModels: available,
+		});
+		const selected = mapped.session.model
+			? available.find(
+					(item) =>
+						item.id === mapped.session.model?.id && item.provider === mapped.session.model.provider,
+				)
+			: model;
+		if (!selected) throw new Error(`Agent "${definition.name}" model is unavailable`);
+		agents.set(
+			definition.name,
+			await buildSessionAgent(entry, run, selected, sdkModel(selected), {
+				node: definition.name,
+				target: definition,
+				...(mapped.session.thinkingLevel !== undefined
+					? { thinkingLevel: mapped.session.thinkingLevel }
+					: {}),
+			}),
+		);
+		assertActive(entry, run);
+	}
+	for (const [from, agent] of agents) {
+		const transfers = (handoffTargets(handoffs.graph, from) ?? []).map((to) => {
+			const target = agents.get(to);
+			if (!target) throw new Error(`Handoff target "${to}" is unavailable`);
+			return handoff(target, {
+				inputType: handoffReason,
+				onHandoff: (_context, input) => {
+					assertHandoffAuthority(entry, run, from, to);
+					run.pendingTransfer = { from, to, reason: input?.reason ?? "" };
+				},
+			});
+		});
+		const names = new Set(agent.tools.map((candidate) => candidate.name));
+		for (const { toolName } of transfers) {
+			if (names.has(toolName))
+				throw new Error(`Handoff tool "${toolName}" of "${agent.name}" collides with another tool`);
+			names.add(toolName);
+		}
+		agent.handoffs = transfers;
+		agent.on("agent_start", () => commitHandoffOwner(entry, run, from));
+	}
+	const start = agents.get(handoffs.activeNode);
+	if (!start) throw new Error("The accepted conversation owner is not in the Handoff graph");
+	return { root: agents.get(HANDOFF_ROOT) ?? start, start };
 }
 
 function commitReviewOutput(
@@ -2623,26 +2878,28 @@ async function executeRun(
 			: undefined;
 		if (!model) throw new Error("Configure a Responses-compatible model before sending a message");
 		assertActive(entry, run);
-		const buildAgent = () => buildSessionAgent(entry, run, model);
-		let agent = await buildAgent();
+		const buildAgent = () => buildSessionGraph(entry, run, model);
+		let graph = await buildAgent();
 		configureLocalSdkTracing();
 		const runner = new Runner({
 			tracingDisabled: !loadConfig().sdkTracingEnabled,
 			traceIncludeSensitiveData: false,
-			callModelInputFilter: ({ modelData }) => {
+			callModelInputFilter: ({ modelData, agent }) => {
 				assertActive(entry, run);
+				assertOwnerAgent(entry, agent);
 				if (entry.store.record.runCheckpoint && !entry.store.record.pendingApproval)
 					entry.store.update((record) => {
 						delete record.runCheckpoint;
 					});
-				return modelData;
+				return { ...modelData, input: modelHistoryView(entry, run, agent, modelData.input) };
 			},
 		});
 		let next: AgentInputItem[] | RunState<SessionContext, SessionAgent> = recovery
-			? await RunState.fromString(agent, recovery)
+			? await RunState.fromString(graph.root, recovery)
 			: input;
 		if (recovery && next instanceof RunState) {
 			assertWorkspaceContext(next.toJSON().context.context, entry);
+			assertOwnerAgent(entry, next.currentAgent);
 			run.state = next;
 			const pendingIds = new Set(next.pendingInput.map((item) => item.id));
 			if (
@@ -2663,7 +2920,13 @@ async function executeRun(
 						(name) => !run.enabledExtensions.some((extension) => extension.name === name),
 					).has(interruption.rawItem.name)
 				) {
-					await waitForToolResponse(entry, run, next, interruption.rawItem);
+					await waitForToolResponse(
+						entry,
+						run,
+						next,
+						interruption.rawItem,
+						agentNodes.get(interruption.agent),
+					);
 					assertActive(entry, run);
 					next.approve(interruption);
 					continue;
@@ -2675,6 +2938,8 @@ async function executeRun(
 						(d) => d.runId === run.id && d.toolCallId === callId,
 					);
 					if (!decision) throw new Error("No saved decision for checkpoint");
+					if (decision.agentNode !== agentNodes.get(interruption.agent))
+						throw new Error("The saved decision belongs to another agent");
 					if (
 						decision.policyFingerprint &&
 						decision.policyFingerprint !==
@@ -2685,7 +2950,13 @@ async function executeRun(
 					if (decision.value) next.approve(interruption);
 					else next.reject(interruption);
 				} else {
-					const approved = await waitForApproval(entry, run, next, interruption.rawItem);
+					const approved = await waitForApproval(
+						entry,
+						run,
+						next,
+						interruption.rawItem,
+						agentNodes.get(interruption.agent),
+					);
 					assertActive(entry, run);
 					if (approved) next.approve(interruption);
 					else next.reject(interruption);
@@ -2695,7 +2966,13 @@ async function executeRun(
 		run.markReady?.();
 		while (true) {
 			assertActive(entry, run);
-			const stream = await startStream(runner, agent, next, entry.store, run.controller.signal);
+			const stream = await startStream(
+				runner,
+				graph.start,
+				next,
+				entry.store,
+				run.controller.signal,
+			);
 			run.state = stream.state;
 			stageSteering(entry);
 			const completed = stream.completed.catch(() => undefined);
@@ -2782,12 +3059,24 @@ async function executeRun(
 						(name) => !run.enabledExtensions.some((extension) => extension.name === name),
 					).has(interruption.rawItem.name)
 				) {
-					await waitForToolResponse(entry, run, stream.state, interruption.rawItem);
+					await waitForToolResponse(
+						entry,
+						run,
+						stream.state,
+						interruption.rawItem,
+						agentNodes.get(interruption.agent),
+					);
 					assertActive(entry, run);
 					stream.state.approve(interruption);
 					continue;
 				}
-				const approved = await waitForApproval(entry, run, stream.state, interruption.rawItem);
+				const approved = await waitForApproval(
+					entry,
+					run,
+					stream.state,
+					interruption.rawItem,
+					agentNodes.get(interruption.agent),
+				);
 				assertActive(entry, run);
 				if (approved) stream.state.approve(interruption);
 				else {
@@ -2807,9 +3096,10 @@ async function executeRun(
 			});
 			run.controller.abort();
 			run.controller = new AbortController();
-			agent = await buildAgent();
-			next = await RunState.fromString(agent, checkpoint);
+			graph = await buildAgent();
+			next = await RunState.fromString(graph.root, checkpoint);
 			assertWorkspaceContext(next.toJSON().context.context, entry);
+			assertOwnerAgent(entry, next.currentAgent);
 			run.state = next;
 		}
 	} catch (error) {
@@ -2849,6 +3139,9 @@ async function executeRun(
 				messageId,
 				partial?.role === "assistant" ? partial.content : [],
 				terminal.stopReason,
+				partial?.role === "assistant"
+					? partial.agent
+					: entry.store.record.handoffs && agentName(entry.store.record.handoffs.activeNode),
 			);
 			if (terminal.errorMessage) message.errorMessage = terminal.errorMessage;
 			if (entry.store.record.childRun?.purpose === "review") run.assistantId = messageId;
@@ -3475,11 +3768,19 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 		? available.find((item) => item.provider === requested.provider && item.id === requested.id)
 		: available[0];
 	if (requested && !model && !input.modelOptional) throw new Error("Unknown model");
+	const graph = input.childRun
+		? undefined
+		: loadHandoffGraph({
+				cwd: resolve(input.cwd),
+				agentDir: dataDir(),
+				projectTrusted: projectResourcesTrusted(input.workspaceId),
+			});
 	const sessionId = randomUUID();
 	const entry: Entry = {
 		store: new PersistentSession({
 			version: 2,
 			...(input.childRun ? { childRun: input.childRun } : {}),
+			...(graph ? { handoffs: { graph, activeNode: HANDOFF_ROOT, transfers: [] } } : {}),
 			sessionId,
 			workspaceId: input.workspaceId,
 			cwd: resolve(input.cwd),

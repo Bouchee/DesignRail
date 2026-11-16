@@ -132,8 +132,15 @@ export async function compactSession(
 	];
 	const afterTokens = estimateSessionTokens(history);
 	if (afterTokens >= beforeTokens) throw new Error("Summary did not reduce model history");
+	// Provenance for restricted history views: no tool records and no tool-derived earlier summary.
+	const toolFree = prefix.every((item) => {
+		if (item.type === "function_call" || item.type === "function_call_result") return false;
+		const id = "role" in item && item.role === "user" ? item.id : undefined;
+		return !id?.startsWith("summary_") || !!original.summaryOperations[id.slice(8)]?.toolFree;
+	});
 	const receipt: SummaryReceipt = {
 		force,
+		toolFree,
 		instructions,
 		sourceRevision: original.revision,
 		beforeTokens,

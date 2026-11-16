@@ -23,6 +23,12 @@ host-owned review child with `stopReason:"stop"`. A `message_end` correction car
 message; provisional JSON text has no verdict authority. Session hydration and history fixtures retain
 the field unchanged. Bad DTOs or a typed payload on a failed message fail stored-record validation.
 
+SDK Handoff chats add three application-owned fields. `SessionState.activeAgent` names the accepted
+owner that answers the next input. `AssistantMessage.agent` names the agent that wrote a message. The
+custom message `agent-transfer` (`AgentTransferDetails`, `isAgentTransferMessage`) records one accepted
+transfer with a stable ID, from/to agent names and reason. Ordinary chats carry none of them. This is a
+different contract from `chat-handoff`, which continues a chat in another workspace.
+
 The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction, call and revision ownership, and remain visible on reply failure. Queue entries have stable IDs, pending/staged admission state and an optional retained error; admitted input appears in the transcript under the same ID. Queue mutation addresses IDs, never mutable positions. Compaction uses an operation ID and keeps the full transcript. Advanced tool execution remains assigned to stage 3. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## Responsibility

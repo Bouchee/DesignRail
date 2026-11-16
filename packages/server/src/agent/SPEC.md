@@ -425,6 +425,87 @@ failure publication and fix delivery. Browser/live tests check user controls, re
 Wrong: count a package rename or a directly invoked factory as proof of product integration.
 Correct: trace host startup and UI admission through SDK dispatch to a persisted effect and cleanup.
 
+## SDK Handoffs
+
+A Handoff transfers the current conversation to another declared agent inside the same session,
+Runner and `PersistentSession`. It is distinct from `Agent.asTool` delegation: a child returns its
+report to its parent, while an accepted Handoff target answers the next user input itself.
+
+`handoffGraph.ts` owns the declarative graph. Sources are the personal `<dataDir>/handoffs.json` and the
+trusted project `<cwd>/.raildesign/handoffs.json`; a trusted project document replaces the personal one
+as a whole. An absent document supplies no Handoffs. A present malformed document is an error and does
+not fall back to another source. Untrusted project resources never supply a graph or its definitions;
+the project-trust inventory lists the file as `handoffs`. Discovery grants no edge and there is no
+default graph. Example:
+
+```json
+{
+  "version": 1,
+  "rootTargets": ["analyst"],
+  "agents": [
+    { "definition": "analyst", "targets": ["builder", "$root"], "history": "all" },
+    { "definition": "builder", "targets": ["$root"], "history": "without_tools" }
+  ]
+}
+```
+
+Each node names an existing agent definition and declares its outgoing edges and history policy.
+`$root` is the reserved chat agent (`RailDesign`); it is not a definition. The resolver rejects unknown
+keys/versions/policies, duplicate or reserved nodes, the chat agent's name, self or repeated edges,
+undeclared targets, missing definitions and nodes unreachable from root. Cycles are allowed and share
+the root run's `maxTurns`. Composition rejects generated transfer tool names that collide with
+another tool of the same agent before any model call.
+
+`history` selects the model-visible view for the current agent; it is history selection, not redaction.
+`all` keeps the admitted input. `without_tools` (`withoutToolHistory`) removes function call/result pairs
+whose call the current agent did not make in this run, the reasoning that opens such a call, and
+`summary_*` items whose receipt is not `toolFree`. Its own current-run exchanges are kept by call ID from
+the public `RunState.toJSON().generatedItems` attribution, so pairs stay complete. One implementation runs
+in the shared `callModelInputFilter` at every model request: after a transfer, on the next run
+admission, after an approval resume and with summaries in history. The SDK handoff `inputFilter` is not
+used: it replaces the run continuation for every later agent of the run, so an `all` agent after a
+`without_tools` agent would lose history, and the 0.21.0 `removeAllTools` helper is not exported by
+`@openai/agents`. `PersistentSession.history`, effects and the transcript keep every record. A summary
+receipt records `toolFree` when its prefix has no tool records and no tool-derived earlier summary;
+an absent value is not proof, so restricted views omit that summary.
+
+`createSession` captures the resolved graph (definition data, edges, policies and source) for root
+chats into `SessionRecord.handoffs` with `activeNode: "$root"` and an empty transfer list. Children,
+review children and chats created without a graph have no `handoffs` field and stay ordinary. Every
+graph build and every transfer recompares the current resolution under current trust with that
+snapshot; drift, removal or revoked trust fails the run before any model request or effect. The
+snapshot is never replaced underneath a stored continuation; the user restores configuration or
+starts a new chat.
+
+`buildSessionGraph` builds every node over the same run grant and connects public SDK `handoff()`
+objects with a validated `{ reason }` input. Destination and authority come only from the configured
+edge. Targets use their definition instructions, tool and Skill allowlists, extension opt-in and
+model resolution; they never receive the child BRIDGE prompt, workspace actions, child management
+or MCP. Only non-interactive children lose the question tool. Delegated and review children have no
+Handoffs.
+
+`onHandoff` rechecks the run grant, current owner, declared edge and graph identity, then records
+only a provisional transfer. The SDK emits the target's synchronous `agent_start` before its model
+request; that listener rechecks authority and commits `activeNode` plus the transfer record
+`{id,runId,from,to,reason,timestamp}` through the synchronous Session update. A write failure or a
+late callback after Stop throws there, so the target never runs. `callModelInputFilter`, dynamic
+instructions and `agent_tool_start` reject an agent that is not the committed owner. A failed target
+remains the owner; Stop does not change it. The next prompt and drained queue input start at
+`activeNode`.
+
+The same write appends the transcript row `custom/agent-transfer` (`AgentTransferDetails`: transfer ID,
+from/to agent names, reason) and advances `eventSeq`; its `message_end` and the new state are published only
+after that write. Record validation rejects a transfer row without its receipt. `visibleState` derives
+`SessionState.activeAgent` from `activeNode` (root is `RailDesign`), so live state, summaries and reopen
+agree. Assistant text, reasoning and tool-call messages carry `agent` from the SDK item or the
+`agent_updated_stream_event` author; ordinary chats carry neither field. Handoff call/output items are
+shown only through the transfer row. A target's approval title starts with its node name.
+
+Pending approvals, questions and decisions store the originating `agentNode`. Recovery rebuilds the
+full graph and passes the root agent to `RunState.fromString`, so every reachable agent resolves by
+its unique name. The restored current agent and each interruption must match the saved owner and
+node; a mismatch fails before continuation and completed effects never replay.
+
 ## DeepSeek web access
 
 `webAccess.ts` owns the separate DeepSeek key and the Search/Fetch clients.

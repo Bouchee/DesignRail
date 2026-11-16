@@ -17,11 +17,16 @@ import type {
 	TranscriptMessage,
 	WireModel,
 } from "@thinkrail/contracts";
-import { isPlanReviewOutput } from "@thinkrail/contracts";
+import {
+	AGENT_TRANSFER_CUSTOM_TYPE,
+	isAgentTransferMessage,
+	isPlanReviewOutput,
+} from "@thinkrail/contracts";
 import { z } from "zod";
 import { logger } from "../log";
 import { dataDir } from "../persistence";
 import type { AgentDefinition } from "./childDefinitions";
+import { HANDOFF_ROOT, type HandoffGraphSnapshot, handoffTargets } from "./handoffGraph";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
 const log = logger("agent");
@@ -59,6 +64,8 @@ export interface SummaryReceipt {
 	sourceRevision: number;
 	beforeTokens: number;
 	afterTokens: number;
+	/** The summarized prefix had no tool records; absent means not proven, so restricted views omit it. */
+	toolFree?: boolean | undefined;
 	usage?:
 		| { input: number; output: number; cacheRead: number; cacheWrite: number; total: number }
 		| undefined;
@@ -82,9 +89,25 @@ export interface ChildRunRecord {
 	abortReason?: string | undefined;
 }
 
+export interface HandoffTransferRecord {
+	id: string;
+	runId: string;
+	from: string;
+	to: string;
+	reason: string;
+	timestamp: number;
+}
+
+export interface SessionHandoffs {
+	graph: HandoffGraphSnapshot;
+	activeNode: string;
+	transfers: HandoffTransferRecord[];
+}
+
 export interface SessionRecord {
 	version: 2;
 	childRun?: ChildRunRecord | undefined;
+	handoffs?: SessionHandoffs | undefined;
 	sessionId: string;
 	workspaceId: string;
 	cwd: string;
@@ -104,7 +127,9 @@ export interface SessionRecord {
 	state: SessionState;
 	updatedAt: number;
 	modelContextTokens?: number | undefined;
-	pendingApproval?: { request: ApprovalRequest; checkpoint: string } | undefined;
+	pendingApproval?:
+		| { request: ApprovalRequest; checkpoint: string; agentNode?: string | undefined }
+		| undefined;
 	pendingToolResponse?:
 		| {
 				id: string;
@@ -115,6 +140,7 @@ export interface SessionRecord {
 				toolName: string;
 				args: Record<string, unknown>;
 				checkpoint: string;
+				agentNode?: string | undefined;
 		  }
 		| undefined;
 	toolResponses: Record<
@@ -138,10 +164,12 @@ export interface SessionRecord {
 			value: boolean;
 			selection?: string | null | undefined;
 			policyFingerprint?: string | undefined;
+			agentNode?: string | undefined;
 		}
 	>;
 }
 
+const AGENT_TRANSFER: string = AGENT_TRANSFER_CUSTOM_TYPE;
 const idSchema = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/);
 const thinkingSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh"]);
 const textSchema = z.object({
@@ -192,6 +220,7 @@ const transcriptSchema = z.discriminatedUnion("role", [
 			stopReason: z.enum(["stop", "length", "toolUse", "error", "aborted"]),
 			errorMessage: z.string().optional(),
 			planReview: z.custom((value) => value === undefined || isPlanReviewOutput(value)).optional(),
+			agent: z.string().min(1).optional(),
 		})
 		.refine((message) => message.planReview === undefined || message.stopReason === "stop"),
 	messageBase.extend({
@@ -264,6 +293,63 @@ const stateSchema = z.object({
 	queuedCount: z.number().int().nonnegative(),
 	backgroundWork: z.boolean(),
 });
+const definitionSchema = z.object({
+	name: z.string().min(1),
+	description: z.string(),
+	source: z.enum(["builtin", "personal", "project"]),
+	filePath: z.string().optional(),
+	tools: z.array(z.string()).optional(),
+	model: z.string().optional(),
+	thinking: thinkingSchema.optional(),
+	maxTurns: z.number().int().positive().optional(),
+	inheritProjectContext: z.boolean().optional(),
+	skills: z.array(z.string()).optional(),
+	extensions: z.boolean().optional(),
+	systemPrompt: z.string(),
+});
+const handoffsSchema = z
+	.strictObject({
+		graph: z.strictObject({
+			version: z.literal(1),
+			source: z.strictObject({
+				scope: z.enum(["personal", "project"]),
+				path: z.string().min(1),
+			}),
+			rootTargets: z.array(z.string().min(1)).min(1),
+			nodes: z.array(
+				z.strictObject({
+					definition: definitionSchema.strict(),
+					targets: z.array(z.string().min(1)),
+					history: z.enum(["all", "without_tools"]),
+				}),
+			),
+		}),
+		activeNode: z.string().min(1),
+		transfers: z.array(
+			z.strictObject({
+				id: z.string().min(1),
+				runId: z.string().min(1),
+				from: z.string().min(1),
+				to: z.string().min(1),
+				reason: z.string(),
+				timestamp: z.number().finite(),
+			}),
+		),
+	})
+	.refine(
+		({ graph, activeNode, transfers }) => {
+			const known = (node: string) => handoffTargets(graph, node) !== undefined;
+			return (
+				known(activeNode) &&
+				transfers.every(
+					(transfer) =>
+						known(transfer.from) && handoffTargets(graph, transfer.from)?.includes(transfer.to),
+				) &&
+				(transfers.at(-1)?.to ?? HANDOFF_ROOT) === activeNode
+			);
+		},
+		{ message: "Invalid Handoff ownership record" },
+	);
 const recordSchema = z
 	.object({
 		version: z.literal(2),
@@ -275,20 +361,7 @@ const recordSchema = z
 				reviewOutput: z.object({ runId: idSchema, messageId: idSchema }).optional(),
 				toolCallId: z.string().min(1),
 				task: z.string(),
-				definition: z.object({
-					name: z.string().min(1),
-					description: z.string(),
-					source: z.enum(["builtin", "personal", "project"]),
-					filePath: z.string().optional(),
-					tools: z.array(z.string()).optional(),
-					model: z.string().optional(),
-					thinking: thinkingSchema.optional(),
-					maxTurns: z.number().int().positive().optional(),
-					inheritProjectContext: z.boolean().optional(),
-					skills: z.array(z.string()).optional(),
-					extensions: z.boolean().optional(),
-					systemPrompt: z.string(),
-				}),
+				definition: definitionSchema,
 				enabledExtensions: z.array(
 					z.object({ name: z.string(), settings: z.record(z.string(), z.boolean()) }),
 				),
@@ -301,6 +374,7 @@ const recordSchema = z
 				abortReason: z.string().optional(),
 			})
 			.optional(),
+		handoffs: handoffsSchema.optional(),
 		sessionId: idSchema,
 		workspaceId: z.string().min(1),
 		cwd: z.string().min(1),
@@ -330,6 +404,7 @@ const recordSchema = z
 				sourceRevision: z.number().int().nonnegative(),
 				beforeTokens: z.number().int().nonnegative(),
 				afterTokens: z.number().int().nonnegative(),
+				toolFree: z.boolean().optional(),
 				usage: z
 					.object({
 						input: z.number().int().nonnegative(),
@@ -372,7 +447,13 @@ const recordSchema = z
 			.custom<SessionRecord["pendingApproval"]>(
 				(v) =>
 					v === undefined ||
-					z.object({ request: approvalSchema, checkpoint: z.string() }).safeParse(v).success,
+					z
+						.object({
+							request: approvalSchema,
+							checkpoint: z.string(),
+							agentNode: z.string().min(1).optional(),
+						})
+						.safeParse(v).success,
 			)
 			.optional(),
 		pendingToolResponse: z
@@ -385,6 +466,7 @@ const recordSchema = z
 				toolName: z.string(),
 				args: z.record(z.string(), z.unknown()),
 				checkpoint: z.string(),
+				agentNode: z.string().min(1).optional(),
 			})
 			.optional(),
 		toolResponses: z.record(
@@ -415,6 +497,7 @@ const recordSchema = z
 				value: z.boolean(),
 				selection: z.string().nullable().optional(),
 				policyFingerprint: z.string().optional(),
+				agentNode: z.string().min(1).optional(),
 			}),
 		),
 	})
@@ -433,6 +516,19 @@ const recordSchema = z
 			);
 		},
 		{ message: "Invalid committed Plan review binding" },
+	)
+	.refine(
+		(record) =>
+			record.messages.every(
+				(message) =>
+					message.role !== "custom" ||
+					message.customType !== AGENT_TRANSFER ||
+					(isAgentTransferMessage(message) &&
+						!!record.handoffs?.transfers.some(
+							(transfer) => transfer.id === message.details.transferId,
+						)),
+			),
+		{ message: "A transfer row has no Handoff receipt" },
 	);
 
 export function sessionRecordPath(sessionId: string, directory = dataDir()): string {

@@ -1,6 +1,7 @@
 import type { AgentSettlement, TranscriptMessage } from "@thinkrail/contracts";
 import {
 	customMessageText,
+	isAgentTransferMessage,
 	isBackgroundCommandCompletionMessage,
 	isChatHandoffMessage,
 	isContinueInWorkspaceRequestMessage,
@@ -105,6 +106,14 @@ export function messagesToRuntime(
 			turnId = transcriptTurnId(message, index, options);
 			turns.push({
 				kind: "continuationRequest",
+				id: turnId,
+				details: message.details,
+				timestamp: message.timestamp,
+			});
+		} else if (isAgentTransferMessage(message)) {
+			turnId = transcriptTurnId(message, index, options);
+			turns.push({
+				kind: "agentTransfer",
 				id: turnId,
 				details: message.details,
 				timestamp: message.timestamp,

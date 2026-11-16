@@ -1,4 +1,5 @@
 import {
+	type AgentTransferDetails,
 	assistantToolCallsAreExecutable,
 	type BackgroundCommandCompletionDetails,
 	type ChatHandoffDetails,
@@ -63,12 +64,13 @@ export type ChatRow =
 			maxAttempts: number;
 			delayMs: number;
 	  }
-	| { kind: "markdown"; id: string; text: string; planReview?: PlanReviewOutput }
+	| { kind: "markdown"; id: string; text: string; planReview?: PlanReviewOutput; agent?: string }
 	| { kind: "backgroundCommandCompletion"; id: string; details: BackgroundCommandCompletionDetails }
 	| { kind: "subagentCompletion"; id: string; details: SubagentCompletionDetails; text: string }
 	| { kind: "reviewFix"; id: string; details: ReviewFixDetails; text: string }
 	| { kind: "continuationRequest"; id: string; details: ContinueInWorkspaceRequestDetails }
 	| { kind: "handoff"; id: string; details: ChatHandoffDetails }
+	| { kind: "agentTransfer"; id: string; details: AgentTransferDetails }
 	| ({ kind: "tool"; id: string } & ToolCallData)
 	| {
 			kind: "activity";
@@ -211,7 +213,12 @@ export function deriveRows(
 					}
 					if (block.text.trim().length === 0) continue;
 					flushRun();
-					rows.push({ kind: "markdown", id: `${turn.id}:text:${b}`, text: block.text });
+					rows.push({
+						kind: "markdown",
+						id: `${turn.id}:text:${b}`,
+						text: block.text,
+						...(message.agent ? { agent: message.agent } : {}),
+					});
 				} else if (block.type === "toolCall") {
 					const data: ToolCallData = {
 						toolCallId: block.id,
@@ -302,6 +309,9 @@ export function deriveRows(
 					break;
 				case "handoff":
 					rows.push({ kind: "handoff", id: turn.id, details: turn.details });
+					break;
+				case "agentTransfer":
+					rows.push({ kind: "agentTransfer", id: turn.id, details: turn.details });
 					break;
 			}
 		}

@@ -194,6 +194,19 @@ control message. `chats.spec.ts` checks the repository picker and cancellation w
 `continuation-state.spec.ts` mounts saved cards, restores completed links through the actual status
 handler, and checks lost-operation Retry sends the source workspace and target project; only that retry
 reply is held by the test, so the no-agent suite cannot start a model.
+`agent-handoffs.spec.ts` seeds a stored SDK Handoff chat (graph snapshot, accepted owner, transfer
+receipt and row, attributed messages) and checks the transfer row, the current-handler indicator and
+message authorship before and after refresh. It starts no model; live transfer, authorship and
+live/restored agreement are host and store unit tests, and provider evidence is a separate live gate.
+`agent-handoffs.live.spec.ts` is that gate: through `e2e:agent` only (retries zero), it seeds a fictitious
+`analyst` definition and a personal `handoffs.json`, launches restart-isolated `dev.ts` with the test-only
+`handoffAdmission.ts` preload, and checks root -> analyst SDK transfer, the analyst's attributed answer, a
+second turn kept by the analyst without a new transfer, and the same handler/transfer/authorship after
+refresh. The preload sets the shared retry owner to zero retries for that host and reserves every outgoing
+fetch in `RAILDESIGN_HANDOFF_LEDGER` (`request_cap` 8, `batch_start` 0, phase from the spec) before
+transport; a request past the cap, an unexpected request or a failed response is refused and stops the run.
+The spec requires three remaining requests before starting and writes response IDs and counts to
+`RAILDESIGN_HANDOFF_RESULT`.
 The resource probe in `mcp-approval.live.spec.ts` calls the three resource tools against the same owned
 stdio fixture, then checks the stored result and browser state after refresh. Transport and access
 removal regressions use local stdio and HTTP servers in the unit suite.

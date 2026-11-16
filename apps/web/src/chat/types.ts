@@ -1,4 +1,5 @@
 import type {
+	AgentTransferDetails,
 	AssistantMessage,
 	BackgroundCommandCompletionDetails,
 	ChatHandoffDetails,
@@ -57,6 +58,7 @@ export type ChatTurn =
 			timestamp: number;
 	  }
 	| { kind: "handoff"; id: string; details: ChatHandoffDetails; timestamp: number }
+	| { kind: "agentTransfer"; id: string; details: AgentTransferDetails; timestamp: number }
 	| {
 			kind: "retry";
 			id: string;
