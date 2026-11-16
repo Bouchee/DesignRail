@@ -81,7 +81,7 @@ async function hostAgent() {
 		name: "Plan reviewer",
 		outputType: planReviewOutput,
 		model: createConfiguredModel(model, "owned-review-fixture"),
-		modelSettings: { ...responsesClientSettings, maxTokens: 512 },
+		modelSettings: { ...responsesClientSettings, maxTokens: 512, retry: { maxRetries: 0 } },
 		tools: [
 			tool({
 				name: "read",

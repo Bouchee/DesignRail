@@ -6,6 +6,7 @@ import { Agent, type RunContext, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
+	modelError,
 	modelResponder,
 	modelResponse,
 	ScriptedModel,
@@ -162,16 +163,25 @@ for (const maxTurns of [undefined, 3]) {
 	});
 }
 
-test("SDK foreground child returns its report, transcript and owned resource without a visible chat", async () => {
+test("SDK foreground child retries a transient model failure and returns its report, transcript and owned resource without a visible chat", async () => {
 	writeFileSync(join(cwd, "fixture.txt"), "fixture bytes");
 	const parent = new ScriptedModel([agentCall(), done("parent complete")]);
 	const child = new ScriptedModel([
 		call("read", { path: "fixture.txt" }, "child-read"),
+		modelError(
+			Object.assign(new Error("HTTP 503"), {
+				status: 503,
+				headers: new Headers({ "retry-after-ms": "1" }),
+			}),
+		),
 		done("CHILD_REPORT"),
 	]);
 	const created = await createSession({ cwd, workspaceId: "workspace" });
 	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
 	await promptSession(created.sessionId, "Delegate the task");
+	expect(child.calls).toHaveLength(3);
+	for (const { request } of [...parent.calls, ...child.calls])
+		expect(request.modelSettings.retry?.maxRetries).toBe(5);
 	const record = readSessionRecord(created.sessionId);
 	expect(record?.state.completion?.outcome).toBe("succeeded");
 	const result = record?.messages.find(
@@ -258,6 +268,69 @@ test("foreground child approval restores the same interaction after host restart
 	expect(readFileSync(join(cwd, "foreground-once.txt"), "utf8")).toBe("x");
 	parent.assertComplete();
 	child.assertComplete();
+});
+
+test("invalid child-agent input returns an error result without starting a child", async () => {
+	const parent = new ScriptedModel([
+		call("Agent", { subagent_type: 5, task: "" }, "invalid-agent"),
+		done("parent complete"),
+	]);
+	const child = new ScriptedModel([]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	await promptSession(created.sessionId, "Delegate invalid work");
+	expect(
+		readSessionRecord(created.sessionId)?.messages.find(
+			(message) => message.role === "toolResult" && message.toolCallId === "invalid-agent",
+		),
+	).toMatchObject({ isError: true });
+	expect(child.calls).toHaveLength(0);
+	expect((await sessionResources("workspace", created.sessionId)).subagents).toHaveLength(0);
+	parent.assertComplete();
+});
+
+test("child agents disabled during a parent approval cannot start after it resumes", async () => {
+	const parent = new ScriptedModel([
+		call("bash", { command: "printf ok > approved.txt", timeoutMs: 1000 }, "parent-bash"),
+		agentCall(),
+		done("must not finish"),
+	]);
+	const child = new ScriptedModel([done("CHILD_REPORT")]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	const running = promptSession(created.sessionId, "Run then delegate");
+	await until(() => getSessionState(created.sessionId).needsInput?.kind === "dialog");
+	const pending = getSessionState(created.sessionId).needsInput;
+	if (pending?.kind !== "dialog") throw new Error("Missing approval");
+	saveConfig({ ...loadConfig(), subagentsEnabled: false });
+	approve(pending.request);
+	await running;
+	expect(readFileSync(join(cwd, "approved.txt"), "utf8")).toBe("ok");
+	expect(JSON.stringify(parent.calls[1]?.request.tools)).not.toContain('"Agent"');
+	expect(child.calls).toHaveLength(0);
+	expect(getSessionState(created.sessionId).completion?.outcome).toBe("failed");
+	expect((await sessionResources("workspace", created.sessionId)).subagents).toHaveLength(0);
+});
+
+test("child agents disabled before a restored foreground child approval cannot run the child effect", async () => {
+	const parent = new ScriptedModel([agentCall(), done("parent complete")]);
+	const child = new ScriptedModel([
+		call("bash", { command: "printf x >> disabled-child.txt", timeoutMs: 1000 }, "child-bash"),
+		done("child complete"),
+	]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	setExtUiPublisher(() => {});
+	const running = promptSession(created.sessionId, "Delegate the task");
+	await until(() => getSessionState(created.sessionId).needsInput?.kind === "dialog");
+	await removeSession(created.sessionId);
+	await running;
+	saveConfig({ ...loadConfig(), subagentsEnabled: false });
+	await getSessionMessages(created.sessionId, "workspace", cwd);
+	expect(getSessionState(created.sessionId).needsInput).toBeNull();
+	expect(getSessionState(created.sessionId).completion?.outcome).toBe("failed");
+	expect(existsSync(join(cwd, "disabled-child.txt"))).toBe(false);
+	expect(child.calls).toHaveLength(1);
 });
 
 test("foreground approval usage counts each model response once in both transcripts", async () => {

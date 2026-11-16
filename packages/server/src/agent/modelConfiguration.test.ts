@@ -160,7 +160,77 @@ test("one-shot assistance uses the same SDK model and fails explicitly without c
 	expect(result.text).toBe("one-shot answer");
 	expect(result.model.id).toBe("deepseek-v4.1-flash");
 	expect(model.firstCall?.request.modelSettings.maxTokens).toBe(64);
+	expect(model.firstCall?.request.modelSettings.retry?.maxRetries).toBe(5);
 	model.assertComplete();
+});
+
+test("only the SDK retries transient provider responses; other client errors fail at once", async () => {
+	await saveCustomEndpoint(draft());
+	let requests = 0;
+	const mockedFetch = spyOn(globalThis, "fetch").mockImplementation(
+		offlineFetch(() => {
+			requests++;
+			if (requests === 1)
+				return Response.json(
+					{ error: { message: "status 503" } },
+					{ status: 503, headers: { "retry-after-ms": "1" } },
+				);
+			if (requests === 3)
+				return Response.json({ error: { message: "status 400" } }, { status: 400 });
+			return Response.json({
+				id: "retried-response",
+				object: "response",
+				created_at: 1,
+				status: "completed",
+				model: "deepseek-v4.1-flash",
+				output: [
+					{
+						id: "retried-message",
+						type: "message",
+						role: "assistant",
+						status: "completed",
+						content: [{ type: "output_text", text: "after retry", annotations: [] }],
+					},
+				],
+				usage: {
+					input_tokens: 1,
+					output_tokens: 1,
+					total_tokens: 2,
+					input_tokens_details: { cached_tokens: 0 },
+					output_tokens_details: { reasoning_tokens: 0 },
+				},
+			});
+		}),
+	);
+	try {
+		expect((await completeOnce({ prompt: "retry" })).text).toBe("after retry");
+		expect(requests).toBe(2);
+		await expect(completeOnce({ prompt: "reject" })).rejects.toThrow("400");
+		expect(requests).toBe(3);
+	} finally {
+		mockedFetch.mockRestore();
+	}
+});
+
+test("retry-after hints are capped and do not make other statuses retryable", async () => {
+	const policy = responsesClientSettings.retry.policy;
+	const context = (statusCode: number, retryAfterMs?: number) => ({
+		error: new Error(`status ${statusCode}`),
+		attempt: 1,
+		maxRetries: 5,
+		stream: false,
+		normalized: {
+			statusCode,
+			...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+			isNetworkError: false,
+			isAbort: false,
+		},
+	});
+	expect(await policy(context(429, 3_600_000))).toEqual({ retry: true, delayMs: 16000 });
+	expect(await policy(context(503, 1))).toEqual({ retry: true, delayMs: 1 });
+	expect(await policy(context(503))).toEqual({ retry: true });
+	expect(await policy(context(403, 1000))).toBe(false);
+	expect(await policy(context(400))).toBe(false);
 });
 
 test("outbound SDK requests identify RailDesign and retain the application conversation independently of credentials", async () => {

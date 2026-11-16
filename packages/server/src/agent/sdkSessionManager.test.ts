@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -15,16 +15,20 @@ import { Agent, applyDiff, tool, Usage } from "@openai/agents";
 import {
 	assistantMessage,
 	functionCall,
+	modelError,
 	modelResponder,
 	modelResponse,
+	modelStreamResponder,
 	ScriptedModel,
 } from "@openai/agents/testing";
 import type { ExtUiRequest, ExtUiResponse, SessionEventPayload } from "@thinkrail/contracts";
 import { TODO_NUDGE_PREFIX } from "@thinkrail/contracts";
 import { TodoStore } from "@thinkrail/todos/core";
 import { z } from "zod";
+import * as fsModule from "../fs";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
 import { resetConfigCache, updateConfig } from "../settings";
+import * as subprocessModule from "../subprocess";
 import { setTrashImplementationForTests } from "../trash";
 import { MCP_CONFIRM_CHAT, MCP_CONFIRM_CHOICES } from "./mcp";
 import { closeAllMcpConnections, setMcpProjectResolver } from "./mcpSessions";
@@ -150,6 +154,85 @@ test("a root SDK run completes more than twenty sequential tool rounds", async (
 			(message) => message.role === "toolResult" && message.toolName === "read" && !message.isError,
 		),
 	).toHaveLength(21);
+});
+
+const httpFailure = (status: number, headers: Record<string, string> = {}) =>
+	Object.assign(new Error(`HTTP ${status}`), { status, headers: new Headers(headers) });
+const transient = (retryAfterMs = "1") =>
+	modelError(httpFailure(503, { "retry-after-ms": retryAfterMs }));
+const assistantMessages = (sessionId: string) =>
+	readSessionRecord(sessionId)?.messages.filter((message) => message.role === "assistant") ?? [];
+
+test("a transient model failure is retried with the same input and the earlier tool effect runs once", async () => {
+	const model = new ScriptedModel([
+		command("effect", "printf x >> effect.txt"),
+		transient(),
+		done(),
+	]);
+	configureAgentModelFactory(() => model);
+	setExtUiPublisher((request) => {
+		if (request.kind === "confirm") resolveExtUi(approvalResponse(request, true));
+	});
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	await promptSession(sessionId, "Run the command");
+	expect(model.calls).toHaveLength(3);
+	expect(model.calls[2]?.request.input).toEqual(model.calls[1]?.request.input);
+	for (const call of model.calls) expect(call.request.modelSettings.retry?.maxRetries).toBe(5);
+	expect(readFileSync(join(worktree, "effect.txt"), "utf8")).toBe("x");
+	expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+	expect(assistantMessages(sessionId).filter((message) => message.errorMessage)).toEqual([]);
+	expect(assistantMessages(sessionId).at(-1)).toMatchObject({
+		content: [{ type: "text", text: "done" }],
+	});
+	model.assertComplete();
+});
+
+test("model retries stop after five transient failures and settle the turn once with the error", async () => {
+	const model = new ScriptedModel(Array.from({ length: 6 }, () => transient()));
+	configureAgentModelFactory(() => model);
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	await promptSession(sessionId, "Fail repeatedly");
+	expect(model.calls).toHaveLength(6);
+	expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+	expect(assistantMessages(sessionId)).toEqual([
+		expect.objectContaining({ stopReason: "error", errorMessage: "HTTP 503" }),
+	]);
+	model.assertComplete();
+});
+
+test("non-transient model failures and failures after streamed output are not retried", async () => {
+	for (const failure of [
+		modelError(httpFailure(400)),
+		modelStreamResponder(async function* () {
+			yield { type: "output_text_delta" as const, delta: "partial" };
+			throw httpFailure(503);
+		}),
+	]) {
+		const model = new ScriptedModel([failure]);
+		configureAgentModelFactory(() => model);
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		await promptSession(sessionId, "Fail once");
+		expect(model.calls).toHaveLength(1);
+		expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+		expect(assistantMessages(sessionId)).toHaveLength(1);
+		model.assertComplete();
+	}
+});
+
+test("Stop during model retry backoff ends the turn without another request", async () => {
+	const model = new ScriptedModel([transient("60000")]);
+	configureAgentModelFactory(() => model);
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	const started = Date.now();
+	const running = promptSession(sessionId, "Wait for the provider");
+	while (model.calls.length === 0) await Bun.sleep(5);
+	await Bun.sleep(20);
+	await abortSession(sessionId);
+	await running;
+	expect(Date.now() - started).toBeLessThan(5000);
+	expect(model.calls).toHaveLength(1);
+	expect(getSessionState(sessionId).completion?.outcome).toBe("cancelled");
+	model.assertComplete();
 });
 
 test("SDK web tools keep renderer metadata in restored transcripts and readable text in model history", async () => {
@@ -494,6 +577,66 @@ test("tool failure status follows actual execution and preserves successful erro
 		else expect(readSessionRecord(created.sessionId)?.effects[callId]).toBeUndefined();
 	}
 	model.assertComplete();
+});
+
+test("invalid input to each effectful tool factory returns an error result without running its executor", async () => {
+	const workspaceHost = {
+		start: mock(() => Promise.reject(new Error("must not start"))),
+		status: mock(async () => "must not report"),
+	};
+	setWorkspaceToolsHost(workspaceHost);
+	// An admitted Skill makes skill_read/skill_search succeed if their executors run.
+	mkdirSync(join(root, "data/skills/probe"), { recursive: true });
+	writeFileSync(
+		join(root, "data/skills/probe/SKILL.md"),
+		"---\nname: probe\ndescription: Probe procedure\n---\nProbe body.",
+	);
+	const reads = spyOn(fsModule, "readFile");
+	const processes = spyOn(subprocessModule, "runBounded");
+	const invalid: [string, unknown][] = [
+		["read", { path: "" }],
+		["search", { query: "" }],
+		["bash", { command: "printf leak > bash-leak.txt", timeoutMs: "fast" }],
+		["apply_patch", { path: "patch-leak.txt", diff: "+leak\n", original: 5 }],
+		["skill_read", { name: "probe", path: 5 }],
+		["skill_search", { query: "probe", limit: 0 }],
+		["start_workspace", { prompt: "", project: 5 }],
+		["workspace_status", { workspaces: "all" }],
+	];
+	const model = new ScriptedModel([
+		modelResponse(
+			invalid.map(([name, args]) =>
+				functionCall(name, args as Record<string, unknown>, { callId: `invalid-${name}` }),
+			),
+		),
+		done(),
+	]);
+	configureAgentModelFactory(() => model);
+	setExtUiPublisher((request) => {
+		if (request.kind === "confirm") resolveExtUi(approvalResponse(request, true));
+	});
+	try {
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		await promptSession(sessionId, "Call every tool with invalid input");
+		const results = readSessionRecord(sessionId)?.messages.filter(
+			(message) => message.role === "toolResult",
+		);
+		for (const [name] of invalid)
+			expect(results?.find((message) => message.toolCallId === `invalid-${name}`)).toMatchObject({
+				isError: true,
+			});
+		expect(reads).not.toHaveBeenCalled();
+		expect(processes).not.toHaveBeenCalled();
+		expect(workspaceHost.start).not.toHaveBeenCalled();
+		expect(workspaceHost.status).not.toHaveBeenCalled();
+		expect(existsSync(join(worktree, "bash-leak.txt"))).toBe(false);
+		expect(existsSync(join(worktree, "patch-leak.txt"))).toBe(false);
+		expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+		model.assertComplete();
+	} finally {
+		reads.mockRestore();
+		processes.mockRestore();
+	}
 });
 
 test("a model key referenced by an arbitrary environment name is not inherited by commands", async () => {
@@ -1113,8 +1256,12 @@ test("Stop preserves pending followups for editing and withdraws by stable input
 	expect(model.calls).toHaveLength(1);
 	expect(existsSync(join(worktree, "forbidden.txt"))).toBe(false);
 });
-test("closing and reattaching a pending approval rebuilds executors and executes the same call once", async () => {
-	const model = new ScriptedModel([command("durable", "printf once >> once.txt"), done()]);
+test("closing and reattaching a pending approval rebuilds executors, keeps model retry and executes the same call once", async () => {
+	const model = new ScriptedModel([
+		command("durable", "printf once >> once.txt"),
+		transient(),
+		done(),
+	]);
 	configureAgentModelFactory(() => model);
 	const ready = latch();
 	let card: ExtUiRequest | undefined;
@@ -1151,6 +1298,10 @@ test("closing and reattaching a pending approval rebuilds executors and executes
 	}
 	expect(readFileSync(join(worktree, "once.txt"), "utf8")).toBe("once");
 	expect(readSessionRecord(sessionId)?.effects.durable).toMatchObject({ status: "completed" });
+	expect(model.calls.slice(1).map((call) => call.request.modelSettings.retry?.maxRetries)).toEqual([
+		5, 5,
+	]);
+	expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
 	resolveExtUi(approvalResponse(card, true));
 	expect(readFileSync(join(worktree, "once.txt"), "utf8")).toBe("once");
 	model.assertComplete();
@@ -1173,6 +1324,7 @@ test("manual summary uses the configured SDK model and successful replay makes n
 	const before = readSessionRecord(sessionId);
 	const usageBefore = getSessionStats(sessionId).tokens;
 	await compactSession(sessionId, { operationId: "summary" });
+	expect(model.calls[2]?.request.modelSettings.retry?.maxRetries).toBe(5);
 	expect(getSessionStats(sessionId).tokens.input).toBe(usageBefore.input + 100);
 	expect(getSessionStats(sessionId).tokens.output).toBe(usageBefore.output + 20);
 	const compacted = readSessionRecord(sessionId);

@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Model, OpenAIResponsesModel } from "@openai/agents";
+import {
+	type Model,
+	type ModelSettings,
+	OpenAIResponsesModel,
+	retryPolicies,
+} from "@openai/agents";
 import type {
 	CustomEndpoint,
 	CustomEndpointDraft,
@@ -38,9 +43,28 @@ const VERIFIED_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 const VERIFIED_MODEL = "deepseek-v4.1-flash";
 const VERIFIED_CONTEXT_WINDOW = 1_000_000;
 const CLIENT_USER_AGENT = "RailDesign/0.1";
+const MAX_RETRY_DELAY_MS = 16000;
+const transientFailure = retryPolicies.any(
+	retryPolicies.networkError(),
+	retryPolicies.httpStatus([408, 409, 429, 500, 502, 503, 504]),
+);
 export const responsesClientSettings = {
 	providerData: { extra_headers: { "User-Agent": CLIENT_USER_AGENT } },
-};
+	retry: {
+		maxRetries: 5,
+		backoff: { initialDelayMs: 1000, multiplier: 2, maxDelayMs: MAX_RETRY_DELAY_MS, jitter: true },
+		async policy(context) {
+			const decision = await transientFailure(context);
+			const hinted = context.normalized.retryAfterMs;
+			if (decision === false || (typeof decision === "object" && !decision.retry)) return decision;
+			if (hinted === undefined) return decision;
+			return {
+				...(typeof decision === "object" ? decision : { retry: true }),
+				delayMs: Math.min(hinted, MAX_RETRY_DELAY_MS),
+			};
+		},
+	},
+} satisfies ModelSettings;
 
 let publishModels: (() => void) | null = null;
 let publishListings: (() => void) | null = null;

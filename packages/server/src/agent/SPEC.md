@@ -482,6 +482,19 @@ Function factories use `errorFunction: null` so SDK validation and executor fail
 
 Factory service contracts carry current grants and owned application services, without a second failure callback. `sdkSessionManager.test.ts` covers invalid Skill and workspace arguments, malformed Todo/Spec JSON, nonzero commands, successful error-shaped text, and Stop during executing tools.
 
+## SDK model retry and kept tool defaults
+
+`responsesClientSettings.retry` is the only model retry owner, so root, child, summary and one-shot runs share it. A restored run rebuilds the agent and receives the runtime-only policy again. It allows five retries with exponential backoff (1 s start, ×2, 16 s cap, jitter) for network errors, HTTP 408/409/429/500/502/503/504. A provider retry-after hint sets the delay but is capped at 16 s, because the SDK otherwise waits the full hint (an hour-long quota hint would hang the turn); a hint alone does not make another status retryable. The OpenAI client keeps `maxRetries: 0`, so one owner counts attempts. The policy never sets `approveUnsafeReplay`; the SDK refuses a retry after streamed output or abort, and Stop aborts the backoff wait. After the last attempt the turn settles through the normal error record. Test-only live fixtures set `retry: { maxRetries: 0 }` to keep their request ledgers exact.
+
+These SDK defaults stay unchanged:
+
+- Tool concurrency: all calls of one turn start together; writes already wait for approval.
+- `toolNotFoundBehavior: raise_error`: a call to an unknown or disabled tool fails the run.
+- `toolNameCollisionPolicy: warn`: MCP tools use namespaced names that are checked for uniqueness.
+- No tool `outputSchema`: no consumer needs typed tool output.
+
+Direct MCP tools reject non-object arguments before transport; the MCP server validates its own input schema. A disabled subagent or MCP tool refuses an approval or fails a restored run before its effect. Tests: `sdkSessionManager.test.ts`, `sdkExecution.test.ts`, `sdkCapabilities.test.ts` and `modelConfiguration.test.ts`.
+
 ## Retained workspace actions and host notifications
 
 Top-level SDK sessions expose `start_workspace` and `workspace_status` through host-injected application

@@ -8,7 +8,7 @@ import {
 	modelResponse,
 	ScriptedModel,
 } from "@openai/agents/testing";
-import type { Project } from "@thinkrail/contracts";
+import type { ExtUiRequest, Project } from "@thinkrail/contracts";
 import { SPEC_RULE } from "@thinkrail/spec-graph";
 import { TodoStore } from "@thinkrail/todos/core";
 import { loadWorkspaces, saveWorkspaces } from "../persistence";
@@ -19,6 +19,7 @@ import {
 	reconcileMcpSessions,
 	setMcpProjectResolver,
 	setMcpToolGrantWriter,
+	setSessionMcpServerEnabled,
 } from "./mcpSessions";
 import { configureAgentModelFactory } from "./modelConfiguration";
 import {
@@ -452,3 +453,83 @@ test("SDK MCP search argument failures remain errors in the saved transcript", a
 	expect(result?.role === "toolResult" && result.isError).toBe(true);
 	expect(record?.effects["invalid-search"]?.isError).toBe(true);
 });
+
+function approveMcp(request: ExtUiRequest) {
+	if (
+		request.kind !== "select" ||
+		!request.runId ||
+		request.revision === undefined ||
+		!request.toolCallId
+	)
+		throw new Error("Missing approval ownership");
+	resolveExtUi({
+		id: request.id,
+		sessionId: request.sessionId,
+		runId: request.runId,
+		revision: request.revision,
+		toolCallId: request.toolCallId,
+		value: MCP_CONFIRM_ONCE,
+	});
+}
+
+test("malformed MCP arguments return errors without reaching the MCP server", async () => {
+	configureMcp();
+	const model = new ScriptedModel([
+		modelResponse([
+			functionCall("mcp__docs__write_note", "[1]", { callId: "malformed-note" }),
+			functionCall("read_mcp_resource", { server: "", uri: "" }, { callId: "invalid-resource" }),
+		]),
+		done(),
+	]);
+	configureAgentModelFactory(() => model);
+	setExtUiPublisher((request) => {
+		if (request.kind === "select") approveMcp(request);
+	});
+	await promptSession(sessionId, "Write a malformed note");
+	const record = readSessionRecord(sessionId);
+	for (const callId of ["malformed-note", "invalid-resource"])
+		expect(
+			record?.messages.find(
+				(message) => message.role === "toolResult" && message.toolCallId === callId,
+			),
+		).toMatchObject({ isError: true });
+	expect(existsSync(join(root, "note.txt"))).toBe(false);
+	model.assertComplete();
+});
+
+for (const moment of ["approval", "restore"] as const) {
+	test(`an MCP server disabled before ${moment} cannot run the approved call`, async () => {
+		configureMcp();
+		configureAgentModelFactory(
+			() =>
+				new ScriptedModel([call("mcp__docs__write_note", { text: "blocked" }, "blocked"), done()]),
+		);
+		const card = Promise.withResolvers<ExtUiRequest>();
+		setExtUiPublisher((request) => {
+			if (request.kind === "select") card.resolve(request);
+		});
+		const running = promptSession(sessionId, "Write the note");
+		const pending = await card.promise;
+		if (moment === "approval") {
+			await setSessionMcpServerEnabled(sessionId, "docs", false);
+			expect(() => approveMcp(pending)).toThrow("MCP trust or configuration changed");
+			await abortSession(sessionId);
+			await running;
+		} else {
+			await removeSession(sessionId);
+			await running;
+			await closeAllMcpConnections();
+			writeFileSync(join(root, "data/mcp.json"), JSON.stringify({ mcpServers: {} }));
+			await getSessionMessages(sessionId, "workspace", cwd);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+			expect(readSessionRecord(sessionId)?.pendingApproval).toBeUndefined();
+		}
+		const deadline = Date.now() + 5000;
+		while (getSessionState(sessionId).execution !== "idle") {
+			if (Date.now() > deadline) throw new Error("Run did not settle");
+			await Bun.sleep(5);
+		}
+		expect(existsSync(join(root, "note.txt"))).toBe(false);
+		expect(readSessionRecord(sessionId)?.effects.blocked?.status).not.toBe("completed");
+	});
+}
