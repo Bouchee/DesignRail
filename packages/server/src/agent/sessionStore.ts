@@ -26,7 +26,12 @@ import { z } from "zod";
 import { logger } from "../log";
 import { dataDir } from "../persistence";
 import type { AgentDefinition } from "./childDefinitions";
-import { HANDOFF_ROOT, type HandoffGraphSnapshot, handoffTargets } from "./handoffGraph";
+import {
+	assertHandoffGraphSnapshot,
+	HANDOFF_ROOT,
+	type HandoffGraphSnapshot,
+	handoffTargets,
+} from "./handoffGraph";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
 const log = logger("agent");
@@ -309,21 +314,29 @@ const definitionSchema = z.object({
 });
 const handoffsSchema = z
 	.strictObject({
-		graph: z.strictObject({
-			version: z.literal(1),
-			source: z.strictObject({
-				scope: z.enum(["personal", "project"]),
-				path: z.string().min(1),
-			}),
-			rootTargets: z.array(z.string().min(1)).min(1),
-			nodes: z.array(
-				z.strictObject({
-					definition: definitionSchema.strict(),
-					targets: z.array(z.string().min(1)),
-					history: z.enum(["all", "without_tools"]),
+		graph: z
+			.strictObject({
+				version: z.literal(1),
+				source: z.strictObject({
+					scope: z.enum(["personal", "project"]),
+					path: z.string().min(1),
 				}),
-			),
-		}),
+				rootTargets: z.array(z.string().min(1)).min(1),
+				nodes: z.array(
+					z.strictObject({
+						definition: definitionSchema.strict(),
+						targets: z.array(z.string().min(1)),
+						history: z.enum(["all", "without_tools"]),
+					}),
+				),
+			})
+			.superRefine((graph, context) => {
+				try {
+					assertHandoffGraphSnapshot(graph);
+				} catch (error) {
+					context.addIssue({ code: "custom", message: (error as Error).message });
+				}
+			}),
 		activeNode: z.string().min(1),
 		transfers: z.array(
 			z.strictObject({

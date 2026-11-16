@@ -2,6 +2,14 @@ import type { AgentInputItem } from "@openai/agents";
 import type { AutoSummaryThresholdPercent } from "@thinkrail/contracts";
 import type { PersistentSession, SummaryReceipt } from "./sessionStore";
 
+const SUMMARY_ID_PREFIX = "summary_";
+
+/** The summary operation that produced `item`, or undefined when it is not a summary message. */
+export function summaryOperationId(item: AgentInputItem): string | undefined {
+	const id = "role" in item && item.role === "user" ? item.id : undefined;
+	return id?.startsWith(SUMMARY_ID_PREFIX) ? id.slice(SUMMARY_ID_PREFIX.length) : undefined;
+}
+
 export interface CompactOptions {
 	operationId: string;
 	force: boolean;
@@ -125,7 +133,7 @@ export async function compactSession(
 		{
 			type: "message",
 			role: "user",
-			id: `summary_${operationId}`,
+			id: `${SUMMARY_ID_PREFIX}${operationId}`,
 			content: `Earlier conversation summary:\n${summary.trim()}`,
 		},
 		...recent,
@@ -135,8 +143,8 @@ export async function compactSession(
 	// Provenance for restricted history views: no tool records and no tool-derived earlier summary.
 	const toolFree = prefix.every((item) => {
 		if (item.type === "function_call" || item.type === "function_call_result") return false;
-		const id = "role" in item && item.role === "user" ? item.id : undefined;
-		return !id?.startsWith("summary_") || !!original.summaryOperations[id.slice(8)]?.toolFree;
+		const id = summaryOperationId(item);
+		return id === undefined || !!original.summaryOperations[id]?.toolFree;
 	});
 	const receipt: SummaryReceipt = {
 		force,

@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentInputItem } from "@openai/agents";
 import type { AgentDefinition } from "./childDefinitions";
-import { loadHandoffGraph, resolveHandoffGraph, withoutToolHistory } from "./handoffGraph";
+import {
+	handoffHistory,
+	loadHandoffGraph,
+	resolveHandoffGraph,
+	withoutToolHistory,
+} from "./handoffGraph";
 
 let root: string, cwd: string, agentDir: string;
 beforeEach(() => {
@@ -44,6 +49,13 @@ test("a valid graph resolves definition data, edges and policies", () => {
 		["You are analyst.", ["builder", "$root"], "all"],
 		["You are builder.", ["$root"], "without_tools"],
 	]);
+});
+
+test("history policy is defined for the root and declared nodes only", () => {
+	const resolved = resolve(graph);
+	expect(handoffHistory(resolved, "$root")).toBe("all");
+	expect(handoffHistory(resolved, "builder")).toBe("without_tools");
+	expect(() => handoffHistory(resolved, "ghost")).toThrow('no agent "ghost"');
 });
 
 test.each([

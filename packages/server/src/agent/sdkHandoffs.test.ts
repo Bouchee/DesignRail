@@ -361,6 +361,28 @@ test("definition drift and revoked project trust fail before any model request",
 	expect(lastError(project)).toContain("Handoff configuration or trust changed");
 });
 
+test("a malformed graph reports its own cause, not drift, before any model request", async () => {
+	personalGraph(["analyst"], [["analyst", []]]);
+	const model = new ScriptedModel([]);
+	const sessionId = await session(model);
+	write(join(data, "handoffs.json"), "{");
+	await promptSession(sessionId, "Hello");
+	expect(model.calls).toHaveLength(0);
+	expect(getSessionState(sessionId).completion).toMatchObject({ outcome: "failed" });
+	expect(lastError(sessionId)).toContain("not valid JSON");
+	expect(lastError(sessionId)).not.toContain("changed");
+});
+
+test("a hand-edited saved graph that breaks an invariant fails to load", async () => {
+	personalGraph(["analyst"], [["analyst", []]]);
+	const sessionId = await session(new ScriptedModel([]));
+	const path = join(data, "sessions", `${sessionId}.json`);
+	const record = JSON.parse(readFileSync(path, "utf8"));
+	record.handoffs.graph.nodes[0].targets = ["ghost"];
+	writeFileSync(path, JSON.stringify(record));
+	expect(() => readSessionRecord(sessionId)).toThrow("Invalid saved handoff graph");
+});
+
 test("colliding transfer tool names are rejected before a model request", async () => {
 	write(join(data, "agents", "a-b.md"), agentFile("a-b", "AB_DASH"));
 	write(join(data, "agents", "a.b.md"), agentFile("a.b", "AB_DOT"));
@@ -694,14 +716,21 @@ test("Stop after onHandoff and before the target commit publishes no switch", as
 	setSessionStatePublisher((record) => active.push(record.state.activeAgent));
 	const model = new ScriptedModel([transfer("builder", "h1"), bash("printf x > late.txt", "b1")]);
 	const sessionId = await session(model);
-	// The SDK emits agent_handoff after onHandoff and before the target's agent_start.
+	// Hazard: relies on @openai/agents 0.21.0 emitting agent_handoff after onHandoff and before the
+	// target's agent_start; the event-order assertion below fails instead of passing vacuously.
 	const original = Agent.prototype.emit;
+	const events: string[] = [];
+	let eventsAtAbort: string[] | undefined;
 	let stopping: Promise<void> | undefined;
 	const emit = spyOn(Agent.prototype, "emit").mockImplementation(function (
 		this: Agent,
 		...args: unknown[]
 	) {
-		if (args[0] === "agent_handoff") stopping ??= abortSession(sessionId);
+		events.push(`${String(args[0])}:${this.name}`);
+		if (args[0] === "agent_handoff" && !stopping) {
+			eventsAtAbort = [...events];
+			stopping = abortSession(sessionId);
+		}
 		return Reflect.apply(original, this, args) as boolean;
 	} as typeof original);
 	try {
@@ -711,6 +740,8 @@ test("Stop after onHandoff and before the target commit publishes no switch", as
 		emit.mockRestore();
 	}
 	expect(stopping).toBeDefined();
+	expect(eventsAtAbort?.at(-1)).toStartWith("agent_handoff:");
+	expect(eventsAtAbort).not.toContain("agent_start:builder");
 	await until(() => getSessionState(sessionId).execution === "idle");
 	expect(getSessionState(sessionId).completion?.outcome).toBe("cancelled");
 	const record = readSessionRecord(sessionId);

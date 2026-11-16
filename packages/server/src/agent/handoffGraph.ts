@@ -3,9 +3,15 @@ import { join } from "node:path";
 import type { AgentInputItem } from "@openai/agents";
 import { z } from "zod";
 import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitions";
+import { summaryOperationId } from "./sessionSummary";
 
 export const HANDOFF_ROOT = "$root";
 export const ROOT_AGENT_NAME = "RailDesign";
+
+/** The SDK agent name and displayed identity of a graph node. */
+export function agentName(node: string): string {
+	return node === HANDOFF_ROOT ? ROOT_AGENT_NAME : node;
+}
 
 export type HandoffHistory = "all" | "without_tools";
 
@@ -35,7 +41,10 @@ export function handoffTargets(graph: HandoffGraphSnapshot, node: string): strin
 }
 
 export function handoffHistory(graph: HandoffGraphSnapshot, node: string): HandoffHistory {
-	return graph.nodes.find((item) => item.definition.name === node)?.history ?? "all";
+	if (node === HANDOFF_ROOT) return "all";
+	const history = graph.nodes.find((item) => item.definition.name === node)?.history;
+	if (!history) throw new Error(`Handoff graph has no agent "${node}"`);
+	return history;
 }
 
 /**
@@ -56,8 +65,8 @@ export function withoutToolHistory(
 			const next = items.slice(index + 1).find((candidate) => candidate.type !== "reasoning");
 			return !(next?.type === "function_call" && dropped(next));
 		}
-		const id = "role" in item && item.role === "user" ? item.id : undefined;
-		return !id?.startsWith("summary_") || toolFreeSummary(id.slice("summary_".length));
+		const id = summaryOperationId(item);
+		return id === undefined || toolFreeSummary(id);
 	});
 }
 
@@ -78,8 +87,37 @@ export function resolveHandoffGraph(
 	const result = documentSchema.safeParse(parsed);
 	if (!result.success) return fail(result.error.issues[0]?.message ?? "invalid document");
 	const document = result.data;
+	checkGraphShape(document.rootTargets, document.agents, fail);
+	const nodes = document.agents.map((node) => {
+		const definition = definitions.find((item) => item.name === node.definition);
+		if (!definition) return fail(`agent definition "${node.definition}" is unavailable`);
+		return {
+			definition: structuredClone(definition),
+			targets: node.targets,
+			history: node.history,
+		};
+	});
+	return { version: 1, source, rootTargets: document.rootTargets, nodes };
+}
+
+/** Rechecks a stored snapshot with the resolver's identity, target and reachability rules. */
+export function assertHandoffGraphSnapshot(graph: HandoffGraphSnapshot): void {
+	checkGraphShape(
+		graph.rootTargets,
+		graph.nodes.map((node) => ({ definition: node.definition.name, targets: node.targets })),
+		(reason) => {
+			throw new Error(`Invalid saved handoff graph ${graph.source.path}: ${reason}`);
+		},
+	);
+}
+
+function checkGraphShape(
+	rootTargets: readonly string[],
+	agents: readonly { definition: string; targets: readonly string[] }[],
+	fail: (reason: string) => never,
+): void {
 	const ids = new Set<string>();
-	for (const { definition } of document.agents) {
+	for (const { definition } of agents) {
 		if (definition === HANDOFF_ROOT) fail(`"${HANDOFF_ROOT}" is reserved for the chat agent`);
 		if (definition === ROOT_AGENT_NAME) fail(`"${ROOT_AGENT_NAME}" is the chat agent's name`);
 		if (ids.has(definition)) fail(`agent "${definition}" is declared twice`);
@@ -93,26 +131,16 @@ export function resolveHandoffGraph(
 				fail(`"${from}" targets undeclared agent "${target}"`);
 		}
 	};
-	checkTargets(HANDOFF_ROOT, document.rootTargets);
-	const nodes = document.agents.map((node) => {
-		checkTargets(node.definition, node.targets);
-		const definition = definitions.find((item) => item.name === node.definition);
-		if (!definition) return fail(`agent definition "${node.definition}" is unavailable`);
-		return {
-			definition: structuredClone(definition),
-			targets: node.targets,
-			history: node.history,
-		};
-	});
+	checkTargets(HANDOFF_ROOT, rootTargets);
+	for (const node of agents) checkTargets(node.definition, node.targets);
 	const reached = new Set([HANDOFF_ROOT]);
-	const pending = [...document.rootTargets];
+	const pending = [...rootTargets];
 	for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
 		if (reached.has(next)) continue;
 		reached.add(next);
-		pending.push(...(document.agents.find((node) => node.definition === next)?.targets ?? []));
+		pending.push(...(agents.find((node) => node.definition === next)?.targets ?? []));
 	}
 	for (const id of ids) if (!reached.has(id)) fail(`agent "${id}" is not reachable from the chat`);
-	return { version: 1, source, rootTargets: document.rootTargets, nodes };
 }
 
 /** A trusted project document replaces the personal one; absent documents supply no Handoffs. */

@@ -85,6 +85,7 @@ import {
 import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitions";
 import { toSpawnMapping } from "./childMapping";
 import {
+	agentName,
 	HANDOFF_ROOT,
 	handoffHistory,
 	handoffTargets,
@@ -2649,14 +2650,12 @@ function projectResourcesTrusted(workspaceId: string): boolean {
 function assertHandoffGraphCurrent(entry: Entry): void {
 	const saved = entry.store.record.handoffs?.graph;
 	if (!saved) return;
-	let current: unknown;
-	try {
-		current = loadHandoffGraph({
-			cwd: entry.store.record.cwd,
-			agentDir: dataDir(),
-			projectTrusted: projectResourcesTrusted(entry.store.record.workspaceId),
-		});
-	} catch {}
+	// A malformed or unreadable graph throws its own cause; only a valid but different graph is drift.
+	const current = loadHandoffGraph({
+		cwd: entry.store.record.cwd,
+		agentDir: dataDir(),
+		projectTrusted: projectResourcesTrusted(entry.store.record.workspaceId),
+	});
 	if (!isDeepStrictEqual(current, saved))
 		throw new Error(
 			"Handoff configuration or trust changed since this chat started; restore it or start a new chat",
@@ -2719,10 +2718,6 @@ function commitHandoffOwner(entry: Entry, run: ActiveRun, node: string): void {
 	assertActive(entry, run);
 	publishEvent(entry, { type: "message_end", message });
 	notifyState(entry);
-}
-
-function agentName(node: string): string {
-	return node === HANDOFF_ROOT ? ROOT_AGENT_NAME : node;
 }
 
 /** Applies the current agent's Handoff history policy to the model request; the Session keeps all. */

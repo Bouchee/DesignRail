@@ -488,7 +488,9 @@ Handoffs.
 only a provisional transfer. The SDK emits the target's synchronous `agent_start` before its model
 request; that listener rechecks authority and commits `activeNode` plus the transfer record
 `{id,runId,from,to,reason,timestamp}` through the synchronous Session update. A write failure or a
-late callback after Stop throws there, so the target never runs. `callModelInputFilter`, dynamic
+late callback after Stop throws there, so the target never runs. The HA6 Stop test in
+`sdkHandoffs.test.ts` depends on SDK 0.21.0 emitting `agent_handoff` between `onHandoff` and the target
+`agent_start`; it asserts that order, so recheck it when the SDK version changes. `callModelInputFilter`, dynamic
 instructions and `agent_tool_start` reject an agent that is not the committed owner. A failed target
 remains the owner; Stop does not change it. The next prompt and drained queue input start at
 `activeNode`.
