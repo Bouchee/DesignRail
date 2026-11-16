@@ -1,7 +1,7 @@
 import type { PlanReviewOutput } from "./domain";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
+export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted" | "guardrail";
 
 export interface TextContent {
 	type: "text";
@@ -59,7 +59,15 @@ export interface AssistantMessage {
 	planReview?: PlanReviewOutput;
 	/** The SDK Handoff agent that wrote this message; present only in chats with a Handoff graph. */
 	agent?: string;
+	/** The rule that stopped the run; present only with `stopReason: "guardrail"`. */
+	guardrail?: string;
 	timestamp: number;
+}
+
+/** A guardrail rejected the call before it ran (`input`) or withheld its result from the model (`output`). */
+export interface ToolGuardrailOutcome {
+	stage: "input" | "output";
+	rule: string;
 }
 
 export interface ToolResultMessage<T = unknown> {
@@ -70,6 +78,7 @@ export interface ToolResultMessage<T = unknown> {
 	content: (TextContent | ImageContent)[];
 	details?: T;
 	isError: boolean;
+	guardrail?: ToolGuardrailOutcome;
 	timestamp: number;
 }
 
@@ -104,6 +113,7 @@ const NON_EXECUTABLE_TOOL_CALL_STOP_REASONS: ReadonlySet<string> = new Set([
 	"error",
 	"aborted",
 	"length",
+	"guardrail",
 ]);
 
 export function assistantToolCallsAreExecutable(stopReason: string | undefined): boolean {
@@ -144,6 +154,8 @@ export interface RefreshedModels {
 export interface AgentSettlement {
 	stopReason: StopReason;
 	errorMessage?: string;
+	/** The rule that stopped the run; present only with `stopReason: "guardrail"`. */
+	guardrail?: string;
 }
 
 export type SessionInputKind = "tool-response" | "dialog";
@@ -164,7 +176,7 @@ export type SessionInputState =
 
 export type SessionCompletion =
 	| { completionId: string; outcome: "succeeded" | "interrupted" | "cancelled" }
-	| { completionId: string; outcome: "failed"; failure: "error" | "length" };
+	| { completionId: string; outcome: "failed"; failure: "error" | "length" | "guardrail" };
 
 export interface SessionState {
 	execution: "idle" | "running";
@@ -221,6 +233,7 @@ export type SessionEvent =
 			toolName: string;
 			result: unknown;
 			isError: boolean;
+			guardrail?: ToolGuardrailOutcome;
 	  }
 	| { type: "agent_end"; messages: WireAgentMessage[]; willRetry: boolean }
 	| { type: "agent_settled"; terminal: AgentSettlement | null }

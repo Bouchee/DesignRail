@@ -10,6 +10,7 @@ import { cn } from "@thinkrail/ui/utils";
 import { CONTENT_WIDTH_BREAKOUT } from "./contentWidth";
 import { ToolPromptSlot } from "./ExtUiPrompt";
 import { useFold } from "./foldState";
+import { ToolGuardrailNote } from "./ToolGuardrailNote";
 import { ToolRendererBody } from "./ToolRendererBody";
 import { getToolSummary, getToolWidth, resolveProminence } from "./toolRegistry";
 import type { ToolResultState } from "./types";
@@ -98,6 +99,9 @@ export function ToolCard({
 					className={`size-16 shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
 				/>
 			</button>
+			{tool?.guardrail ? (
+				<ToolGuardrailNote outcome={tool.guardrail} className="px-8 pb-4" />
+			) : null}
 			{expanded && !pending ? (
 				<div className={cn("px-8 pb-4", isError && "text-feedback-error")}>
 					<ToolRendererBody {...renderProps} imageLabel={summary} />

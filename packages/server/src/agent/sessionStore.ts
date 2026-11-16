@@ -222,18 +222,26 @@ const transcriptSchema = z.discriminatedUnion("role", [
 				]),
 			),
 			usage: usageSchema,
-			stopReason: z.enum(["stop", "length", "toolUse", "error", "aborted"]),
+			stopReason: z.enum(["stop", "length", "toolUse", "error", "aborted", "guardrail"]),
 			errorMessage: z.string().optional(),
 			planReview: z.custom((value) => value === undefined || isPlanReviewOutput(value)).optional(),
 			agent: z.string().min(1).optional(),
+			guardrail: z.string().min(1).optional(),
 		})
-		.refine((message) => message.planReview === undefined || message.stopReason === "stop"),
+		.refine((message) => message.planReview === undefined || message.stopReason === "stop")
+		.refine(
+			(message) => (message.guardrail !== undefined) === (message.stopReason === "guardrail"),
+		),
 	messageBase.extend({
 		role: z.literal("toolResult"),
 		toolCallId: z.string(),
 		toolName: z.string(),
 		content: z.array(z.union([textSchema, imageSchema])),
 		isError: z.boolean(),
+		guardrail: z
+			.object({ stage: z.enum(["input", "output"]), rule: z.string().min(1) })
+			.strict()
+			.optional(),
 	}),
 	messageBase.extend({
 		role: z.literal("custom"),
@@ -263,7 +271,7 @@ const completionSchema = z.union([
 	z.object({
 		completionId: z.string(),
 		outcome: z.literal("failed"),
-		failure: z.enum(["error", "length"]),
+		failure: z.enum(["error", "length", "guardrail"]),
 	}),
 ]);
 const approvalAnchorSchema = z.object({
@@ -599,6 +607,8 @@ export function writeSessionRecord(record: SessionRecord, root = dataDir()): voi
 export class PersistentSession implements Session {
 	record: SessionRecord;
 	onUpdate?: (previous: SessionRecord) => void;
+	/** Throws to refuse assistant message text before any history write; the run owner sets it. */
+	outputGate?: (text: string) => void;
 	private readonly directory: string;
 	constructor(record: SessionRecord) {
 		this.directory = dataDir();
@@ -635,6 +645,7 @@ export class PersistentSession implements Session {
 	addItems(items: AgentInputItem[]): Promise<void> {
 		const detached = snapshotItems(items);
 		if (detached.length === 0) return Promise.resolve();
+		this.checkOutput(detached);
 		this.update((record) => {
 			appendHistory(record, detached);
 		});
@@ -650,6 +661,13 @@ export class PersistentSession implements Session {
 						expectedSuffix: snapshotItems(args.transaction.expectedSuffix),
 						replacement: snapshotItems(args.transaction.replacement),
 					};
+		this.checkOutput(
+			transaction.type === "append_items"
+				? transaction.items
+				: transaction.replacement.filter(
+						(item) => !transaction.expectedSuffix.some((old) => isDeepStrictEqual(old, item)),
+					),
+		);
 		const previous = Object.hasOwn(this.record.historyOperations, args.operationId)
 			? this.record.historyOperations[args.operationId]
 			: undefined;
@@ -675,6 +693,24 @@ export class PersistentSession implements Session {
 			record.historyOperations = { ...record.historyOperations, [args.operationId]: transaction };
 		});
 		return Promise.resolve();
+	}
+	/** Assistant message and reasoning text pass the run's output gate before any write. */
+	private checkOutput(items: readonly AgentInputItem[]): void {
+		const gate = this.outputGate;
+		if (!gate) return;
+		for (const item of items) {
+			if ("role" in item && item.role === "assistant" && Array.isArray(item.content))
+				gate(
+					item.content
+						.map((part) =>
+							part.type === "output_text" ? part.text : part.type === "refusal" ? part.refusal : "",
+						)
+						.join(""),
+				);
+			else if (item.type === "reasoning")
+				for (const parts of [item.content, item.rawContent ?? []])
+					gate(parts.map((part) => part.text).join("\n"));
+		}
 	}
 	popItem(): Promise<AgentInputItem | undefined> {
 		let popped: AgentInputItem | undefined;

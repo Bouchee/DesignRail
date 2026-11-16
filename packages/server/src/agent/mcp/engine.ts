@@ -9,7 +9,7 @@ import { modelKeyEnvironmentNames } from "../modelConfiguration";
 import { toolEnvironment } from "../sdkTools";
 import { appendMcpLog } from "./log";
 import { McpSignInRequiredError, OwnedMcpOAuthProvider } from "./oauth";
-import { redactMcpText } from "./redact";
+import { redactMcpText, SECRET_NAME } from "./redact";
 import { LoggedStdioMcpServer } from "./stdio";
 import type { McpServerEntry } from "./types";
 
@@ -38,6 +38,41 @@ export function mcpChildEnvironment(explicit: Record<string, string> = {}): Reco
 		),
 		...Object.fromEntries(Object.entries(explicit).map(([name, value]) => [name, expand(value)])),
 	};
+}
+
+/**
+ * Secret values this host sends to MCP servers: secret-named headers and stdio environment values,
+ * OAuth client secrets and saved OAuth tokens. Unset references and unreadable token files are skipped.
+ */
+export function mcpCredentialValues(entries: readonly McpServerEntry[]): string[] {
+	const values: string[] = [];
+	const add = (raw: string | undefined) => {
+		if (!raw) return;
+		try {
+			values.push(expand(raw).replace(/^(?:bearer|basic)\s+/i, ""));
+		} catch {
+			// An unset reference is never sent, so there is no value to guard.
+		}
+	};
+	for (const { name, config } of entries) {
+		const named = "command" in config ? config.env : config.headers;
+		for (const [key, value] of Object.entries(named ?? {})) if (SECRET_NAME.test(key)) add(value);
+		if ("command" in config) continue;
+		add(config.oauth?.clientSecret);
+		try {
+			const tokens = new OwnedMcpOAuthProvider({
+				name,
+				config,
+				redirectUrl: config.oauth?.callbackUrl ?? "http://127.0.0.1/callback",
+				signal: new AbortController().signal,
+			}).tokens();
+			add(tokens?.access_token);
+			add(tokens?.refresh_token);
+		} catch {
+			// The engine refuses the same unreadable credentials, so they are never sent.
+		}
+	}
+	return values;
 }
 
 export interface McpConnection {

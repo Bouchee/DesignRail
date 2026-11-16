@@ -43,6 +43,7 @@ test("the summary inventories every application resource kind without executing 
 		["systemPrompt", "APPEND_SYSTEM.md"],
 		["subagents", "agents/reviewer.md"],
 		["handoffs", "handoffs.json"],
+		["guardrails", "guardrails.json"],
 	];
 	for (const [index, [kind, path]] of files.entries()) {
 		const directory = join(cwd, String(index));

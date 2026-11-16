@@ -26,6 +26,13 @@ open a round and is unrelated to the Continue in workspace `HandoffCard`. Markdo
 `SessionState.activeAgent` from the host state as "Handled by {agent}" (`active-agent`). The browser
 never receives the graph, checkpoints or SDK objects.
 
+Guardrail outcomes: `assistantFailure` maps stop reason `guardrail` to failure `guardrail` with the rule
+name, rendered as `chat.failure.guardrail`, never as a generic error. The host output gate holds the
+last `window - 1` characters of a streaming message, so live text can lag by that much; the browser
+never receives held or blocked text. `ToolResultState.guardrail` comes
+from `tool_execution_end` live and from `ToolResultMessage.guardrail` on hydration; `ToolCard` and the
+routine activity row show `ToolGuardrailNote` (`tool-guardrail`, `data-stage`) with the rule.
+
 The application owns its message, tool, usage and event types in `sessionProtocol.ts`; browser code does not import engine types. `session.event` carries `{sessionId, runId, seq, event}` with increasing per-session sequence numbers. SDK details and checkpoints remain on the host. The initial transcript snapshot carries its event sequence watermark; events arriving before hydration are buffered and only later events are applied. Stable message IDs join streamed snapshots and final messages. Basic tool approvals use the existing confirmation UI with session, run, interaction and revision ownership; failures keep the pending card visible. A declared tool without an execution result state is pending: its card and routine row use a neutral marker, and execution summaries/bodies begin only after `tool_execution_start`.
 
 `ChatView` connects the existing resource hook, header trigger, dock and inspector to the SDK host's owned resource routes. Command output and child transcripts load only for the selected detail. Historical text does not create resource authority. Skills retain catalog, trust and disable controls, manual commands and idle reload. Reload keeps the current watcher baseline and clears its stale badge only after host success. Stop remains available for owned work. Protocol versions gate available routes; they do not replace host ownership checks.

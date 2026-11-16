@@ -57,6 +57,7 @@ const RESOURCE_KINDS: ReadonlyArray<[ProjectResourceKind, MessageKey]> = [
 	["systemPrompt", "chat.trust.kind.systemPrompt"],
 	["subagents", "chat.trust.kind.subagents"],
 	["handoffs", "chat.trust.kind.handoffs"],
+	["guardrails", "chat.trust.kind.guardrails"],
 	["extensions", "chat.trust.kind.extensions"],
 	["settings", "chat.trust.kind.settings"],
 ];

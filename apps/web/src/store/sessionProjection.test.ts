@@ -376,3 +376,65 @@ test("an agent transfer row and attributed messages converge live with restored 
 	});
 	expect(rows.some((row) => row.kind === "handoff")).toBe(false);
 });
+
+test("guardrail tool outcomes and a guardrail stop agree live and after restore", () => {
+	const call: AssistantMessage = {
+		...assistant(""),
+		id: "call-1",
+		content: [
+			{ type: "toolCall", id: "r1", name: "read", arguments: { path: "config.txt" } },
+			{ type: "toolCall", id: "b1", name: "bash", arguments: { command: "echo" } },
+		],
+		stopReason: "toolUse",
+	};
+	const withheld = {
+		id: "result:r1",
+		role: "toolResult" as const,
+		toolCallId: "r1",
+		toolName: "read",
+		content: [{ type: "text" as const, text: "original" }],
+		isError: false,
+		guardrail: { stage: "output" as const, rule: "secret" },
+		timestamp: 2,
+	};
+	const rejected = {
+		...withheld,
+		id: "result:b1",
+		toolCallId: "b1",
+		toolName: "bash",
+		isError: true,
+		guardrail: { stage: "input" as const, rule: "no-delete" },
+	};
+	const stopped: AssistantMessage = {
+		...assistant(""),
+		id: "stop-1",
+		content: [],
+		stopReason: "guardrail",
+		guardrail: "secret",
+	};
+	let runtime = reduceSessionEvent(EMPTY_RUNTIME, { type: "message_end", message: call });
+	for (const result of [withheld, rejected])
+		runtime = reduceSessionEvent(runtime, {
+			type: "tool_execution_end",
+			toolCallId: result.toolCallId,
+			toolName: result.toolName,
+			result: { content: result.content },
+			isError: result.isError,
+			guardrail: result.guardrail,
+		});
+	runtime = reduceSessionEvent(runtime, { type: "message_end", message: stopped });
+	runtime = reduceSessionEvent(runtime, {
+		type: "agent_settled",
+		terminal: { stopReason: "guardrail", guardrail: "secret" },
+	});
+	const restored = messagesToRuntime([call, withheld, rejected, stopped]);
+	for (const view of [runtime, restored]) {
+		expect(view.toolResults.r1).toMatchObject({ status: "done", guardrail: withheld.guardrail });
+		expect(view.toolResults.b1).toMatchObject({ status: "error", guardrail: rejected.guardrail });
+		expect(view.turns.at(-1)).toMatchObject({
+			kind: "error",
+			failure: "guardrail",
+			text: "secret",
+		});
+	}
+});

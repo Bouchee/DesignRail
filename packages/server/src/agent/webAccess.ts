@@ -32,7 +32,7 @@ function configPath(): string {
 	return join(dataDir(), "web-access.json");
 }
 
-function readKey(): string | undefined {
+export function readWebAccessKey(): string | undefined {
 	let fd: number;
 	try {
 		fd = openSync(configPath(), constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -57,7 +57,7 @@ function readKey(): string | undefined {
 }
 
 export function getWebAccessStatus(): WebAccessStatus {
-	return { configured: readKey() !== undefined };
+	return { configured: readWebAccessKey() !== undefined };
 }
 
 export function setWebAccessKey(apiKey: string): WebAccessStatus {
@@ -89,7 +89,7 @@ async function request(
 	signal?: AbortSignal,
 ): Promise<unknown> {
 	signal?.throwIfAborted();
-	const key = readKey();
+	const key = readWebAccessKey();
 	if (!key)
 		throw new Error("Configure a DeepSeek platform key in Settings to use web search and fetch");
 	const activeSignal = signal

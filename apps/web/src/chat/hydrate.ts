@@ -73,6 +73,7 @@ export function messagesToRuntime(
 			toolResults[message.toolCallId] = {
 				status: message.isError ? "error" : "done",
 				raw: { content: message.content, details: message.details },
+				...(message.guardrail ? { guardrail: message.guardrail } : {}),
 			};
 		} else if (toolResponse) {
 			toolResponses[toolResponse.toolCallId] = toolResponse.response;

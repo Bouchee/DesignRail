@@ -17,6 +17,7 @@ import { CONTENT_WIDTH_BREAKOUT } from "./contentWidth";
 import { PendingExtUiContext, ToolPromptSlot } from "./ExtUiPrompt";
 import { useFold } from "./foldState";
 import type { ActivityStep, RoutineToolStep, ThinkingStep } from "./rows";
+import { ToolGuardrailNote } from "./ToolGuardrailNote";
 import { ToolRendererBody } from "./ToolRendererBody";
 import { TranscriptItem } from "./TranscriptItem";
 import { getToolSummary, getToolWidth } from "./toolRegistry";
@@ -407,6 +408,9 @@ function RoutineToolRow({
 				name={step.toolName}
 				summary={summary}
 			/>
+			{step.tool?.guardrail ? (
+				<ToolGuardrailNote outcome={step.tool.guardrail} className="px-8 pb-4 pl-16" />
+			) : null}
 			{expanded && !pending ? (
 				<div
 					className={cn(

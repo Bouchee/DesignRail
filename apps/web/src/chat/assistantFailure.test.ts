@@ -16,6 +16,18 @@ test("a run's failure is recorded as a kind plus the provider's own message", ()
 	});
 	expect(assistantFailure({ stopReason: "length" })).toEqual({ failure: "truncated", message: "" });
 	expect(assistantFailure({ stopReason: "stop" })).toBeNull();
+	expect(assistantFailure({ stopReason: "guardrail", guardrail: "secret" })).toEqual({
+		failure: "guardrail",
+		message: "secret",
+	});
+});
+
+test("a guardrail stop names its rule and is distinct from an error", () => {
+	const t = currentTranslator();
+	expect(errorTurnText(t, { text: "secret", failure: "guardrail" })).toBe(
+		'Guardrail "secret" stopped the answer. The rest of the answer is withheld.',
+	);
+	expect(subscriptionLimit({ text: "secret", failure: "guardrail" })).toBeNull();
 });
 
 test("notices translate at render; a provider message stays verbatim", async () => {

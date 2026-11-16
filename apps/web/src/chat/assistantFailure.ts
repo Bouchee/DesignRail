@@ -4,9 +4,10 @@ import type { Translator } from "@thinkrail/locales/react";
 interface AssistantTerminal {
 	stopReason: StopReason;
 	errorMessage?: string;
+	guardrail?: string;
 }
 
-export type AssistantFailure = "error" | "truncated";
+export type AssistantFailure = "error" | "truncated" | "guardrail";
 
 export function assistantFailure(
 	terminal: AssistantTerminal | null | undefined,
@@ -14,6 +15,8 @@ export function assistantFailure(
 	if (terminal?.stopReason === "error")
 		return { failure: "error", message: terminal.errorMessage ?? "" };
 	if (terminal?.stopReason === "length") return { failure: "truncated", message: "" };
+	if (terminal?.stopReason === "guardrail")
+		return { failure: "guardrail", message: terminal.guardrail ?? "" };
 	return null;
 }
 
@@ -67,6 +70,7 @@ export function errorTurnText(
 	turn: { text: string; failure?: AssistantFailure | undefined },
 ): string {
 	if (turn.failure === "truncated") return t("chat.failure.truncated");
+	if (turn.failure === "guardrail") return t("chat.failure.guardrail", { rule: turn.text });
 	if (turn.failure === "error" && isModelUnavailableError(turn.text))
 		return `${t("chat.failure.modelUnavailable")}\n\n${turn.text}`;
 	if (turn.failure === "error") return turn.text || t("chat.failure.error");

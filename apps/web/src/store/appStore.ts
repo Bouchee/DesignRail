@@ -955,7 +955,11 @@ export function reduceSessionEvent(rt: SessionRuntime, event: SessionEvent): Ses
 				...rt,
 				toolResults: {
 					...rt.toolResults,
-					[event.toolCallId]: { status: event.isError ? "error" : "done", raw: event.result },
+					[event.toolCallId]: {
+						status: event.isError ? "error" : "done",
+						raw: event.result,
+						...(event.guardrail ? { guardrail: event.guardrail } : {}),
+					},
 				},
 			};
 		case "agent_end":

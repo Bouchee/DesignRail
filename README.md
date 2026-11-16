@@ -50,6 +50,14 @@ definitions may take over a chat through SDK Handoffs. The chat shows each trans
 conversation and who wrote each reply; the accepted agent answers later messages after refresh and restart.
 A `without_tools` target sees the conversation without earlier tool records. Provider acceptance of a
 live transfer is a separate gate.
+Guardrails keep configured credentials and token-shaped values away from the model: a tool result that
+contains one is withheld from the model (the run continues and the tool row says so), and a tool call
+that contains a configured key is rejected before approval. Assistant replies are checked by the host
+before they are shown or saved: a reply with a configured key or token stops the run and is never shown,
+saved or sent back to the model (live text can trail by a few characters). An optional `guardrails.json`
+(personal, or in a trusted project's `.raildesign/`) adds rules for user input, tool input and tool output
+(literal or regex) and assistant output (literal only); a malformed file stops the run with an explicit
+error.
 Web search and page reading use DeepSeek Search and Fetch with a separate
 host key configured in Extensions settings. Skill search, content reads, manual `/skill:name` commands
 and idle catalog reload share current trust and enable policy. The Extensions settings page manages bundled SDK

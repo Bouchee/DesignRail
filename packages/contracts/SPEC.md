@@ -29,6 +29,14 @@ custom message `agent-transfer` (`AgentTransferDetails`, `isAgentTransferMessage
 transfer with a stable ID, from/to agent names and reason. Ordinary chats carry none of them. This is a
 different contract from `chat-handoff`, which continues a chat in another workspace.
 
+SDK guardrails add stop reason `guardrail` (non-executable tool calls), `AssistantMessage.guardrail` and
+`AgentSettlement.guardrail` naming the rule, completion failure `guardrail`, and
+`ToolGuardrailOutcome {stage:"input"|"output",rule}` on `ToolResultMessage.guardrail` and
+`tool_execution_end`. These are distinct from error, cancel, refusal and approval rejection. Stop
+reason `guardrail` comes from a user-input rule or the host output gate; it is not an SDK output
+guardrail result.
+`ProjectResourceKind` adds `guardrails` for `.raildesign/guardrails.json`.
+
 The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction, call and revision ownership, and remain visible on reply failure. Queue entries have stable IDs, pending/staged admission state and an optional retained error; admitted input appears in the transcript under the same ID. Queue mutation addresses IDs, never mutable positions. Compaction uses an operation ID and keeps the full transcript. Advanced tool execution remains assigned to stage 3. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## Responsibility

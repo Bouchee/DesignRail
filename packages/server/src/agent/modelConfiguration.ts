@@ -146,6 +146,15 @@ export function modelKeyEnvironmentNames(): string[] {
 	});
 }
 
+/** Configured endpoint key values; unset environment references are skipped. */
+export function configuredModelKeys(): string[] {
+	return endpoints().flatMap((endpoint) => {
+		const name = keyEnvironmentName(endpoint.apiKey);
+		const value = name ? process.env[name] : endpoint.apiKey;
+		return value ? [value] : [];
+	});
+}
+
 export function resolveProviderAuthorization(provider: string): string {
 	const endpoint = endpoints().find((candidate) => candidate.id === provider);
 	if (!endpoint) throw new Error("MCP authorization provider is not configured");

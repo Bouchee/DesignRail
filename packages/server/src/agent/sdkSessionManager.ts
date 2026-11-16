@@ -5,6 +5,7 @@ import {
 	Agent,
 	type AgentInputItem,
 	handoff,
+	InputGuardrailTripwireTriggered,
 	MaxTurnsExceededError,
 	type RunContext,
 	Runner,
@@ -42,6 +43,7 @@ import type {
 	SessionSummary,
 	SubagentResourceSummary,
 	ThinkingLevel,
+	ToolGuardrailOutcome,
 	TranscriptMessage,
 	WireModel,
 } from "@thinkrail/contracts";
@@ -85,6 +87,11 @@ import {
 import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitions";
 import { toSpawnMapping } from "./childMapping";
 import {
+	GuardrailOutputBlockedError,
+	type GuardrailPolicy,
+	loadGuardrailPolicy,
+} from "./guardrails";
+import {
 	agentName,
 	HANDOFF_ROOT,
 	handoffHistory,
@@ -94,6 +101,7 @@ import {
 	withoutToolHistory,
 } from "./handoffGraph";
 import { configureLocalSdkTracing } from "./localTracing";
+import { loadMcpConfigFiles, mcpCredentialValues } from "./mcp";
 import {
 	applySessionMcpApproval,
 	mcpResourceSummaries,
@@ -103,6 +111,7 @@ import {
 	sessionMcpTools,
 } from "./mcpSessions";
 import {
+	configuredModelKeys,
 	createConfiguredModel,
 	listAvailableModels,
 	modelContextBudget,
@@ -133,7 +142,7 @@ import {
 	workspaceInstructions,
 } from "./skillTools";
 import { stripAnsi } from "./stripAnsi";
-import { webFetch, webSearch } from "./webAccess";
+import { readWebAccessKey, webFetch, webSearch } from "./webAccess";
 import { createWorkspaceActions } from "./workspaceActions";
 
 const log = logger("agent");
@@ -168,6 +177,13 @@ interface ActiveRun {
 	/** SDK agent currently streaming, for message authorship in Handoff chats. */
 	author?: string;
 	structuredResults?: Map<string, StructuredToolResult>;
+	/** Loaded once at run start; every agent and tool in the run shares it. */
+	guardrails?: GuardrailPolicy;
+	guardrailOutcomes?: Map<string, ToolGuardrailOutcome>;
+	/** Full text of the streaming assistant message; only its gated prefix is published. */
+	streamText?: string;
+	/** The output gate stopped this run. */
+	blocked?: { rule: string };
 	usage?: {
 		inputTokens: number;
 		outputTokens: number;
@@ -560,6 +576,8 @@ function recordToolResult(
 ): void {
 	const structured = entry.active?.structuredResults?.get(callId) ?? structuredToolResult(output);
 	if (structured) isError ||= structured.isError;
+	const guardrail = entry.active?.guardrailOutcomes?.get(callId);
+	if (guardrail?.stage === "input") isError = true;
 	const previous = entry.store.record.messages.find(
 		(message) => message.role === "toolResult" && message.toolCallId === callId,
 	);
@@ -571,7 +589,8 @@ function recordToolResult(
 	if (
 		previous?.role === "toolResult" &&
 		JSON.stringify(previous.content) === JSON.stringify(content) &&
-		previous.isError === isError
+		previous.isError === isError &&
+		isDeepStrictEqual(previous.guardrail, guardrail)
 	)
 		return;
 	const message: TranscriptMessage = {
@@ -582,6 +601,7 @@ function recordToolResult(
 		content,
 		...(details !== undefined ? { details } : {}),
 		isError,
+		...(guardrail ? { guardrail } : {}),
 		timestamp: previous?.timestamp ?? Date.now(),
 	};
 	const answer = Object.values(entry.store.record.toolResponses).find(
@@ -611,7 +631,40 @@ function recordToolResult(
 				: {}),
 		},
 		isError,
+		...(guardrail ? { guardrail } : {}),
 	});
+	emit(entry, { type: "message_end", message });
+}
+
+function outputGate(run: ActiveRun): GuardrailPolicy["output"] {
+	if (!run.guardrails) throw new Error("The run has no guardrail policy");
+	return run.guardrails.output;
+}
+
+/** On an output-gate match, revokes the grant and stops the run before anything is published. */
+function blockOutput(run: ActiveRun, text: string): boolean {
+	const hit = outputGate(run).match(text);
+	if (!hit) return false;
+	run.blocked ??= hit;
+	run.granted = false;
+	run.controller.abort();
+	return true;
+}
+
+/** The guardrail stop message: the published safe prefix only, under the streaming message ID. */
+function appendGuardrailStop(entry: Entry, run: ActiveRun, rule: string): void {
+	const partial = run.assistantId
+		? entry.store.record.messages.find((message) => message.id === run.assistantId)
+		: undefined;
+	const message = assistant(
+		entry,
+		run.assistantId ?? randomUUID(),
+		partial?.role === "assistant" ? partial.content : [],
+		"guardrail",
+		partial?.role === "assistant" ? partial.agent : run.author,
+	);
+	message.guardrail = rule;
+	appendMessage(entry, message);
 	emit(entry, { type: "message_end", message });
 }
 
@@ -628,10 +681,13 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 		};
 	if (event.type === "raw_model_stream_event" && event.data.type === "output_text_delta") {
 		const previous = startAssistant(entry, run);
-		const message = {
-			...previous,
-			content: [{ type: "text" as const, text: textOf(previous.content) + event.data.delta }],
-		};
+		const published = textOf(previous.content);
+		const text = (run.streamText ?? published) + event.data.delta;
+		run.streamText = text;
+		if (blockOutput(run, text)) return;
+		const safe = text.slice(0, Math.max(0, text.length - (outputGate(run).window - 1)));
+		if (safe.length <= published.length) return;
+		const message = { ...previous, content: [{ type: "text" as const, text: safe }] };
 		appendMessage(entry, message);
 		emit(
 			entry,
@@ -641,7 +697,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 				assistantMessageEvent: {
 					type: "text_delta",
 					contentIndex: 0,
-					delta: event.data.delta,
+					delta: safe.slice(published.length),
 					partial: message,
 				},
 			},
@@ -655,20 +711,17 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 	if (event.type !== "run_item_stream_event") return;
 	const item = event.item;
 	if (item.type === "message_output_item") {
-		const previous = startAssistant(entry, run);
-		const message = assistant(
-			entry,
-			previous.id ?? randomUUID(),
-			item.rawItem.content.flatMap((part) =>
-				part.type === "output_text"
-					? [{ type: "text" as const, text: part.text }]
-					: part.type === "refusal"
-						? [{ type: "text" as const, text: part.refusal }]
-						: [],
-			),
-			"stop",
-			item.agent.name,
+		const content = item.rawItem.content.flatMap((part) =>
+			part.type === "output_text"
+				? [{ type: "text" as const, text: part.text }]
+				: part.type === "refusal"
+					? [{ type: "text" as const, text: part.refusal }]
+					: [],
 		);
+		if (blockOutput(run, content.map((part) => part.text).join(""))) return;
+		delete run.streamText;
+		const previous = startAssistant(entry, run);
+		const message = assistant(entry, previous.id ?? randomUUID(), content, "stop", item.agent.name);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_end", message });
 		run.finalAssistant = {
@@ -690,7 +743,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 		const text = item.rawItem.content
 			.flatMap((part) => (part.type === "input_text" ? [part.text] : []))
 			.join("\n");
-		if (text) {
+		if (text && !blockOutput(run, text)) {
 			const message = assistant(
 				entry,
 				item.rawItem.id ?? randomUUID(),
@@ -1219,9 +1272,27 @@ function childDetails(child: Entry): DelegationRunDetails {
 // Ends a foreground child that failed. A failed result keeps its details so the card can open the
 // child transcript; a stopped run rethrows so cancellation stays an SDK abort.
 function failedForegroundChild(child: Entry, childRun: ActiveRun, error: unknown) {
+	if (childRun.blocked) {
+		appendGuardrailStop(child, childRun, childRun.blocked.rule);
+		finishChild(child, "error");
+		childRun.granted = false;
+		delete child.active;
+		delete child.store.outputGate;
+		return {
+			content: [
+				{
+					type: "text" as const,
+					text: `Child output blocked by guardrail "${childRun.blocked.rule}".`,
+				},
+			],
+			details: childDetails(child),
+			isError: true,
+		};
+	}
 	finishChild(child, childRun.controller.signal.aborted ? "aborted" : "error");
 	childRun.granted = false;
 	delete child.active;
+	delete child.store.outputGate;
 	if (childRun.controller.signal.aborted) throw error;
 	return {
 		content: [
@@ -1518,6 +1589,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 						runConfig: {
 							tracingDisabled: !loadConfig().sdkTracingEnabled,
 							traceIncludeSensitiveData: false,
+							toolExecution: { preApprovalInputGuardrails: true },
 						},
 						runOptions: {
 							session: child.store,
@@ -1558,6 +1630,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 								finishChild(child, "completed");
 								childRun.granted = false;
 								delete child.active;
+								delete child.store.outputGate;
 							}
 							return output;
 						},
@@ -1804,6 +1877,7 @@ async function stopOwnedResources(entry: Entry, reason = "user"): Promise<void> 
 				child.active.done.then(() => {
 					if (preserveApproval) {
 						delete child.active;
+						delete child.store.outputGate;
 						sessions.delete(record.sessionId);
 					}
 				}),
@@ -1908,7 +1982,10 @@ export async function reloadSessionResources(
 		} finally {
 			run.granted = false;
 			run.controller.abort();
-			if (entry.active === run) delete entry.active;
+			if (entry.active === run) {
+				delete entry.active;
+				delete entry.store.outputGate;
+			}
 		}
 	})();
 	await run.done;
@@ -2430,6 +2507,14 @@ async function buildSessionAgent(
 			throw new Error("This agent is not the accepted conversation owner");
 	};
 	const thinkingLevel = role.thinkingLevel ?? entry.store.record.thinkingLevel;
+	run.guardrails ??= runGuardrails(entry);
+	const gate = run.guardrails.output;
+	entry.store.outputGate = (text) => {
+		const hit = gate.match(text);
+		if (!hit) return;
+		run.blocked ??= hit;
+		throw new GuardrailOutputBlockedError(hit.rule);
+	};
 	const skillOptions = {
 		...(definition ? { allowedSkills: definition.skills ?? [] } : {}),
 		manualSkills: definition
@@ -2510,6 +2595,7 @@ async function buildSessionAgent(
 	const agent = new Agent<SessionContext, "text" | typeof planReviewOutput>({
 		name: definition?.name ?? ROOT_AGENT_NAME,
 		outputType: entry.store.record.childRun?.purpose === "review" ? planReviewOutput : "text",
+		inputGuardrails: run.guardrails.agentInput,
 		instructions: (context) => {
 			assertWorkspaceContext(context.context, entry);
 			assertOwner();
@@ -2637,7 +2723,73 @@ async function buildSessionAgent(
 	}
 	if (role.node !== undefined) agentNodes.set(agent, role.node);
 	captureStructuredToolResults(agent.tools, run);
+	attachToolGuardrails(agent.tools, run, run.guardrails);
 	return agent;
+}
+
+/** Current rule files and configured credentials; read once per run. */
+function runGuardrails(entry: Entry): GuardrailPolicy {
+	const { cwd, workspaceId } = entry.store.record;
+	const projectTrusted = projectResourcesTrusted(workspaceId);
+	return loadGuardrailPolicy({
+		cwd,
+		dataDir: dataDir(),
+		projectTrusted,
+		credentials: [
+			...configuredModelKeys(),
+			readWebAccessKey() ?? "",
+			...mcpCredentialValues(
+				loadMcpConfigFiles({ agentDir: dataDir(), cwd, projectTrusted }).servers,
+			),
+		],
+	});
+}
+
+/**
+ * Every FunctionTool gets the run's tool guardrails. A rejection records its outcome for the tool card;
+ * a withheld result keeps the original output on the host transcript while the model gets the message.
+ */
+function attachToolGuardrails(
+	tools: Tool<SessionContext>[],
+	run: ActiveRun,
+	policy: GuardrailPolicy,
+): void {
+	run.guardrailOutcomes ??= new Map();
+	const observe = (callId: string, stage: ToolGuardrailOutcome["stage"], rule: string) =>
+		run.guardrailOutcomes?.set(callId, { stage, rule });
+	for (const candidate of tools) {
+		if (candidate.type !== "function") continue;
+		candidate.inputGuardrails = policy.toolInput.map((guardrail) => ({
+			...guardrail,
+			run: async (data) => {
+				const result = await guardrail.run(data);
+				if (result.behavior.type === "rejectContent")
+					observe(data.toolCall.callId, "input", guardrail.name);
+				return result;
+			},
+		}));
+		candidate.outputGuardrails = policy.toolOutput.map((guardrail) => ({
+			...guardrail,
+			run: async (data) => {
+				const result = await guardrail.run(data);
+				if (result.behavior.type === "rejectContent") {
+					const callId = data.toolCall.callId;
+					observe(callId, "output", guardrail.name);
+					if (!run.structuredResults?.has(callId))
+						run.structuredResults?.set(callId, {
+							content: [
+								{
+									type: "text",
+									text: typeof data.output === "string" ? data.output : JSON.stringify(data.output),
+								},
+							],
+							isError: false,
+						});
+				}
+				return result;
+			},
+		}));
+	}
 }
 
 function projectResourcesTrusted(workspaceId: string): boolean {
@@ -2879,6 +3031,7 @@ async function executeRun(
 		const runner = new Runner({
 			tracingDisabled: !loadConfig().sdkTracingEnabled,
 			traceIncludeSensitiveData: false,
+			toolExecution: { preApprovalInputGuardrails: true },
 			callModelInputFilter: ({ modelData, agent }) => {
 				assertActive(entry, run);
 				assertOwnerAgent(entry, agent);
@@ -3100,17 +3253,21 @@ async function executeRun(
 	} catch (error) {
 		run.markReady?.();
 		if (run.suspended) return;
-		terminal = {
-			stopReason:
-				!streamFailed && (!run.granted || run.controller.signal.aborted)
-					? "aborted"
-					: error instanceof MaxTurnsExceededError
-						? "length"
-						: "error",
-			...(!streamFailed && (run.controller.signal.aborted || !run.granted)
-				? {}
-				: { errorMessage: error instanceof Error ? error.message : String(error) }),
-		};
+		const tripwire = error instanceof InputGuardrailTripwireTriggered ? error : undefined;
+		const aborted = !streamFailed && (!run.granted || run.controller.signal.aborted);
+		const rule = run.blocked?.rule ?? (aborted ? undefined : tripwire?.result.guardrail.name);
+		terminal = rule
+			? { stopReason: "guardrail", guardrail: rule }
+			: {
+					stopReason: aborted
+						? "aborted"
+						: error instanceof MaxTurnsExceededError
+							? "length"
+							: "error",
+					...(aborted
+						? {}
+						: { errorMessage: error instanceof Error ? error.message : String(error) }),
+				};
 		const failedId =
 			run.assistantId ??
 			(entry.store.record.childRun?.purpose === "review"
@@ -3139,6 +3296,7 @@ async function executeRun(
 					: entry.store.record.handoffs && agentName(entry.store.record.handoffs.activeNode),
 			);
 			if (terminal.errorMessage) message.errorMessage = terminal.errorMessage;
+			if (terminal.guardrail) message.guardrail = terminal.guardrail;
 			if (entry.store.record.childRun?.purpose === "review") run.assistantId = messageId;
 			appendMessage(entry, message);
 			emit(entry, { type: "message_end", message });
@@ -3202,7 +3360,9 @@ async function executeRun(
 				entry.store.record.state.completion =
 					terminal.stopReason === "aborted"
 						? { completionId: run.id, outcome: "cancelled" }
-						: terminal.stopReason === "error" || terminal.stopReason === "length"
+						: terminal.stopReason === "error" ||
+								terminal.stopReason === "length" ||
+								terminal.stopReason === "guardrail"
 							? { completionId: run.id, outcome: "failed", failure: terminal.stopReason }
 							: { completionId: run.id, outcome: "succeeded" };
 				entry.store.record.state.completionUnread = terminal.stopReason !== "aborted";
@@ -3230,6 +3390,7 @@ async function executeRun(
 			run.granted = false;
 			run.controller.abort();
 			delete entry.active;
+			delete entry.store.outputGate;
 			notifyState(entry);
 		}
 	}
@@ -3674,6 +3835,7 @@ export async function compactSession(
 	});
 	try {
 		const operationId = options.operationId ?? randomUUID();
+		const guard = runGuardrails(entry);
 		const summaryUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 		const result = await entry.store.compact({
 			operationId,
@@ -3720,7 +3882,10 @@ export async function compactSession(
 						sum + (typeof detail.cache_write_tokens === "number" ? detail.cache_write_tokens : 0),
 					0,
 				);
-				return response.finalOutput ?? "";
+				const summary = response.finalOutput ?? "";
+				const hit = guard.output.match(summary);
+				if (hit) throw new GuardrailOutputBlockedError(hit.rule);
+				return summary;
 			},
 		});
 		if (result.status === "compacted") {
@@ -3893,6 +4058,7 @@ function promptEntry(
 				);
 	} finally {
 		delete entry.active;
+		delete entry.store.outputGate;
 	}
 	const content: AgentInputItem[] = [userItem({ id, text, images })];
 	if (modelText !== text) content.unshift({ id: randomUUID(), role: "user", content: modelText });

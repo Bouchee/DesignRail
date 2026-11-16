@@ -194,6 +194,9 @@ control message. `chats.spec.ts` checks the repository picker and cancellation w
 `continuation-state.spec.ts` mounts saved cards, restores completed links through the actual status
 handler, and checks lost-operation Retry sends the source workspace and target project; only that retry
 reply is held by the test, so the no-agent suite cannot start a model.
+`agent-guardrails.spec.ts` seeds a stored chat with a withheld tool result, a rejected call and a
+guardrail stop, and checks both tool notes and the distinct stop text before and after refresh. It
+starts no model; guardrail execution is covered by host `sdkGuardrails.test.ts`.
 `agent-handoffs.spec.ts` seeds a stored SDK Handoff chat (graph snapshot, accepted owner, transfer
 receipt and row, attributed messages) and checks the transfer row, the current-handler indicator and
 message authorship before and after refresh. It starts no model; live transfer, authorship and

@@ -116,7 +116,8 @@ export type ProjectResourceKind =
 	| "themes"
 	| "systemPrompt"
 	| "subagents"
-	| "handoffs";
+	| "handoffs"
+	| "guardrails";
 
 /**
  * What a project's trust grant would load, for the trust notice; alias skill names show only after trust.

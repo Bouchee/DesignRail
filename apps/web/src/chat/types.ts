@@ -8,6 +8,7 @@ import type {
 	ImageContent,
 	ReviewFixDetails,
 	SubagentCompletionDetails,
+	ToolGuardrailOutcome,
 	WireUserMessage,
 } from "@thinkrail/contracts";
 import type { ToolStatus } from "@thinkrail/extension-api/web";
@@ -80,4 +81,5 @@ export interface CompactionState {
 export interface ToolResultState {
 	status: ToolStatus;
 	raw: unknown;
+	guardrail?: ToolGuardrailOutcome;
 }

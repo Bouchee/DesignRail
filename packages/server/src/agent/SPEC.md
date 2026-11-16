@@ -508,6 +508,64 @@ full graph and passes the root agent to `RunState.fromString`, so every reachabl
 its unique name. The restored current agent and each interruption must match the saved owner and
 node; a mismatch fails before continuation and completed effects never replay.
 
+## SDK guardrails
+
+`guardrails.ts` owns one interface: `loadGuardrailPolicy({cwd?,dataDir,projectTrusted,credentials})`
+returns public SDK definitions (`agentInput`, `toolInput`, `toolOutput`), each named after the rule it
+enforces, and the host output gate `output: {window, match}`. It reads `<cwd>/.raildesign/guardrails.json` when the project's resource trust is
+granted, otherwise `<dataDir>/guardrails.json`; the project file replaces the personal one. An absent
+file adds no rules. A malformed, oversized (64 KiB), invalid-regex, duplicate or reserved-name document
+throws `GuardrailConfigurationError` citing the file, so the run fails before any model request. An
+untrusted project file is ignored and listed by project trust. Format: `{version:1, rules:[{name,
+stages:["userInput"|"finalOutput"|"toolInput"|"toolOutput"], literal | regex}]}`; patterns are at most
+1024 characters, regexes compile with `u`. `finalOutput` rules accept literals only; a regex there is a
+load error. `outputInfo` carries only `{rule}`, never matched text.
+
+The built-in rule `secret` is always on. It matches configured credential values of at least eight
+characters (endpoint keys from `configuredModelKeys`, the web-access key, and from `mcpCredentialValues`:
+secret-named MCP headers/stdio env, OAuth client secrets and saved OAuth tokens) in tool arguments, and
+those values or `TOKEN_LITERAL` (exported from `mcp/redact.ts`) in tool results. The manager collects
+these values from their owners once per run (`runGuardrails`).
+
+The manager loads the policy once per run in `buildSessionAgent` (`run.guardrails`), so root, Handoff
+targets, foreground and background children share one policy, and an edited file applies to the next run.
+Agent input guardrails use `runInParallel:false`: a user-input match ends the run as stop reason
+`guardrail` with `AssistantMessage.guardrail` and completion failure `guardrail`, before any model
+request; the SDK does not persist the blocked input to model history. Only the newest trailing user
+messages are examined, so older history cannot re-trigger. `attachToolGuardrails` sets every
+FunctionTool's guardrails, and both Runners set `toolExecution.preApprovalInputGuardrails`, so a rejected
+call never shows an approval card and never runs. A rejection is SDK `rejectContent`: the model and model
+history get only the rejection or withheld message and the run continues. The tool record carries
+`guardrail:{stage,rule}`; a rejected call is an error, a withheld result keeps its original content on
+the host transcript and card, while the effect receipt and repaired history keep the withheld text.
+Summaries, Handoff views and restored checkpoints read model history only. Guardrails never grant,
+approve or replace grants, containment or approval.
+
+G4 is a host output gate, not SDK output guardrail integration; the D01 output-guardrail part stays open.
+SDK 0.21.0 refuses to restore a saved approval state when an agent has an output guardrail and a
+non-default `toolUseBehavior` (`runner/blockedOutputPersistence.mjs:184`, `runState.mjs:3063`); the
+question terminate rule needs that function. `output.match` applies the built-in `secret` output matcher
+and the `finalOutput` literals; `window` is the longest text a match can need (longest credential or
+literal, or 20 for token shapes). Three seams use it, in this order:
+1. Stream projection keeps the full text of the streaming message in `run.streamText` and publishes and
+   saves only the prefix older than `window - 1` characters, so live text lags by at most that much. The
+   message-end item (deltas, no deltas or refusal) and each reasoning item are checked before
+   `appendMessage`/`message_end`. A match revokes the grant, aborts the run and settles stop reason
+   `guardrail` with the published safe prefix only. The held tail is flushed only by a successful message
+   end that passes the full-text check; Stop, error, length, cancel and guardrail ends drop it unsaved.
+2. `PersistentSession.outputGate`, installed per run and cleared on every settle path, refuses SDK
+   `addItems`/`applyHistoryTransaction` writes whose assistant message or reasoning text matches
+   (`GuardrailOutputBlockedError`); history is unchanged and the run settles as `guardrail`. A
+   `replace_suffix` checks only replacement items not already in the expected suffix, so a later stricter
+   rule never refuses older history. This closes the case where the SDK writes the turn before the host
+   sees it. Tool items are not checked here (G2/G3).
+3. The summary callback checks the generated summary before the transaction saves it; a match throws
+   `GuardrailOutputBlockedError` naming the rule and keeps prior history.
+A blocked foreground child records the guardrail stop in its transcript and returns an error result to
+its parent. Not protected: the user's own input and earlier text that does not match. Tool-call
+arguments with a configured key are rejected (G3) but stay on the tool card and in the `function_call`
+history item, because the model produced them.
+
 ## DeepSeek web access
 
 `webAccess.ts` owns the separate DeepSeek key and the Search/Fetch clients.
