@@ -66,6 +66,11 @@ through a reviewed `logger(scope)` call with an intentionally bounded message.
   equivalent bounded metadata — never raw error text or request-derived paths. A callsite that explicitly
   approves a structured error gets only type/message/stack, never arbitrary enumerable fields.
 
+  Enabled `sdk-trace` diagnostics have one narrower exception: the agent module's closed span field
+  allowlist may include an SDK span error message after shared configured-credential/token redaction
+  and a 256-character bound. It never logs raw SDK error data, stacks, response bodies, inputs or
+  outputs. The agent's owning SPEC defines trace identity and lifecycle correlation.
+
 ## Logged-error observer
 
 `observeLoggedErrors(observer | null)` lets local diagnostic tests observe `warn`/`error` calls carrying

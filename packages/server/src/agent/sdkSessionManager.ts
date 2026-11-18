@@ -100,7 +100,13 @@ import {
 	ROOT_AGENT_NAME,
 	withoutToolHistory,
 } from "./handoffGraph";
-import { configureLocalSdkTracing } from "./localTracing";
+import {
+	attachAgentDiagnostics,
+	attachRunDiagnostics,
+	configureLocalSdkTracing,
+	type DiagnosticOutcome,
+	traceRunOptions,
+} from "./localTracing";
 import { loadMcpConfigFiles, mcpCredentialValues } from "./mcp";
 import {
 	applySessionMcpApproval,
@@ -179,6 +185,7 @@ interface ActiveRun {
 	structuredResults?: Map<string, StructuredToolResult>;
 	/** Loaded once at run start; every agent and tool in the run shares it. */
 	guardrails?: GuardrailPolicy;
+	diagnostics?: ReturnType<typeof attachRunDiagnostics>;
 	guardrailOutcomes?: Map<string, ToolGuardrailOutcome>;
 	/** Full text of the streaming assistant message; only its gated prefix is published. */
 	streamText?: string;
@@ -1568,6 +1575,9 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 					startedTools: new Set<string>(),
 				};
 				child.active = childRun;
+				let childDiagnostics: ReturnType<typeof attachAgentDiagnostics> | undefined;
+				let childOutcome: DiagnosticOutcome = "success";
+				let childError: unknown;
 				try {
 					if (metadata.status === "queued")
 						await acquireChildSlot(child, childRun.controller.signal);
@@ -1582,22 +1592,32 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 							current.state = { ...idleState(), execution: "running", runId: childRun.id };
 						});
 					const agent = await buildSessionAgent(child, childRun, model);
+					childDiagnostics = attachAgentDiagnostics(
+						agent,
+						diagnosticIdentity(child, childRun.id),
+						childRun.guardrails?.redact ?? runGuardrails(child).redact,
+					);
 					let hasChildOutcome = false;
 					const childTool = agent.asTool({
 						toolName: "Agent",
 						toolDescription: "Run one foreground child task.",
 						runConfig: {
-							tracingDisabled: !loadConfig().sdkTracingEnabled,
-							traceIncludeSensitiveData: false,
+							...traceRunOptions(diagnosticIdentity(entry, run.id)),
 							toolExecution: { preApprovalInputGuardrails: true },
 						},
 						runOptions: {
 							session: child.store,
 							signal: childRun.controller.signal,
 							maxTurns: metadata.definition.maxTurns ?? 20,
+							errorHandlers: {
+								maxTurns: ({ error }) => {
+									childError = error;
+								},
+							},
 						},
 						onStream: ({ event }) => projectStream(child, childRun, event),
 						customOutputExtractor: (result) => {
+							if (result.interruptions.length) childOutcome = "suspended";
 							const output = result.interruptions.length ? "" : (result.finalOutput ?? "");
 							if (typeof output !== "string") throw new Error("Ordinary child output must be text");
 							hasChildOutcome = true;
@@ -1651,10 +1671,12 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 						}
 						childInvocationDetails = { ...details, resumeState: resumed.toString() };
 					}
-					const invocation = childTool.invoke(
-						context,
-						JSON.stringify({ input: metadata.task }),
-						childInvocationDetails,
+					const invocation = childDiagnostics.run(() =>
+						childTool.invoke(
+							context,
+							JSON.stringify({ input: metadata.task }),
+							childInvocationDetails,
+						),
 					);
 					childRun.done = invocation.then(
 						() => {},
@@ -1667,7 +1689,14 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 						);
 					return childOutput(child);
 				} catch (error) {
+					childOutcome = diagnosticFailure(
+						childError ?? error,
+						childRun.controller.signal,
+						!!childRun.blocked,
+					);
 					return failedForegroundChild(child, childRun, error);
+				} finally {
+					await childDiagnostics?.close(childOutcome);
 				}
 			},
 		}),
@@ -2745,6 +2774,32 @@ function runGuardrails(entry: Entry): GuardrailPolicy {
 	});
 }
 
+function diagnosticIdentity(entry: Entry, runId: string) {
+	const { sessionId, workspaceId, childRun, handoffs } = entry.store.record;
+	return {
+		sessionId,
+		runId,
+		workspaceId,
+		startNodeId: handoffs?.activeNode ?? HANDOFF_ROOT,
+		...(childRun ? { parentSessionId: childRun.parentSessionId } : {}),
+	};
+}
+
+function diagnosticFailure(
+	error: unknown,
+	signal: AbortSignal,
+	blocked = false,
+): DiagnosticOutcome {
+	if (
+		blocked ||
+		error instanceof GuardrailOutputBlockedError ||
+		error instanceof InputGuardrailTripwireTriggered
+	)
+		return "guardrail";
+	if (signal.aborted) return "cancel";
+	return error instanceof MaxTurnsExceededError ? "length" : "error";
+}
+
 /**
  * Every FunctionTool gets the run's tool guardrails. A rejection records its outcome for the tool card;
  * a withheld result keeps the original output on the host transcript while the model gets the message.
@@ -3029,8 +3084,7 @@ async function executeRun(
 		let graph = await buildAgent();
 		configureLocalSdkTracing();
 		const runner = new Runner({
-			tracingDisabled: !loadConfig().sdkTracingEnabled,
-			traceIncludeSensitiveData: false,
+			...traceRunOptions(diagnosticIdentity(entry, run.id)),
 			toolExecution: { preApprovalInputGuardrails: true },
 			callModelInputFilter: ({ modelData, agent }) => {
 				assertActive(entry, run);
@@ -3042,6 +3096,11 @@ async function executeRun(
 				return { ...modelData, input: modelHistoryView(entry, run, agent, modelData.input) };
 			},
 		});
+		run.diagnostics = attachRunDiagnostics(
+			runner,
+			diagnosticIdentity(entry, run.id),
+			run.guardrails?.redact ?? runGuardrails(entry).redact,
+		);
 		let next: AgentInputItem[] | RunState<SessionContext, SessionAgent> = recovery
 			? await RunState.fromString(graph.root, recovery)
 			: input;
@@ -3114,12 +3173,8 @@ async function executeRun(
 		run.markReady?.();
 		while (true) {
 			assertActive(entry, run);
-			const stream = await startStream(
-				runner,
-				graph.start,
-				next,
-				entry.store,
-				run.controller.signal,
+			const stream = await run.diagnostics.run(() =>
+				startStream(runner, graph.start, next, entry.store, run.controller.signal),
 			);
 			run.state = stream.state;
 			stageSteering(entry);
@@ -3387,6 +3442,15 @@ async function executeRun(
 					);
 			}
 		} finally {
+			await run.diagnostics?.close(
+				run.suspended
+					? "suspended"
+					: terminal.stopReason === "stop" || terminal.stopReason === "toolUse"
+						? "success"
+						: terminal.stopReason === "aborted"
+							? "cancel"
+							: terminal.stopReason,
+			);
 			run.granted = false;
 			run.controller.abort();
 			delete entry.active;
@@ -3833,6 +3897,8 @@ export async function compactSession(
 	entry.summaryDone = new Promise((resolve) => {
 		finishSummary = resolve;
 	});
+	let summaryDiagnostics: ReturnType<typeof attachRunDiagnostics> | undefined;
+	let summaryOutcome: DiagnosticOutcome = "success";
 	try {
 		const operationId = options.operationId ?? randomUUID();
 		const guard = runGuardrails(entry);
@@ -3856,18 +3922,24 @@ export async function compactSession(
 				});
 				configureLocalSdkTracing();
 				const runner = new Runner({
-					tracingDisabled: !loadConfig().sdkTracingEnabled,
-					traceIncludeSensitiveData: false,
+					...traceRunOptions(diagnosticIdentity(entry, operationId)),
 				});
-				const response = await runner.run(
-					agent,
-					[
-						{
-							role: "user",
-							content: `${options.instructions ?? ""}\nConversation:\n${JSON.stringify(prefix)}`,
-						},
-					],
-					{ signal, maxTurns: 1 },
+				summaryDiagnostics = attachRunDiagnostics(
+					runner,
+					diagnosticIdentity(entry, operationId),
+					guard.redact,
+				);
+				const response = await summaryDiagnostics.run(() =>
+					runner.run(
+						agent,
+						[
+							{
+								role: "user",
+								content: `${options.instructions ?? ""}\nConversation:\n${JSON.stringify(prefix)}`,
+							},
+						],
+						{ signal, maxTurns: 1 },
+					),
 				);
 				summaryUsage.input = response.state.usage.inputTokens;
 				summaryUsage.output = response.state.usage.outputTokens;
@@ -3894,7 +3966,11 @@ export async function compactSession(
 			);
 			if (message) emit(entry, { type: "message_end", message });
 		}
+	} catch (error) {
+		summaryOutcome = diagnosticFailure(error, controller.signal);
+		throw error;
 	} finally {
+		await summaryDiagnostics?.close(summaryOutcome);
 		finishSummary();
 		if (entry.summaryController === controller) {
 			delete entry.summaryController;

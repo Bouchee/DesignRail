@@ -9,7 +9,7 @@ import {
 	type ToolOutputGuardrailDefinition,
 } from "@openai/agents";
 import { z } from "zod";
-import { TOKEN_LITERAL } from "./mcp";
+import { redactMcpText, TOKEN_LITERAL } from "./mcp";
 
 /**
  * One run's guardrails. The SDK definitions are named after the rule they enforce. `output` is the host
@@ -22,6 +22,7 @@ export interface GuardrailPolicy {
 	toolInput: ToolInputGuardrailDefinition[];
 	toolOutput: ToolOutputGuardrailDefinition[];
 	output: { window: number; match: (text: string) => { rule: string } | undefined };
+	redact: (text: string) => string;
 }
 
 /** Assistant text that the output gate refused; the run settles with the guardrail outcome. */
@@ -186,7 +187,8 @@ const info = (rule: string) => ({ rule });
 /**
  * Reads the personal or trusted project rule file (the project file replaces the personal one) and adds
  * the always-on secret rule. Absent files add no rules; a malformed file throws
- * `GuardrailConfigurationError`. Credential values shorter than eight characters are not matched.
+ * `GuardrailConfigurationError`. Execution guards match credentials of eight or more characters;
+ * diagnostics redact every nonempty credential.
  */
 export function loadGuardrailPolicy(input: {
 	cwd?: string;
@@ -194,10 +196,9 @@ export function loadGuardrailPolicy(input: {
 	projectTrusted: boolean;
 	credentials: readonly string[];
 }): GuardrailPolicy {
-	const credentials = [...new Set(input.credentials)].filter(
-		(value) => value.length >= MIN_CREDENTIAL,
-	);
-	const hasCredential = (text: string) => credentials.some((value) => text.includes(value));
+	const credentials = [...new Set(input.credentials)].filter((value) => value.length > 0);
+	const hasCredential = (text: string, minimumLength = MIN_CREDENTIAL) =>
+		credentials.some((value) => value.length >= minimumLength && text.includes(value));
 	const secretInput = { name: SECRET_RULE, matches: hasCredential };
 	const secretOutput = {
 		name: SECRET_RULE,
@@ -207,6 +208,7 @@ export function loadGuardrailPolicy(input: {
 	const at = (stage: Stage) => rules.filter((rule) => rule.stages.has(stage));
 	const outputRules = at("finalOutput");
 	return {
+		redact: (text) => (hasCredential(text, 1) ? "***" : redactMcpText(text)),
 		agentInput: at("userInput").map((rule) => ({
 			name: rule.name,
 			runInParallel: false,

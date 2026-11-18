@@ -163,7 +163,40 @@ follow-up before writes, retain a generic-child queue positive control and file 
 Wrong: treat every `message_output_item` as terminal, or admit input that fails only during queue drain.
 Correct: bind final correction to an action-free response and reject unsupported input at admission.
 
-Only the configured, verified stage-1 Responses target is offered. API keys are host-side and saved with mode 0600 in the RailDesign data directory. SDK tracing starts disabled. When enabled, an application-local processor records only trace/span IDs, fixed workflow names, span types and timestamps through the local logger. It replaces the SDK exporter; no trace reaches OpenAI, and sensitive model/tool content is excluded. Ordinary FunctionTools are used for files and commands; native provider shell/patch/compact endpoints are not required.
+Only the configured, verified stage-1 Responses target is offered. API keys are host-side and saved with mode 0600 in the RailDesign data directory. Ordinary FunctionTools are used for files and commands; native provider shell/patch/compact endpoints are not required.
+
+`localTracing.ts` owns SDK diagnostics through the existing `sdk-trace` host logger; tracing starts
+disabled. Its one processor replaces the SDK exporter and never exports over the network. Enabled
+root/summary traces use `groupId=sessionId` and metadata `sessionId`, `runId`, `workspaceId`,
+`startNodeId`, plus `parentSessionId` for child sessions. Ended spans retain SDK trace/span/parent IDs,
+timestamps, duration and a closed field allowlist: agent/function names, Handoff endpoints, guardrail
+name/triggered, generation model and numeric token usage, task/turn usage. Inputs, outputs, instructions,
+arguments, results, model configuration, arbitrary metadata/error data and response bodies are omitted.
+Allowed text and error messages use the run's shared configured-credential matcher plus MCP token
+redaction before a 256-character bound; the whole text is masked when it contains any nonempty
+configured key. The execution guardrails retain their eight-character minimum for credential matching.
+
+One observational recorder per host run uses public Runner hooks; native foreground `Agent.asTool`
+uses the same recorder with public Agent hooks because SDK 0.21.0 does not expose its nested Runner.
+The SDK keeps that child's spans under the parent tool span and trace. A diagnostics-local async
+scope captures child session/run/parent identity on span start without changing SDK trace IDs or
+parent links. Host-owned Runner invocations clear ambient SDK trace context through public
+`withTraceContext(null, ...)`, so detached children and summaries create their own correctly grouped
+traces even when launched by a parent tool. No second execution owner or usage recorder is installed. Repeated starts during
+approval/resume do not open duplicate lifecycle items. Native ends and Handoffs close their matching
+items; host settlement closes remaining items exactly once with success/error/length/cancel/guardrail
+(or suspended at a durable checkpoint), then detaches observers. A run-end record carries the final
+host outcome even when SDK agent-end preceded host output validation. Existing effect receipts,
+approval/Handoff commits and usage ownership stay unchanged. Disabled tracing produces no trace,
+span or lifecycle diagnostics; unrelated host logging is unaffected.
+Host settlement also ends only SDK traces created in its diagnostics scope through the public,
+idempotent `Trace.end`: SDK 0.21.0's non-streaming error path otherwise leaves a started trace open.
+The foreground child's native `maxTurns` error handler observes the length outcome and returns void,
+preserving SDK error behavior. Its public input guardrail callbacks are observed once and restored
+when diagnostics close: arguments/results/errors and execution counts remain with the existing
+SDK guardrails, while a tripwire remains identifiable after `asTool` converts the thrown error into
+its default tool result. Responses spans expose no model/usage fields with sensitive data off;
+their IDs/duration remain available, and SDK task/turn spans carry numeric usage when supplied.
 
 Go requests identify the client as `RailDesign/0.1`. `createConfiguredModel(model, sessionId)` requires the application conversation ID and sends it as `x-opencode-session` through the public OpenAI client's `defaultHeaders`. Every run and approval continuation in that conversation uses the stored session ID, independent of run IDs and credentials. One-shot assistance allocates one UUID for its logical invocation. The fixed `responsesClientSettings` uses public `ModelSettings.providerData.extra_headers` for the user agent because Agents SDK 0.21.0 replaces the client default with its own per-request header. Model discovery sends the same client identity without inventing a conversation. This follows the [Go client requirements](https://opencode.ai/docs/console/go/#where-can-i-use-it), checked 2026-11-11 with Agents SDK 0.21.0 and OpenAI 7.55.0; generic SDK identification or a missing session header can reject a request before inference.
 
@@ -512,7 +545,8 @@ node; a mismatch fails before continuation and completed effects never replay.
 
 `guardrails.ts` owns one interface: `loadGuardrailPolicy({cwd?,dataDir,projectTrusted,credentials})`
 returns public SDK definitions (`agentInput`, `toolInput`, `toolOutput`), each named after the rule it
-enforces, and the host output gate `output: {window, match}`. It reads `<cwd>/.raildesign/guardrails.json` when the project's resource trust is
+enforces, the host output gate `output: {window, match}`, and `redact(text)` for local diagnostics.
+The redactor reuses the same configured-credential matcher and MCP redaction. It reads `<cwd>/.raildesign/guardrails.json` when the project's resource trust is
 granted, otherwise `<dataDir>/guardrails.json`; the project file replaces the personal one. An absent
 file adds no rules. A malformed, oversized (64 KiB), invalid-regex, duplicate or reserved-name document
 throws `GuardrailConfigurationError` citing the file, so the run fails before any model request. An

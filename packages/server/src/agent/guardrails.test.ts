@@ -134,6 +134,8 @@ test("credentials shorter than eight characters, empty and duplicate values are 
 		toolInput: "allow",
 		toolOutput: "allow",
 	});
+	expect(policy.redact("a short answer")).toBe("***");
+	expect(policy.redact("ordinary answer")).toBe("ordinary answer");
 });
 
 test("a credential inside JSON-escaped tool arguments is still rejected", async () => {
