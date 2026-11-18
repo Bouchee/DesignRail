@@ -16,7 +16,7 @@ import {
 	type Tool,
 	tool,
 } from "@openai/agents";
-import { Manifest, SandboxAgent } from "@openai/agents/sandbox";
+import { filesystem, Manifest, SandboxAgent } from "@openai/agents/sandbox";
 import { UnixLocalSandboxClient, type UnixLocalSandboxSession } from "@openai/agents/sandbox/local";
 import type {
 	AgentSettlement,
@@ -165,6 +165,7 @@ const agentNodes = new WeakMap<object, string>();
 
 interface ActiveRun {
 	state?: RunState<SessionContext, SessionAgent>;
+	sandbox?: UnixLocalSandboxSession;
 	suspended?: boolean;
 	inputId?: string;
 	enabledExtensions: SdkExtensionSnapshot[];
@@ -2586,6 +2587,13 @@ async function buildSessionAgent(
 	// A standalone chat is not a repository: it and its children get no Spec tools or rule.
 	const repository =
 		loadWorkspaces().find((item) => item.id === entry.store.record.workspaceId)?.kind !== "chat";
+	const sandboxEnabled = entry.store.record.sandbox === true;
+	const sandboxSession = sandboxEnabled
+		? () => {
+				if (!run.sandbox) throw new Error("The Sandbox session has not started");
+				return run.sandbox;
+			}
+		: undefined;
 	const applicationTools = [
 		...(definition
 			? []
@@ -2596,8 +2604,8 @@ async function buildSessionAgent(
 					signal: run.controller.signal,
 					assertActive: active,
 				})),
-		...(definition ? [] : await childTools(entry, run)),
-		...backgroundTools(entry, run),
+		...(definition || sandboxEnabled ? [] : await childTools(entry, run)),
+		...(sandboxEnabled ? [] : backgroundTools(entry, run)),
 		...titleTools(entry, run),
 		...reviewTools(entry, run),
 		...createTodoTools({
@@ -2635,17 +2643,23 @@ async function buildSessionAgent(
 		instructions: (context) => {
 			assertWorkspaceContext(context.context, entry);
 			assertOwner();
-			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. Use apply_patch for edits and bash to run project checks. Request approval for commands and edits. A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
+			const commandInstructions = sandboxEnabled
+				? "Sandbox bash supports bare pwd directly and rm -- <relative-file> with approval. Other command forms are rejected. Use apply_patch for approved edits."
+				: "Use apply_patch for edits and bash to run project checks. Request approval for commands and edits.";
+			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
 		},
 		model: sdkModel,
 		tools: [
 			...applicationTools,
-			...workspaceTools({
-				workspaceId: entry.store.record.workspaceId,
-				cwd: entry.store.record.cwd,
-				signal: run.controller.signal,
-				assertActive: active,
-			}),
+			...workspaceTools(
+				{
+					workspaceId: entry.store.record.workspaceId,
+					cwd: entry.store.record.cwd,
+					signal: run.controller.signal,
+					assertActive: active,
+				},
+				sandboxSession,
+			),
 			...registrySdkTools(
 				{
 					cwd: entry.store.record.cwd,
@@ -2700,7 +2714,7 @@ async function buildSessionAgent(
 				: {}),
 		},
 	};
-	const agent = entry.store.record.sandbox
+	const agent = sandboxEnabled
 		? new SandboxAgent({ ...options, capabilities: [], baseInstructions: "" })
 		: new Agent(options);
 	agent.on("agent_tool_start", (_context, _tool, details) => {
@@ -2763,6 +2777,13 @@ async function buildSessionAgent(
 	if (role.node !== undefined) agentNodes.set(agent, role.node);
 	captureStructuredToolResults(agent.tools, run);
 	attachToolGuardrails(agent.tools, run, run.guardrails);
+	if (agent instanceof SandboxAgent) {
+		const patch = agent.tools.find((candidate) => candidate.name === "apply_patch");
+		if (patch) {
+			agent.tools = agent.tools.filter((candidate) => candidate !== patch);
+			agent.capabilities = [filesystem({ configureTools: () => [patch] })];
+		}
+	}
 	return agent;
 }
 
@@ -2824,15 +2845,17 @@ function attachToolGuardrails(
 		run.guardrailOutcomes?.set(callId, { stage, rule });
 	for (const candidate of tools) {
 		if (candidate.type !== "function") continue;
-		candidate.inputGuardrails = policy.toolInput.map((guardrail) => ({
-			...guardrail,
-			run: async (data) => {
-				const result = await guardrail.run(data);
-				if (result.behavior.type === "rejectContent")
-					observe(data.toolCall.callId, "input", guardrail.name);
-				return result;
-			},
-		}));
+		candidate.inputGuardrails = [...policy.toolInput, ...(candidate.inputGuardrails ?? [])].map(
+			(guardrail) => ({
+				...guardrail,
+				run: async (data) => {
+					const result = await guardrail.run(data);
+					if (result.behavior.type === "rejectContent")
+						observe(data.toolCall.callId, "input", guardrail.name);
+					return result;
+				},
+			}),
+		);
 		candidate.outputGuardrails = policy.toolOutput.map((guardrail) => ({
 			...guardrail,
 			run: async (data) => {
@@ -3075,7 +3098,6 @@ async function executeRun(
 ): Promise<void> {
 	let terminal: AgentSettlement = { stopReason: "stop" };
 	let streamFailed = false;
-	let sandbox: UnixLocalSandboxSession | undefined;
 	try {
 		assertActive(entry, run);
 		if (
@@ -3188,14 +3210,26 @@ async function executeRun(
 				throw new Error("The Unix-local Sandbox requires macOS or Linux and trusted Python 3");
 			const cwd = await realpath(entry.store.record.cwd);
 			assertActive(entry, run);
-			sandbox = await new UnixLocalSandboxClient().create(
-				new Manifest({ extraPathGrants: [{ path: cwd, readOnly: true }] }),
+			if (cwd.trimEnd() !== cwd)
+				throw new Error(
+					"Sandbox cannot use a worktree path ending in whitespace because the SDK trims it",
+				);
+			// The SDK resolves its virtual root before looking for a host path grant.
+			const defaultRoot = "/workspace";
+			run.sandbox = await new UnixLocalSandboxClient().create(
+				new Manifest({
+					root:
+						cwd === defaultRoot || cwd.startsWith(`${defaultRoot}/`)
+							? "/raildesign-workspace"
+							: defaultRoot,
+					extraPathGrants: [{ path: cwd, readOnly: true }],
+				}),
 			);
 		}
 		while (true) {
 			assertActive(entry, run);
 			const stream = await run.diagnostics.run(() =>
-				startStream(runner, graph.start, next, entry.store, run.controller.signal, sandbox),
+				startStream(runner, graph.start, next, entry.store, run.controller.signal, run.sandbox),
 			);
 			run.state = stream.state;
 			stageSteering(entry);
@@ -3326,18 +3360,21 @@ async function executeRun(
 			assertOwnerAgent(entry, next.currentAgent);
 			run.state = next;
 		}
-		if (sandbox) {
-			const close = sandbox.close();
-			sandbox = undefined;
+		if (run.sandbox) {
+			const close = run.sandbox.close();
+			delete run.sandbox;
 			await close;
 			assertActive(entry, run);
 		}
 	} catch (error) {
 		run.markReady?.();
-		if (sandbox)
-			await sandbox.close().catch((cleanupError: unknown) => {
+		if (run.sandbox) {
+			const close = run.sandbox.close();
+			delete run.sandbox;
+			await close.catch((cleanupError: unknown) => {
 				log.warn("Could not close the Unix-local Sandbox", cleanupError);
 			});
+		}
 		if (run.suspended) return;
 		const tripwire = error instanceof InputGuardrailTripwireTriggered ? error : undefined;
 		const aborted = !streamFailed && (!run.granted || run.controller.signal.aborted);

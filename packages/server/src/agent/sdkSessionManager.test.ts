@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent, applyDiff, tool, Usage } from "@openai/agents";
-import { UnixLocalSandboxClient, type UnixLocalSandboxSession } from "@openai/agents/sandbox/local";
+import { UnixLocalSandboxClient, UnixLocalSandboxSession } from "@openai/agents/sandbox/local";
 import {
 	assistantMessage,
 	functionCall,
@@ -29,7 +29,7 @@ import { TodoStore } from "@thinkrail/todos/core";
 import { z } from "zod";
 import * as fsModule from "../fs";
 import { gitDiffFile } from "../git";
-import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
+import { loadConfig, loadWorkspaces, saveConfig, saveWorkspaces } from "../persistence";
 import { resetConfigCache, updateConfig } from "../settings";
 import * as subprocessModule from "../subprocess";
 import { setTrashImplementationForTests } from "../trash";
@@ -406,6 +406,303 @@ function observeSandboxSessions() {
 }
 
 test.skipIf(process.platform === "win32")(
+	"Sandbox runs bare pwd directly, rejects unknown commands, and approves one-file removal",
+	async () => {
+		const fixture = join(worktree, "remove.txt");
+		const directory = join(worktree, "directory");
+		const link = join(worktree, "link.txt");
+		mkdirSync(directory);
+		mkdirSync(join(worktree, ".git"));
+		writeFileSync(join(worktree, ".git", "config"), "[core]\n");
+		writeFileSync(fixture, "keep until approved\n");
+		symlinkSync(fixture, link);
+		mkdirSync(join(root, "data/skills/probe"), { recursive: true });
+		writeFileSync(
+			join(root, "data/skills/probe/SKILL.md"),
+			"---\nname: probe\ndescription: Probe procedure\n---\nProbe body.",
+		);
+		const exec = spyOn(UnixLocalSandboxSession.prototype, "exec");
+		const read = spyOn(UnixLocalSandboxSession.prototype, "readFile");
+		try {
+			const model = new ScriptedModel([
+				modelResponder(({ request }) => {
+					const names = request.tools.map((tool) => tool.name);
+					expect(new Set(names).size).toBe(names.length);
+					expect(request.tools.every((tool) => tool.type === "function")).toBe(true);
+					for (const name of [
+						"read",
+						"search",
+						"apply_patch",
+						"bash",
+						"skill_search",
+						"skill_read",
+					])
+						expect(names).toContain(name);
+					for (const name of [
+						"exec_command",
+						"write_stdin",
+						"view_image",
+						"Agent",
+						"background_command",
+					])
+						expect(names).not.toContain(name);
+					return [
+						functionCall("read", { path: "remove.txt" }, { callId: "sandbox-read" }),
+						functionCall("bash", { command: "pwd", timeoutMs: 10000 }, { callId: "sandbox-pwd" }),
+						functionCall(
+							"skill_search",
+							{ query: "probe", limit: null },
+							{ callId: "sandbox-skill-search" },
+						),
+						functionCall(
+							"skill_read",
+							{ name: "probe", path: null },
+							{ callId: "sandbox-skill-read" },
+						),
+					];
+				}),
+				modelResponse([
+					functionCall("bash", "{", { callId: "sandbox-invalid-json" }),
+					...[
+						"pwd && pwd",
+						"./script.sh",
+						"rm -- directory",
+						"rm -- link.txt",
+						"rm -- .git/config",
+						"rm -- ../remove.txt",
+						"rm -- remove.txt\n",
+					].map((command, index) =>
+						functionCall(
+							"bash",
+							{ command, timeoutMs: 10000 },
+							{ callId: `sandbox-unknown-${index}` },
+						),
+					),
+				]),
+				command("sandbox-rm-denied", "rm -- remove.txt"),
+				command("sandbox-rm", "rm -- remove.txt"),
+				done(),
+			]);
+			configureAgentModelFactory(() => model);
+			const approvals: Extract<ExtUiRequest, { kind: "confirm" }>[] = [];
+			setExtUiPublisher((request) => {
+				if (request.kind !== "confirm") return;
+				approvals.push(request);
+				expect(existsSync(fixture)).toBe(true);
+				resolveExtUi(approvalResponse(request, request.toolCallId === "sandbox-rm"));
+			});
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			await promptSession(sessionId, "Inspect the workspace and remove the fixture");
+			expect(approvals.map((request) => request.toolCallId)).toEqual([
+				"sandbox-rm-denied",
+				"sandbox-rm",
+			]);
+			for (const approval of approvals) {
+				expect(approval.toolInput).toEqual({ command: "rm -- remove.txt", timeoutMs: 10000 });
+			}
+			expect(exec.mock.calls).toEqual([
+				[
+					{
+						cmd: "pwd",
+						workdir: realpathSync(worktree),
+						shell: "/bin/sh",
+						login: false,
+						tty: false,
+						yieldTimeMs: 1000,
+					},
+				],
+				[
+					{
+						cmd: "exec /bin/rm -- './remove.txt'",
+						workdir: realpathSync(worktree),
+						shell: "/bin/sh",
+						login: false,
+						tty: false,
+						yieldTimeMs: 1000,
+					},
+				],
+			]);
+			expect(read.mock.calls).toEqual([
+				[{ path: join(realpathSync(worktree), "remove.txt"), maxBytes: 262145 }],
+			]);
+			expect(existsSync(fixture)).toBe(false);
+			expect(existsSync(directory)).toBe(true);
+			expect(existsSync(join(worktree, ".git", "config"))).toBe(true);
+			const results = (await getSessionMessages(sessionId, "workspace", worktree)).messages.filter(
+				(item) => item.role === "toolResult",
+			);
+			for (const callId of [
+				"sandbox-read",
+				"sandbox-pwd",
+				"sandbox-rm",
+				"sandbox-skill-search",
+				"sandbox-skill-read",
+			]) {
+				expect(results.find((message) => message.toolCallId === callId)?.isError).toBe(false);
+			}
+			for (const failure of results.filter((message) =>
+				/sandbox-(unknown|invalid)/.test(message.toolCallId),
+			)) {
+				expect(failure.isError).toBe(true);
+			}
+			expect(results.find((message) => message.toolCallId === "sandbox-rm-denied")?.isError).toBe(
+				true,
+			);
+			expect(results.filter((message) => message.isError)).toHaveLength(9);
+			expect(
+				JSON.stringify(results.find((message) => message.toolCallId === "sandbox-pwd")?.content),
+			).toContain(realpathSync(worktree));
+			expect(
+				JSON.stringify(
+					results.find((message) => message.toolCallId === "sandbox-skill-read")?.content,
+				),
+			).toContain("Probe body.");
+			expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+			model.assertComplete();
+		} finally {
+			read.mockRestore();
+			exec.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"Sandbox reads reject filenames that the SDK would trim to a different path",
+	async () => {
+		writeFileSync(join(worktree, "notes.txt"), "ordinary file\n");
+		writeFileSync(join(worktree, "notes.txt "), "different file\n");
+		const model = new ScriptedModel([
+			modelResponse([
+				functionCall("read", { path: "notes.txt" }, { callId: "exact-read" }),
+				functionCall("read", { path: "notes.txt " }, { callId: "ambiguous-read" }),
+			]),
+			done(),
+		]);
+		configureAgentModelFactory(() => model);
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		setSessionSandbox(sessionId, true);
+		await promptSession(sessionId, "Read both notes files");
+		const results = (await getSessionMessages(sessionId, "workspace", worktree)).messages.filter(
+			(item) => item.role === "toolResult",
+		);
+		const exact = results.find((item) => item.toolCallId === "exact-read");
+		const ambiguous = results.find((item) => item.toolCallId === "ambiguous-read");
+		expect(exact?.isError).toBe(false);
+		expect(JSON.stringify(exact?.content)).toContain("ordinary file");
+		expect(ambiguous?.isError).toBe(true);
+		expect(JSON.stringify(ambiguous?.content)).toContain("ending in whitespace");
+		model.assertComplete();
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"Sandbox rechecks an approval and fails closed when a file appears during an unapproved call",
+	async () => {
+		const appeared = join(worktree, "appeared.txt");
+		const swapped = join(worktree, "swapped.txt");
+		const saved = join(worktree, "saved.txt");
+		writeFileSync(swapped, "keep this file\n");
+		const exec = spyOn(UnixLocalSandboxSession.prototype, "exec");
+		try {
+			const model = new ScriptedModel([
+				command("unapproved-appeared", "rm -- appeared.txt"),
+				command("approved-swapped", "rm -- swapped.txt"),
+				done(),
+			]);
+			configureAgentModelFactory(() => model);
+			const approvals: string[] = [];
+			setExtUiPublisher((request) => {
+				if (request.kind !== "confirm") return;
+				if (!request.toolCallId) throw new Error("Approval must belong to a tool call");
+				approvals.push(request.toolCallId);
+				renameSync(swapped, saved);
+				symlinkSync(saved, swapped);
+				resolveExtUi(approvalResponse(request, true));
+			});
+			setSessionPublisher(({ event }) => {
+				if (event.type === "tool_execution_start" && event.toolCallId === "unapproved-appeared")
+					writeFileSync(appeared, "created after classification\n");
+			});
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			await promptSession(sessionId, "Remove the two proposed files");
+			expect(approvals).toEqual(["approved-swapped"]);
+			expect(exec).not.toHaveBeenCalled();
+			expect(readFileSync(appeared, "utf8")).toBe("created after classification\n");
+			expect(readFileSync(swapped, "utf8")).toBe("keep this file\n");
+			const results = (await getSessionMessages(sessionId, "workspace", worktree)).messages.filter(
+				(item) => item.role === "toolResult",
+			);
+			expect(results.map((item) => item.isError)).toEqual([true, true]);
+			expect(JSON.stringify(results[0]?.content)).toContain("requires approval for this command");
+			expect(JSON.stringify(results[1]?.content)).toContain("without symbolic links");
+			model.assertComplete();
+		} finally {
+			exec.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32").each(["timeout", "stop"])(
+	"Sandbox reaps an SDK process that yields after %s before settlement",
+	async (reason) => {
+		const started = latch();
+		const exec = UnixLocalSandboxSession.prototype.exec;
+		let pid = 0;
+		const probe = spyOn(UnixLocalSandboxSession.prototype, "exec").mockImplementation(
+			async function (this: UnixLocalSandboxSession, args) {
+				started.release();
+				const result = await exec.call(this, {
+					...args,
+					cmd: 'printf "%s\\n" "$$"; exec /bin/sleep 10',
+				});
+				expect(result.sessionId).toBeDefined();
+				pid = Number(result.stdout?.trim());
+				return result;
+			},
+		);
+		try {
+			const model = new ScriptedModel([
+				modelResponse([
+					functionCall(
+						"bash",
+						{ command: "pwd", timeoutMs: reason === "timeout" ? 100 : 120000 },
+						{ callId: "sandbox-delayed" },
+					),
+				]),
+				...(reason === "timeout" ? [done()] : []),
+			]);
+			configureAgentModelFactory(() => model);
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			const running = promptSession(sessionId, "Check the working directory");
+			if (reason === "stop") {
+				await Promise.race([started.promise, running]);
+				await abortSession(sessionId);
+			}
+			await running;
+			expect(probe.mock.calls[0]?.[0].yieldTimeMs).toBe(reason === "timeout" ? 100 : 1000);
+			expect(pid).toBeGreaterThan(0);
+			expect(() => process.kill(pid, 0)).toThrow();
+			expect(getSessionState(sessionId).completion?.outcome).toBe(
+				reason === "timeout" ? "succeeded" : "cancelled",
+			);
+			if (reason === "timeout") {
+				const result = readSessionRecord(sessionId)?.messages.find(
+					(item) => item.role === "toolResult" && item.toolCallId === "sandbox-delayed",
+				);
+				expect(result).toMatchObject({ isError: true });
+				expect(JSON.stringify(result)).toContain("timedOut");
+			}
+			model.assertComplete();
+		} finally {
+			probe.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
 	"Sandbox shares the selected worktree across an ordinary patch approval and closes on settlement",
 	async () => {
 		const fixture = join(realpathSync(worktree), "sandbox.txt");
@@ -649,6 +946,30 @@ test.skipIf(process.platform === "win32")(
 			model.assertComplete();
 		} finally {
 			probe.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"Sandbox rejects a canonical worktree path that the SDK would trim",
+	async () => {
+		const spaced = `${worktree} `;
+		mkdirSync(spaced);
+		saveWorkspaces(loadWorkspaces().map((workspace) => ({ ...workspace, worktreePath: spaced })));
+		const create = spyOn(UnixLocalSandboxClient.prototype, "create");
+		try {
+			const model = new ScriptedModel([]);
+			configureAgentModelFactory(() => model);
+			const { sessionId } = await createSession({ cwd: spaced, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			await promptSession(sessionId, "Inspect the workspace");
+			expect(create).not.toHaveBeenCalled();
+			expect(model.calls).toHaveLength(0);
+			expect(assistantMessages(sessionId).at(-1)?.errorMessage).toContain(
+				"worktree path ending in whitespace",
+			);
+		} finally {
+			create.mockRestore();
 		}
 	},
 );

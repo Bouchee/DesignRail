@@ -25,18 +25,33 @@ Each `session.event` envelope carries session ID, run ID and monotonically incre
 
 Tool failure status comes from invalid call JSON, SDK error callbacks, command exit results and explicit approval rejection, never from text returned by repository files or tools. The run's per-call metadata carries this status into both live and saved tool results.
 
-Each run creates a new AbortController and workspace-bound tools. Stop revokes the grant before aborting the model and subprocess group. Tools revalidate grant and an existing workspace record before effects. Read/search/edit paths use the filesystem resolver, including real paths, symlinks, new-file ancestors and `.git` checks. Commands reuse `runBounded` in the assigned worktree with time/output bounds. The tools capture configured model-key environment references at run creation and exclude those names, plus common secret names, from child environments. Edits check original text, apply the SDK diff and replace atomically. This is host-account execution, not an operating-system sandbox.
+Each run creates a new AbortController and workspace-bound tools. Stop revokes the grant before aborting the model and subprocess group. Tools revalidate grant and an existing workspace record before effects. Read/search/edit paths use the filesystem resolver, including real paths, symlinks, new-file ancestors and `.git` checks. Ordinary chats use `runBounded` in the assigned worktree with time/output bounds. The host subprocess tools capture configured model-key environment references at run creation and exclude those names, plus common secret names, from child environments. Edits check original text, apply the SDK diff and replace atomically.
 
-The per-session Sandbox setting selects the SDK `SandboxAgent` with an explicit empty capability list
-and the current ordinary FunctionTools. The host opens one Unix-local SDK session for the active
-run, including its Handoffs and in-process approval continuations. Its manifest grants read-only
-access to the assigned worktree by its canonical path. The worktree remains the authority for Files, Diff
-and grant-checked writes. Native Sandbox tools and shell isolation are outside this mode. Host
-credentials stay outside the manifest and model-facing settings. Unix-local requires macOS or Linux
-and trusted Python 3. Runtime failure has an explicit cause and no alternate run. Stop revokes
-the grant before abort, and settlement awaits SDK session disposal. Approval records keep
-application checkpoints without sandbox workspace state; restart creates a fresh runtime with the
-current grant. Chat mode changes require an idle session.
+The per-session Sandbox setting selects the SDK `SandboxAgent` and one Unix-local SDK session for the
+active run, including its Handoffs and approval continuations. Its manifest grants read-only access
+to the canonical worktree. Worktree paths ending in whitespace are rejected because the SDK trims
+them. A worktree at or under `/workspace` uses a distinct SDK virtual root so the host grant resolves
+to the assigned worktree. The model-facing `read` resolves worktree permissions first and reads
+text through the SDK session. It rejects canonical paths ending in whitespace because the SDK
+trims them before resolving the file. SDK `filesystem.configureTools` offers the existing `apply_patch`
+FunctionTool for approved, grant-checked edits. Files and Diff use the same worktree. Skills keep
+their existing admission checks and tool names. The Sandbox graph omits `Agent` and
+`background_command`. Separately opened chats and user-configured MCP services retain their own permissions.
+
+Sandbox `bash` uses the SDK session's `exec` with a fixed non-login shell, the canonical worktree
+and the SDK environment. Bare `pwd` runs directly. `rm -- <relative-file>` requires approval for
+that call and accepts one existing regular worktree file. Path components use ASCII letters,
+digits, `.`, `_` or `-`. Traversal, `.git` components and symbolic links are rejected. The target
+and approval are checked again immediately before execution. Other shell forms and malformed inputs
+return errors before a process or approval dialog. The existing `timeoutMs` is capped at one second
+for these commands. SDK 0.21.0 first registers a long-running process when execution yields. A yielded
+process is stopped before the tool settles, including when Stop arrives during the initial wait.
+
+Unix-local shell commands run with host permissions. The manifest omits host credentials. Unix-local
+requires macOS or Linux and trusted Python 3. Runtime failures settle with their cause. Stop revokes
+the grant before abort, and settlement awaits SDK session disposal. Approval checkpoints contain
+application state. Restart creates a fresh runtime with the current grant. Chat mode changes require
+an idle session.
 
 The ordinary `apply_patch` FunctionTool describes its SDK 0.21.0 headerless V4A format in the
 model-visible parameter schema: existing-file sections use `@@` followed by remove/add/context lines;
