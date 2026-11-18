@@ -27,6 +27,17 @@ Tool failure status comes from invalid call JSON, SDK error callbacks, command e
 
 Each run creates a new AbortController and workspace-bound tools. Stop revokes the grant before aborting the model and subprocess group. Tools revalidate grant and an existing workspace record before effects. Read/search/edit paths use the filesystem resolver, including real paths, symlinks, new-file ancestors and `.git` checks. Commands reuse `runBounded` in the assigned worktree with time/output bounds. The tools capture configured model-key environment references at run creation and exclude those names, plus common secret names, from child environments. Edits check original text, apply the SDK diff and replace atomically. This is host-account execution, not an operating-system sandbox.
 
+The per-session Sandbox setting selects the SDK `SandboxAgent` with an explicit empty capability list
+and the current ordinary FunctionTools. The host opens one Unix-local SDK session for the active
+run, including its Handoffs and in-process approval continuations. Its manifest grants read-only
+access to the assigned worktree by its canonical path. The worktree remains the authority for Files, Diff
+and grant-checked writes. Native Sandbox tools and shell isolation are outside this mode. Host
+credentials stay outside the manifest and model-facing settings. Unix-local requires macOS or Linux
+and trusted Python 3. Runtime failure has an explicit cause and no alternate run. Stop revokes
+the grant before abort, and settlement awaits SDK session disposal. Approval records keep
+application checkpoints without sandbox workspace state; restart creates a fresh runtime with the
+current grant. Chat mode changes require an idle session.
+
 The ordinary `apply_patch` FunctionTool describes its SDK 0.21.0 headerless V4A format in the
 model-visible parameter schema: existing-file sections use `@@` followed by remove/add/context lines;
 new-file lines all start with `+`. Executable examples accompany the format. `original` is the entire

@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
 	Agent,
 	type AgentInputItem,
+	type AgentOptions,
 	handoff,
 	InputGuardrailTripwireTriggered,
 	MaxTurnsExceededError,
@@ -14,6 +16,8 @@ import {
 	type Tool,
 	tool,
 } from "@openai/agents";
+import { Manifest, SandboxAgent } from "@openai/agents/sandbox";
+import { UnixLocalSandboxClient, type UnixLocalSandboxSession } from "@openai/agents/sandbox/local";
 import type {
 	AgentSettlement,
 	AssistantMessage,
@@ -337,6 +341,7 @@ function visibleState(entry: Entry): SessionState {
 	}
 	const handoffs = entry.store.record.handoffs;
 	if (handoffs) state.activeAgent = agentName(handoffs.activeNode);
+	if (entry.store.record.sandbox === true) state.sandbox = true;
 	return state;
 }
 export async function attachApprovalOwner(response: ExtUiResponse): Promise<void> {
@@ -1073,12 +1078,14 @@ function startStream(
 	input: AgentInputItem[] | RunState<SessionContext, SessionAgent>,
 	session: PersistentSession,
 	signal: AbortSignal,
+	sandbox?: UnixLocalSandboxSession,
 ) {
 	return runner.run(agent, input, {
 		stream: true,
 		session,
 		context: { workspaceId: session.record.workspaceId },
 		signal,
+		...(sandbox ? { sandbox: { session: sandbox } } : {}),
 		maxTurns: session.record.childRun ? (session.record.childRun.definition.maxTurns ?? 20) : 50,
 	});
 }
@@ -2621,7 +2628,7 @@ async function buildSessionAgent(
 					},
 				}))),
 	];
-	const agent = new Agent<SessionContext, "text" | typeof planReviewOutput>({
+	const options: AgentOptions<SessionContext, "text" | typeof planReviewOutput> = {
 		name: definition?.name ?? ROOT_AGENT_NAME,
 		outputType: entry.store.record.childRun?.purpose === "review" ? planReviewOutput : "text",
 		inputGuardrails: run.guardrails.agentInput,
@@ -2692,7 +2699,10 @@ async function buildSessionAgent(
 				? { reasoning: { effort: thinkingLevel } }
 				: {}),
 		},
-	});
+	};
+	const agent = entry.store.record.sandbox
+		? new SandboxAgent({ ...options, capabilities: [], baseInstructions: "" })
+		: new Agent(options);
 	agent.on("agent_tool_start", (_context, _tool, details) => {
 		assertOwner();
 		if (details.toolCall.type !== "function_call") return;
@@ -3065,6 +3075,7 @@ async function executeRun(
 ): Promise<void> {
 	let terminal: AgentSettlement = { stopReason: "stop" };
 	let streamFailed = false;
+	let sandbox: UnixLocalSandboxSession | undefined;
 	try {
 		assertActive(entry, run);
 		if (
@@ -3171,10 +3182,20 @@ async function executeRun(
 			}
 		}
 		run.markReady?.();
+		if (entry.store.record.sandbox) {
+			assertActive(entry, run);
+			if (process.platform !== "darwin" && process.platform !== "linux")
+				throw new Error("The Unix-local Sandbox requires macOS or Linux and trusted Python 3");
+			const cwd = await realpath(entry.store.record.cwd);
+			assertActive(entry, run);
+			sandbox = await new UnixLocalSandboxClient().create(
+				new Manifest({ extraPathGrants: [{ path: cwd, readOnly: true }] }),
+			);
+		}
 		while (true) {
 			assertActive(entry, run);
 			const stream = await run.diagnostics.run(() =>
-				startStream(runner, graph.start, next, entry.store, run.controller.signal),
+				startStream(runner, graph.start, next, entry.store, run.controller.signal, sandbox),
 			);
 			run.state = stream.state;
 			stageSteering(entry);
@@ -3305,8 +3326,18 @@ async function executeRun(
 			assertOwnerAgent(entry, next.currentAgent);
 			run.state = next;
 		}
+		if (sandbox) {
+			const close = sandbox.close();
+			sandbox = undefined;
+			await close;
+			assertActive(entry, run);
+		}
 	} catch (error) {
 		run.markReady?.();
+		if (sandbox)
+			await sandbox.close().catch((cleanupError: unknown) => {
+				log.warn("Could not close the Unix-local Sandbox", cleanupError);
+			});
 		if (run.suspended) return;
 		const tripwire = error instanceof InputGuardrailTripwireTriggered ? error : undefined;
 		const aborted = !streamFailed && (!run.granted || run.controller.signal.aborted);
@@ -4024,6 +4055,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 			thinkingLevel: model?.thinkingLevels.includes(input.thinkingLevel ?? "off")
 				? (input.thinkingLevel ?? "off")
 				: "off",
+			sandbox: false,
 			eventSeq: 0,
 			revision: 0,
 			history: [],
@@ -4512,6 +4544,18 @@ export function setSessionThinkingLevel(sessionId: string, level: ThinkingLevel)
 		record.thinkingLevel = level;
 	});
 	emit(entry, { type: "thinking_level_changed", level });
+}
+export function setSessionSandbox(sessionId: string, enabled: boolean): void {
+	if (typeof enabled !== "boolean") throw new Error("Sandbox setting must be a boolean");
+	const entry = mustGet(sessionId);
+	if (entry.store.record.childRun) throw new Error("The Sandbox setting belongs to a chat");
+	if (entry.active || entry.stopping)
+		throw new Error("Stop the active run before changing Sandbox");
+	if ((entry.store.record.sandbox === true) === enabled) return;
+	entry.store.update((record) => {
+		record.sandbox = enabled;
+	});
+	notifyState(entry);
 }
 export function acknowledgeCompletion(
 	sessionId: string,

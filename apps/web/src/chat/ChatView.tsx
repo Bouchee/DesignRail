@@ -107,6 +107,8 @@ export default function ChatView({
 	const thinkingLevel = useAppStore(
 		(s) => s.sessions[sessionId]?.thinkingLevel ?? EMPTY_RUNTIME.thinkingLevel,
 	);
+	const sandboxEnabled = useAppStore((s) => s.sessions[sessionId]?.hostState?.sandbox === true);
+	const [sandboxPending, setSandboxPending] = useState(false);
 	const extUiStatus = useAppStore(
 		(s) => s.sessions[sessionId]?.extUiStatus ?? EMPTY_RUNTIME.extUiStatus,
 	);
@@ -501,6 +503,13 @@ export default function ChatView({
 		pairSelection.current += 1;
 		useAppStore.getState().setThinkingLevel(sessionId, level);
 		void requestLevel(level, thinkingLevel);
+	};
+	const setSandbox = (enabled: boolean) => {
+		setSandboxPending(true);
+		void Promise.resolve()
+			.then(() => getTransport().request("session.setSandbox", { sessionId, enabled }))
+			.catch((error: unknown) => toast.error(errorText(error), t("chat.view.sandboxChangeFailed")))
+			.finally(() => setSandboxPending(false));
 	};
 
 	const onSelectModel = ({ model, level }: ModelSelection) => {
@@ -949,6 +958,9 @@ export default function ChatView({
 					onSlashActive={setSlashActive}
 					onSelectModel={onSelectModel}
 					onSelectThinking={onSelectThinking}
+					sandboxEnabled={sandboxEnabled}
+					sandboxPending={sandboxPending}
+					onSetSandbox={setSandbox}
 					onSubmit={onSubmit}
 					onAbort={onAbort}
 					onEnterTranscript={() => transcriptRef.current?.focusNewest()}

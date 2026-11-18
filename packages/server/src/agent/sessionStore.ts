@@ -119,6 +119,7 @@ export interface SessionRecord {
 	title?: string | undefined;
 	model: WireModel | null;
 	thinkingLevel: ThinkingLevel;
+	sandbox?: boolean | undefined;
 	eventSeq: number;
 	revision: number;
 	history: AgentInputItem[];
@@ -402,6 +403,7 @@ const recordSchema = z
 		title: z.string().optional(),
 		model: z.custom<WireModel | null>((v) => v === null || wireModelSchema.safeParse(v).success),
 		thinkingLevel: thinkingSchema,
+		sandbox: z.boolean().optional(),
 		eventSeq: z.number().int().nonnegative(),
 		revision: z.number().int().nonnegative(),
 		history: z.array(protocol.ModelItem),

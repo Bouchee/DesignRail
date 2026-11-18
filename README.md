@@ -31,6 +31,10 @@ streaming output, tool approval and Stop. Sessions save conversation history, in
 approvals or questions. Steering reaches the next eligible model call; follow-ups wait for normal task
 completion. Pending input stays visible until admission succeeds.
 
+The per-chat Sandbox toggle uses a Unix-local workspace with a read-only view of the selected
+worktree and the same approved file edits. It requires macOS or Linux and trusted Python 3.
+Shell commands still run with host permissions.
+
 Restart restores saved conversations and pending interactions. Interrupted side effects are marked
 unknown and require a new user decision. `/compact` summarizes model memory while retaining the full
 conversation for display and search. Automatic summaries use the selected verified model's context

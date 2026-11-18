@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	rmSync,
 	symlinkSync,
@@ -12,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent, applyDiff, tool, Usage } from "@openai/agents";
+import { UnixLocalSandboxClient, type UnixLocalSandboxSession } from "@openai/agents/sandbox/local";
 import {
 	assistantMessage,
 	functionCall,
@@ -26,6 +28,7 @@ import { TODO_NUDGE_PREFIX } from "@thinkrail/contracts";
 import { TodoStore } from "@thinkrail/todos/core";
 import { z } from "zod";
 import * as fsModule from "../fs";
+import { gitDiffFile } from "../git";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
 import { resetConfigCache, updateConfig } from "../settings";
 import * as subprocessModule from "../subprocess";
@@ -60,6 +63,7 @@ import {
 	setExtUiPublisher,
 	setSessionPublisher,
 	setSessionResourceCleanup,
+	setSessionSandbox,
 	setSessionStatePublisher,
 	steerSession,
 	updateQueuedMessage,
@@ -387,6 +391,288 @@ function approvalResponse(request: ExtUiRequest, value: boolean): ExtUiResponse 
 		value,
 	};
 }
+
+function observeSandboxSessions() {
+	const opened: UnixLocalSandboxSession[] = [];
+	const create = UnixLocalSandboxClient.prototype.create;
+	const probe = spyOn(UnixLocalSandboxClient.prototype, "create").mockImplementation(
+		async function (this: UnixLocalSandboxClient, ...args) {
+			const session = await create.apply(this, args);
+			opened.push(session);
+			return session;
+		},
+	);
+	return { opened, probe };
+}
+
+test.skipIf(process.platform === "win32")(
+	"Sandbox shares the selected worktree across an ordinary patch approval and closes on settlement",
+	async () => {
+		const fixture = join(realpathSync(worktree), "sandbox.txt");
+		writeFileSync(fixture, "before\n");
+		for (const args of [
+			["init", "-b", "main"],
+			["add", "sandbox.txt"],
+			[
+				"-c",
+				"user.name=Fixture",
+				"-c",
+				"user.email=fixture@example.test",
+				"-c",
+				"commit.gpgSign=false",
+				"commit",
+				"-m",
+				"fixture",
+			],
+		]) {
+			const result = Bun.spawnSync(["git", "-C", worktree, ...args]);
+			expect(result.exitCode).toBe(0);
+		}
+		const { opened, probe } = observeSandboxSessions();
+		try {
+			const model = new ScriptedModel([
+				modelResponder(async ({ request }) => {
+					const session = opened[0];
+					if (!session) throw new Error("The runtime must exist at the model boundary");
+					expect(request.tools.every((tool) => tool.type === "function")).toBe(true);
+					expect(request.tools.filter((tool) => tool.name === "apply_patch")).toHaveLength(1);
+					expect(request.tools.map((tool) => tool.name)).not.toContain("exec_command");
+					expect(Buffer.from(await session.readFile({ path: fixture })).toString()).toBe(
+						"before\n",
+					);
+					await expect(
+						session
+							.createEditor()
+							.createFile({ type: "create_file", path: fixture, diff: "+changed\n" }),
+					).rejects.toThrow(/read.only/i);
+					return [
+						functionCall(
+							"apply_patch",
+							{ path: "sandbox.txt", original: "before\n", diff: "@@\n-before\n+after\n" },
+							{ callId: "sandbox-patch" },
+						),
+					];
+				}),
+				modelResponder(async () => {
+					const session = opened[0];
+					if (!session) throw new Error("No Sandbox session after approval");
+					expect(opened).toHaveLength(1);
+					expect(Buffer.from(await session.readFile({ path: fixture })).toString()).toBe("after\n");
+					return [assistantMessage("Done")];
+				}),
+			]);
+			configureAgentModelFactory(() => model);
+			setExtUiPublisher((request) => {
+				if (request.kind === "confirm") resolveExtUi(approvalResponse(request, true));
+			});
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			await promptSession(sessionId, "Edit the selected worktree");
+			expect(getSessionState(sessionId)).toMatchObject({
+				sandbox: true,
+				completion: { outcome: "succeeded" },
+			});
+			expect(readSessionRecord(sessionId)?.effects["sandbox-patch"]?.status).toBe("completed");
+			expect(fsModule.readFile("workspace", "sandbox.txt").content).toBe("after\n");
+			expect(await gitDiffFile("workspace", "sandbox.txt", { kind: "uncommitted" })).toMatchObject({
+				original: "before\n",
+				modified: "after\n",
+			});
+			expect(opened).toHaveLength(1);
+			const owned = opened[0];
+			if (!owned) throw new Error("No Sandbox session to verify cleanup");
+			expect(existsSync(owned.state.workspaceRootPath)).toBe(false);
+			model.assertComplete();
+			setSessionSandbox(sessionId, false);
+			model.enqueue(done());
+			await promptSession(sessionId, "Continue as a regular chat");
+			expect(getSessionState(sessionId).sandbox).toBeUndefined();
+			expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+			expect(opened).toHaveLength(1);
+			model.assertComplete();
+		} finally {
+			probe.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"Stop closes a Sandbox workspace paused for approval and blocks the late edit",
+	async () => {
+		const { opened, probe } = observeSandboxSessions();
+		try {
+			const model = new ScriptedModel([
+				modelResponse([
+					functionCall(
+						"apply_patch",
+						{ path: "late.txt", original: null, diff: "+forbidden\n" },
+						{ callId: "late-patch" },
+					),
+				]),
+			]);
+			configureAgentModelFactory(() => model);
+			const asked = latch();
+			setExtUiPublisher((request) => {
+				if (request.kind === "confirm") asked.release();
+			});
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			const running = promptSession(sessionId, "Propose a patch");
+			await Promise.race([asked.promise, running]);
+			const request = pendingExtUiDialog(sessionId);
+			const workspace = opened[0]?.state.workspaceRootPath;
+			if (!workspace || !request) throw new Error("Sandbox did not reach its approval boundary");
+			expect(existsSync(workspace)).toBe(true);
+			expect(() => setSessionSandbox(sessionId, false)).toThrow("Stop the active run");
+			const stopping = abortSession(sessionId);
+			expect(() => resolveExtUi(approvalResponse(request, true))).toThrow();
+			await stopping;
+			await running;
+			expect(existsSync(workspace)).toBe(false);
+			expect(existsSync(join(worktree, "late.txt"))).toBe(false);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("cancelled");
+			expect(model.calls).toHaveLength(1);
+		} finally {
+			probe.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"Sandbox Handoff keeps approval ownership and rebuilds a fresh runtime on reattach",
+	async () => {
+		const agents = join(root, "data", "agents");
+		mkdirSync(agents, { recursive: true });
+		writeFileSync(
+			join(agents, "sandbox-validator.md"),
+			"---\nname: sandbox-validator\ndescription: Validate a workspace fixture.\n---\nValidate the fixture.",
+		);
+		writeFileSync(
+			join(root, "data", "handoffs.json"),
+			JSON.stringify({
+				version: 1,
+				rootTargets: ["sandbox-validator"],
+				agents: [{ definition: "sandbox-validator", targets: [], history: "without_tools" }],
+			}),
+		);
+		const { opened, probe } = observeSandboxSessions();
+		try {
+			const model = new ScriptedModel([
+				modelResponder(({ request }) => {
+					const transfer = request.handoffs[0];
+					if (!transfer) throw new Error("No SDK Handoff tool");
+					return [
+						functionCall(
+							transfer.toolName,
+							{ reason: "verify the fixture" },
+							{ callId: "transfer" },
+						),
+					];
+				}),
+				modelResponse([
+					functionCall(
+						"apply_patch",
+						{ path: "reopened.txt", original: null, diff: "+once\n" },
+						{ callId: "reopened-patch" },
+					),
+				]),
+				done(),
+			]);
+			configureAgentModelFactory(() => model);
+			const asked = latch();
+			setExtUiPublisher((request) => {
+				if (request.kind === "confirm") asked.release();
+			});
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			const running = promptSession(sessionId, "Transfer and ask for approval");
+			await Promise.race([asked.promise, running]);
+			const firstWorkspace = opened[0]?.state.workspaceRootPath;
+			if (!firstWorkspace) throw new Error("No first Sandbox session");
+			if (pendingExtUiDialog(sessionId)?.kind !== "confirm")
+				throw new Error(
+					assistantMessages(sessionId).at(-1)?.errorMessage ??
+						"Sandbox Handoff did not request approval",
+				);
+			expect(getSessionState(sessionId).activeAgent).toBe("sandbox-validator");
+			expect(opened).toHaveLength(1);
+
+			await removeSession(sessionId);
+			await running;
+			expect(existsSync(firstWorkspace)).toBe(false);
+			expect(readSessionRecord(sessionId)?.pendingApproval?.checkpoint).not.toContain(
+				firstWorkspace,
+			);
+			const restored = await getSessionMessages(sessionId, "workspace", worktree);
+			expect(restored.summary.state?.sandbox).toBe(true);
+			const approval = pendingExtUiDialog(sessionId);
+			if (!approval) throw new Error("The approval was not restored");
+			const response = approvalResponse(approval, true);
+			const settled = latch();
+			setSessionPublisher((frame) => {
+				if (frame.sessionId === sessionId && frame.event.type === "agent_settled")
+					settled.release();
+			});
+			resolveExtUi(response);
+			await settled.promise;
+			expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+			resolveExtUi(response);
+			expect(readFileSync(join(worktree, "reopened.txt"), "utf8")).toBe("once");
+			expect(readSessionRecord(sessionId)?.effects["reopened-patch"]?.status).toBe("completed");
+			expect(opened).toHaveLength(2);
+			const secondWorkspace = opened[1]?.state.workspaceRootPath;
+			if (!secondWorkspace) throw new Error("No restored Sandbox session");
+			expect(secondWorkspace).not.toBe(firstWorkspace);
+			expect(existsSync(secondWorkspace)).toBe(false);
+			model.assertComplete();
+		} finally {
+			probe.mockRestore();
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"an active Sandbox runtime closes after an SDK model error",
+	async () => {
+		const { opened, probe } = observeSandboxSessions();
+		try {
+			const model = new ScriptedModel([modelError(new Error("Sandbox model failed"))]);
+			configureAgentModelFactory(() => model);
+			const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+			setSessionSandbox(sessionId, true);
+			await promptSession(sessionId, "Encounter an injected failure");
+			expect(assistantMessages(sessionId).at(-1)?.errorMessage).toBe("Sandbox model failed");
+			const workspace = opened[0]?.state.workspaceRootPath;
+			if (!workspace) throw new Error("Sandbox runtime did not start");
+			expect(existsSync(workspace)).toBe(false);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+			model.assertComplete();
+		} finally {
+			probe.mockRestore();
+		}
+	},
+);
+
+test("an unavailable Sandbox runtime reports its cause without a regular model call", async () => {
+	const model = new ScriptedModel([]);
+	configureAgentModelFactory(() => model);
+	const python = process.env.OPENAI_AGENTS_PYTHON;
+	process.env.OPENAI_AGENTS_PYTHON = join(root, "missing-python");
+	try {
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		setSessionSandbox(sessionId, true);
+		await promptSession(sessionId, "Do not fall back");
+		expect(model.calls).toHaveLength(0);
+		expect(assistantMessages(sessionId).at(-1)?.errorMessage).toContain("trusted Python 3");
+		expect(getSessionState(sessionId)).toMatchObject({
+			sandbox: true,
+			completion: { outcome: "failed", failure: "error" },
+		});
+	} finally {
+		if (python === undefined) delete process.env.OPENAI_AGENTS_PYTHON;
+		else process.env.OPENAI_AGENTS_PYTHON = python;
+	}
+});
 
 test("SDK stream projects stable IDs, persists history once and settles with its watermark", async () => {
 	const model = new ScriptedModel([done()]);

@@ -5,6 +5,8 @@ import {
 	RiFileLine as FileIcon,
 	RiFolderLine as FolderIcon,
 	RiHistoryLine as History,
+	RiBox3Line as SandboxOff,
+	RiBox3Fill as SandboxOn,
 	RiSparkling2Line as Sparkles,
 	RiStopFill as StopFill,
 } from "@remixicon/react";
@@ -190,6 +192,9 @@ interface ComposerProps {
 	onSlashActive: (active: boolean) => void;
 	onSelectModel: (selection: ModelSelection) => void;
 	onSelectThinking: (level: ThinkingLevel) => void;
+	sandboxEnabled: boolean;
+	sandboxPending: boolean;
+	onSetSandbox: (enabled: boolean) => void;
 	onSubmit: (
 		text: string,
 		attachments: ChatAttachment[],
@@ -237,6 +242,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		onSlashActive,
 		onSelectModel,
 		onSelectThinking,
+		sandboxEnabled,
+		sandboxPending,
+		onSetSandbox,
 		onSubmit,
 		onAbort,
 		onEnterTranscript,
@@ -666,6 +674,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 							onSelectLevel={onSelectThinking}
 							preferences={modelPreferences}
 							className="max-w-[60vw] px-4 sm:max-w-[320px]"
+						/>
+						<IconButton
+							icon={sandboxEnabled ? SandboxOn : SandboxOff}
+							label={t("chat.composer.sandbox")}
+							tooltip={t("chat.composer.sandboxHint")}
+							aria-pressed={sandboxEnabled}
+							selected={sandboxEnabled}
+							disabled={isStreaming || sandboxPending}
+							onClick={() => onSetSandbox(!sandboxEnabled)}
 						/>
 					</div>
 					<div

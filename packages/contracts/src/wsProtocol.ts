@@ -522,6 +522,7 @@ export const WS_METHODS = {
 	sessionRename: "session.rename",
 	sessionSetModel: "session.setModel",
 	sessionSetThinkingLevel: "session.setThinkingLevel",
+	sessionSetSandbox: "session.setSandbox",
 	sessionCompact: "session.compact",
 	sessionGetStats: "session.getStats",
 	sessionGetCommands: "session.getCommands",
@@ -1200,6 +1201,7 @@ export interface WsMethodMap {
 	};
 	"session.setModel": { params: { sessionId: string; model: WireModel }; result: Ack };
 	"session.setThinkingLevel": { params: { sessionId: string; level: ThinkingLevel }; result: Ack };
+	"session.setSandbox": { params: { sessionId: string; enabled: boolean }; result: Ack };
 	"session.compact": {
 		params: { sessionId: string; operationId?: string; instructions?: string };
 		result: Ack;

@@ -11,6 +11,10 @@ tags: [wire]
 
 ## RailDesign sessions
 
+`session.setSandbox { sessionId, enabled }` selects the local Sandbox runtime for future runs in
+an idle chat. The host saves the choice and projects it as `SessionState.sandbox` in live state and
+session snapshots. Sandbox runtime handles and manifests stay on the host.
+
 `PlanReviewOutput` is the fixed model-owned review DTO: verdict, optional summary/reading order,
 and findings with local IDs and optional kind/path/range. `isPlanReviewOutput` rejects unknown fields
 at every object boundary. It shares verdict, range, reading-order and finding-cardinality validation

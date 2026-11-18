@@ -188,6 +188,7 @@ export interface SessionState {
 	backgroundWork: boolean;
 	/** The accepted SDK Handoff owner that answers the next input; present only with a Handoff graph. */
 	activeAgent?: string;
+	sandbox?: true;
 }
 
 export function isSessionWorking(state: SessionState): boolean {
