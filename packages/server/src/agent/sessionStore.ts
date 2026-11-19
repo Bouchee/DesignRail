@@ -623,8 +623,10 @@ export function writeSessionRecord(record: SessionRecord, root = dataDir()): voi
 export class PersistentSession implements Session {
 	record: SessionRecord;
 	onUpdate?: (previous: SessionRecord) => void;
-	/** Throws to refuse assistant message text before any history write; the run owner sets it. */
-	outputGate?: (text: string) => void;
+	historyGuardrails?: {
+		checkOutput: (text: string) => void;
+		redactToolArguments: (raw: string) => string;
+	};
 	private readonly directory: string;
 	constructor(record: SessionRecord) {
 		this.directory = dataDir();
@@ -659,7 +661,7 @@ export class PersistentSession implements Session {
 		this.onUpdate?.(previous);
 	}
 	addItems(items: AgentInputItem[]): Promise<void> {
-		const detached = snapshotItems(items);
+		const detached = this.snapshotItems(items);
 		if (detached.length === 0) return Promise.resolve();
 		this.checkOutput(detached);
 		this.update((record) => {
@@ -671,11 +673,11 @@ export class PersistentSession implements Session {
 		if (!args.operationId.trim()) throw new Error("Invalid history operation ID");
 		const transaction: SessionHistoryTransaction =
 			args.transaction.type === "append_items"
-				? { type: "append_items", items: snapshotItems(args.transaction.items) }
+				? { type: "append_items", items: this.snapshotItems(args.transaction.items) }
 				: {
 						type: "replace_suffix",
-						expectedSuffix: snapshotItems(args.transaction.expectedSuffix),
-						replacement: snapshotItems(args.transaction.replacement),
+						expectedSuffix: this.snapshotItems(args.transaction.expectedSuffix),
+						replacement: this.snapshotItems(args.transaction.replacement),
 					};
 		this.checkOutput(
 			transaction.type === "append_items"
@@ -698,7 +700,9 @@ export class PersistentSession implements Session {
 				if (
 					count > record.history.length ||
 					!isDeepStrictEqual(
-						count === 0 ? [] : record.history.slice(-count),
+						count === 0
+							? []
+							: this.prepareHistoryItemsForPersistenceComparison(record.history.slice(-count)),
 						transaction.expectedSuffix,
 					)
 				)
@@ -710,9 +714,24 @@ export class PersistentSession implements Session {
 		});
 		return Promise.resolve();
 	}
+	prepareHistoryItemsForPersistenceComparison(items: AgentInputItem[]): AgentInputItem[] {
+		const redact = this.historyGuardrails?.redactToolArguments;
+		if (!redact) return items;
+		return items.map((item) => {
+			if (item.type !== "function_call") return item;
+			const args = redact(item.arguments);
+			if (args === item.arguments) return item;
+			const safe = { ...item, arguments: args };
+			delete safe.providerData;
+			return safe;
+		});
+	}
+	private snapshotItems(items: AgentInputItem[]): AgentInputItem[] {
+		return this.prepareHistoryItemsForPersistenceComparison(snapshotItems(items));
+	}
 	/** Assistant message and reasoning text pass the run's output gate before any write. */
 	private checkOutput(items: readonly AgentInputItem[]): void {
-		const gate = this.outputGate;
+		const gate = this.historyGuardrails?.checkOutput;
 		if (!gate) return;
 		for (const item of items) {
 			if ("role" in item && item.role === "assistant" && Array.isArray(item.content))

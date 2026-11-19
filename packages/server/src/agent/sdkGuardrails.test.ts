@@ -21,6 +21,7 @@ import {
 } from "@openai/agents/testing";
 import type { ExtUiRequest, SessionEventPayload } from "@thinkrail/contracts";
 import { loadConfig, saveConfig, saveWorkspaces } from "../persistence";
+import { loadGuardrailPolicy } from "./guardrails";
 import { configureAgentModelFactory } from "./modelConfiguration";
 import {
 	abortSession,
@@ -188,10 +189,11 @@ test("GA1: a tool result with a configured key or token reaches the model only a
 	model.assertComplete();
 });
 
-test("GA2: a call whose arguments contain a configured key never runs and asks for no approval", async () => {
+test("GA2: configured key arguments are rejected and absent from the transcript and history", async () => {
+	const escapedKey = String.raw`\u0063` + KEY.slice(1);
 	const model = new ScriptedModel([
 		bash(`printf '${KEY}' > leaked.txt`, "b1"),
-		read(KEY, "r1"),
+		modelResponse([functionCall("read", `{"path":"${escapedKey}"}`, { callId: "r1" })]),
 		done("GAVE_UP"),
 	]);
 	const sessionId = await session(model);
@@ -199,16 +201,82 @@ test("GA2: a call whose arguments contain a configured key never runs and asks f
 	expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
 	expect(confirmations()).toEqual([]);
 	expect(existsSync(join(cwd, "leaked.txt"))).toBe(false);
+	const record = readSessionRecord(sessionId);
 	for (const callId of ["b1", "r1"]) {
 		expect(toolResult(sessionId, callId)).toMatchObject({
 			isError: true,
 			guardrail: { stage: "input", rule: "secret" },
 		});
 		expect(JSON.stringify(toolResult(sessionId, callId))).not.toContain(KEY);
+		const frame = frames.find(
+			({ event }) =>
+				event.type === "message_end" &&
+				event.message.role === "assistant" &&
+				event.message.id === `call:${callId}`,
+		)?.event;
+		expect(
+			frame?.type === "message_end" && frame.message.role === "assistant" && frame.message.content,
+		).toEqual([
+			{ type: "toolCall", id: callId, name: callId === "b1" ? "bash" : "read", arguments: {} },
+		]);
+		expect(
+			record?.history.find((item) => item.type === "function_call" && item.callId === callId),
+		).toMatchObject({ arguments: "{}" });
+		expect(
+			record?.history.find(
+				(item) => item.type === "function_call_result" && item.callId === callId,
+			),
+		).toBeDefined();
 	}
 	expect(requests(model)[1]).toContain('Tool call rejected by guardrail \\"secret\\"');
-	expect(JSON.stringify(readSessionRecord(sessionId)?.effects?.b1)).toBeUndefined();
+	expect(record?.effects.b1).toBeUndefined();
+	expect(JSON.stringify(frames)).not.toContain(KEY);
+	expect(sessionFile(sessionId)).not.toContain(KEY.slice(1));
+	disposeAllSessions();
+	const snapshot = await getSessionMessages(sessionId, "workspace", cwd);
+	expect(JSON.stringify(snapshot)).not.toContain(KEY);
+	const reopened = snapshot.messages.find((message) => message.id === "call:b1");
+	expect(reopened?.role === "assistant" && reopened.content).toEqual([
+		{ type: "toolCall", id: "b1", name: "bash", arguments: {} },
+	]);
 	model.assertComplete();
+});
+
+test("session history transactions keep redacted function calls paired and comparable", async () => {
+	const sessionId = await session(new ScriptedModel([]));
+	const record = readSessionRecord(sessionId);
+	if (!record) throw new Error("Missing record");
+	const store = new PersistentSession(record);
+	const policy = loadGuardrailPolicy({ dataDir: data, projectTrusted: false, credentials: [KEY] });
+	store.historyGuardrails = {
+		checkOutput: () => {},
+		redactToolArguments: policy.redactToolArguments,
+	};
+	const input = {
+		type: "function_call" as const,
+		callId: "r1",
+		name: "read",
+		arguments: JSON.stringify({ path: KEY }),
+		providerData: { originalArguments: KEY },
+	};
+	const result = {
+		type: "function_call_result" as const,
+		callId: "r1",
+		name: "read",
+		status: "completed" as const,
+		output: "Rejected by guardrail",
+	};
+	await store.addItems([input]);
+	await store.applyHistoryTransaction({
+		operationId: "op-replace-after-redaction",
+		transaction: { type: "replace_suffix", expectedSuffix: [input], replacement: [input, result] },
+	});
+	expect(store.record.history).toEqual([
+		{ type: "function_call", callId: "r1", name: "read", arguments: "{}" },
+		result,
+	]);
+	expect(sessionFile(sessionId)).not.toContain(KEY);
+	expect(input.arguments).toContain(KEY);
 });
 
 test("GA4/GA5: rule-file stages act as configured; a user-input rule stops before any model request", async () => {
@@ -669,8 +737,11 @@ test("the session write gate refuses reasoning items with a key", async () => {
 	const record = readSessionRecord(sessionId);
 	if (!record) throw new Error("Missing record");
 	const store = new PersistentSession(record);
-	store.outputGate = (text) => {
-		if (text.includes(KEY)) throw new Error("blocked");
+	store.historyGuardrails = {
+		redactToolArguments: (raw) => raw,
+		checkOutput: (text) => {
+			if (text.includes(KEY)) throw new Error("blocked");
+		},
 	};
 	const before = structuredClone(store.record.history);
 	expect(() => store.addItems([reasoning(`see ${KEY}`)])).toThrow("blocked");
@@ -689,8 +760,11 @@ test("a suffix rewrite is checked only for new content, not older history", asyn
 	const record = readSessionRecord(sessionId);
 	if (!record) throw new Error("Missing record");
 	const store = new PersistentSession(record);
-	store.outputGate = (text) => {
-		if (text.includes("ALPHA-OLD")) throw new Error("blocked");
+	store.historyGuardrails = {
+		redactToolArguments: (raw) => raw,
+		checkOutput: (text) => {
+			if (text.includes("ALPHA-OLD")) throw new Error("blocked");
+		},
 	};
 	const suffix = store.record.history.slice(-1);
 	await store.applyHistoryTransaction({

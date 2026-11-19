@@ -575,7 +575,9 @@ function addToolCall(
 	let args: Record<string, unknown> = {};
 	let failed = false;
 	try {
-		const parsed: unknown = JSON.parse(call.arguments);
+		const parsed: unknown = JSON.parse(
+			run.guardrails?.redactToolArguments(call.arguments) ?? call.arguments,
+		);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
 			args = parsed as Record<string, unknown>;
 	} catch {
@@ -1315,7 +1317,7 @@ function failedForegroundChild(child: Entry, childRun: ActiveRun, error: unknown
 		finishChild(child, "error");
 		childRun.granted = false;
 		delete child.active;
-		delete child.store.outputGate;
+		delete child.store.historyGuardrails;
 		return {
 			content: [
 				{
@@ -1330,7 +1332,7 @@ function failedForegroundChild(child: Entry, childRun: ActiveRun, error: unknown
 	finishChild(child, childRun.controller.signal.aborted ? "aborted" : "error");
 	childRun.granted = false;
 	delete child.active;
-	delete child.store.outputGate;
+	delete child.store.historyGuardrails;
 	if (childRun.controller.signal.aborted) throw error;
 	return {
 		content: [
@@ -1681,7 +1683,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 								finishChild(child, "completed");
 								childRun.granted = false;
 								delete child.active;
-								delete child.store.outputGate;
+								delete child.store.historyGuardrails;
 							}
 							return output;
 						},
@@ -1937,7 +1939,7 @@ async function stopOwnedResources(entry: Entry, reason = "user"): Promise<void> 
 				child.active.done.then(() => {
 					if (preserveApproval) {
 						delete child.active;
-						delete child.store.outputGate;
+						delete child.store.historyGuardrails;
 						sessions.delete(record.sessionId);
 					}
 				}),
@@ -2044,7 +2046,7 @@ export async function reloadSessionResources(
 			run.controller.abort();
 			if (entry.active === run) {
 				delete entry.active;
-				delete entry.store.outputGate;
+				delete entry.store.historyGuardrails;
 			}
 		}
 	})();
@@ -2569,11 +2571,14 @@ async function buildSessionAgent(
 	const thinkingLevel = role.thinkingLevel ?? entry.store.record.thinkingLevel;
 	run.guardrails ??= runGuardrails(entry);
 	const gate = run.guardrails.output;
-	entry.store.outputGate = (text) => {
-		const hit = gate.match(text);
-		if (!hit) return;
-		run.blocked ??= hit;
-		throw new GuardrailOutputBlockedError(hit.rule);
+	entry.store.historyGuardrails = {
+		redactToolArguments: run.guardrails.redactToolArguments,
+		checkOutput: (text) => {
+			const hit = gate.match(text);
+			if (!hit) return;
+			run.blocked ??= hit;
+			throw new GuardrailOutputBlockedError(hit.rule);
+		},
 	};
 	const skillOptions = {
 		...(definition ? { allowedSkills: definition.skills ?? [] } : {}),
@@ -3648,7 +3653,7 @@ async function executeRun(
 			run.granted = false;
 			run.controller.abort();
 			delete entry.active;
-			delete entry.store.outputGate;
+			delete entry.store.historyGuardrails;
 			notifyState(entry);
 		}
 	}
@@ -4330,7 +4335,7 @@ function promptEntry(
 				);
 	} finally {
 		delete entry.active;
-		delete entry.store.outputGate;
+		delete entry.store.historyGuardrails;
 	}
 	const content: AgentInputItem[] = [userItem({ id, text, images })];
 	if (modelText !== text) content.unshift({ id: randomUUID(), role: "user", content: modelText });

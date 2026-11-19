@@ -614,7 +614,10 @@ request; the SDK does not persist the blocked input to model history. Only the n
 messages are examined, so older history cannot re-trigger. `attachToolGuardrails` sets every
 FunctionTool's guardrails, and both Runners set `toolExecution.preApprovalInputGuardrails`, so a rejected
 call never shows an approval card and never runs. A rejection is SDK `rejectContent`: the model and model
-history get only the rejection or withheld message and the run continues. The tool record carries
+history get the rejection or withheld result message and the run continues. G3 uses the same configured
+credential matcher on tool arguments before writing the tool card or session history. Matching arguments
+are stored as an empty object with the original call identity. History writes omit provider metadata on
+that call and use the same normalization when reconciling the SDK's original items. The tool record carries
 `guardrail:{stage,rule}`; a rejected call is an error, a withheld result keeps its original content on
 the host transcript and card, while the effect receipt and repaired history keep the withheld text.
 Summaries, Handoff views and restored checkpoints read model history only. Guardrails never grant,
@@ -632,18 +635,16 @@ literal, or 20 for token shapes). Three seams use it, in this order:
    `appendMessage`/`message_end`. A match revokes the grant, aborts the run and settles stop reason
    `guardrail` with the published safe prefix only. The held tail is flushed only by a successful message
    end that passes the full-text check; Stop, error, length, cancel and guardrail ends drop it unsaved.
-2. `PersistentSession.outputGate`, installed per run and cleared on every settle path, refuses SDK
+2. `PersistentSession.historyGuardrails.checkOutput`, installed per run and cleared on every settle path, refuses SDK
    `addItems`/`applyHistoryTransaction` writes whose assistant message or reasoning text matches
    (`GuardrailOutputBlockedError`); history is unchanged and the run settles as `guardrail`. A
    `replace_suffix` checks only replacement items not already in the expected suffix, so a later stricter
    rule never refuses older history. This closes the case where the SDK writes the turn before the host
-   sees it. Tool items are not checked here (G2/G3).
+   sees it. Tool items use the separate G2/G3 rules.
 3. The summary callback checks the generated summary before the transaction saves it; a match throws
    `GuardrailOutputBlockedError` naming the rule and keeps prior history.
 A blocked foreground child records the guardrail stop in its transcript and returns an error result to
-its parent. Not protected: the user's own input and earlier text that does not match. Tool-call
-arguments with a configured key are rejected (G3) but stay on the tool card and in the `function_call`
-history item, because the model produced them.
+its parent. The user input and text that does not match remain outside G4.
 
 ## DeepSeek web access
 

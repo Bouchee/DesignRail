@@ -22,6 +22,7 @@ export interface GuardrailPolicy {
 	toolInput: ToolInputGuardrailDefinition[];
 	toolOutput: ToolOutputGuardrailDefinition[];
 	output: { window: number; match: (text: string) => { rule: string } | undefined };
+	redactToolArguments: (raw: string) => string;
 	redact: (text: string) => string;
 }
 
@@ -200,6 +201,8 @@ export function loadGuardrailPolicy(input: {
 	const hasCredential = (text: string, minimumLength = MIN_CREDENTIAL) =>
 		credentials.some((value) => value.length >= minimumLength && text.includes(value));
 	const secretInput = { name: SECRET_RULE, matches: hasCredential };
+	const matchesToolArguments = (raw: string, rule: Pick<Rule, "matches">) =>
+		rule.matches(argumentText(raw));
 	const secretOutput = {
 		name: SECRET_RULE,
 		matches: (text: string) => hasCredential(text) || TOKEN.test(text),
@@ -208,6 +211,7 @@ export function loadGuardrailPolicy(input: {
 	const at = (stage: Stage) => rules.filter((rule) => rule.stages.has(stage));
 	const outputRules = at("finalOutput");
 	return {
+		redactToolArguments: (raw) => (matchesToolArguments(raw, secretInput) ? "{}" : raw),
 		redact: (text) => (hasCredential(text, 1) ? "***" : redactMcpText(text)),
 		agentInput: at("userInput").map((rule) => ({
 			name: rule.name,
@@ -221,7 +225,7 @@ export function loadGuardrailPolicy(input: {
 			defineToolInputGuardrail({
 				name: rule.name,
 				run: async ({ toolCall }) =>
-					rule.matches(argumentText(toolCall.arguments))
+					matchesToolArguments(toolCall.arguments, rule)
 						? ToolGuardrailFunctionOutputFactory.rejectContent(
 								`Tool call rejected by guardrail "${rule.name}"; it was not run. Do not put credentials or blocked content in tool arguments.`,
 								info(rule.name),
