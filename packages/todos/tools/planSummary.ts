@@ -1,5 +1,4 @@
-import { tool } from "@openai/agents";
-import { Value } from "typebox/value";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import type { TodoToolServices } from "./shared.ts";
 // todo_plan_summary — set the plan-level completion summary: the agent's short overall handoff note,
 // written when every item in the plan is done (todo_update's done-flip nudges it at exactly that
@@ -21,16 +20,13 @@ const parameters = Type.Object({
 });
 
 export function createTodoPlanSummary(services: TodoToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "todo_plan_summary",
 		description:
 			"Set the plan's overall completion summary — a short, CUMULATIVE handoff note covering EVERYTHING done across the whole plan (all tasks, all completions), not just the last step. Call it right after the last open item flips done (the todo_update result nudges you). When a summary from an earlier completion still exists, EXTEND it rather than rewriting from scratch. Shape it as a PR body (three H2 sections: '## Summary' / '## Changes' / '## Testing') — the host prepends this verbatim when it renders the PR body, so a well-shaped summary ships as-is. Not per-item: an item's own summary goes on todo_update's summary field.",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const store = storeFor(services);
 			const summary = params.summary.trim();
 			store.setSummary(summary);

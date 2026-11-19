@@ -1,6 +1,5 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { isValid, validateGraph } from "../core/index.ts";
 import type { SpecToolServices } from "./shared.ts";
 import { getIndex, textResult } from "./shared.ts";
@@ -8,16 +7,13 @@ import { getIndex, textResult } from "./shared.ts";
 const parameters = Type.Object({});
 
 export function createSpecValidate(services: SpecToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "spec_validate",
 		description:
 			"Validate the spec-graph: report dangling parent/depends-on/references/implements links, duplicate ids, and parent cycles.",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
-		async execute(_params) {
+		parameters,
+		async execute() {
 			services.assertActive();
-			if (!Value.Check(parameters, _params)) throw new Error("Invalid tool arguments");
 			const report = validateGraph(getIndex(services.cwd).graph());
 			if (isValid(report)) return textResult("Spec-graph is valid: no issues found.", report);
 

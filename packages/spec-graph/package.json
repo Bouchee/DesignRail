@@ -22,6 +22,7 @@
 	"dependencies": {
 		"yaml": "catalog:",
 		"@openai/agents": "catalog:",
+		"@thinkrail/extension-api": "workspace:*",
 		"@thinkrail/shared": "workspace:*",
 		"typebox": "catalog:"
 	},

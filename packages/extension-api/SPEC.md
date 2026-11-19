@@ -81,11 +81,14 @@ The host retains registration, lifecycle and ordering; `define*` helpers preserv
   The helper preserves the descriptor without registration or default values.
   The host supplies cwd, grant checks, saved responses, failure reporting, workspace checks and frozen settings.
   The server entry also exports `parseToolResultContent` and `ParsedToolResultContent` for host result projection.
-  SDK types remain server-only and disappear from runtime imports.
+- `./server/typeBoxTool` exports `defineTypeBoxTool`. It uses the same TypeBox object for validation before
+  SDK execute and the non-strict model schema.
+  It keeps optional fields, additional properties and approval settings, and delegates malformed JSON to the SDK.
 - The root is browser-safe and exposes only the web contract; it never re-exports the server half.
 - Workspace dependencies are `contracts` and, type-only, `@thinkrail/locales/react`'s `Translator`.
-  React and the SDK are type-only contract dependencies; there are no React components, registry, DOM access,
-  host imports, or SDK runtime values.
+  React remains type-only. The descriptor entry uses the SDK only for types.
+  Only the opted-in tool entry imports the SDK and TypeBox at runtime and requires the SDK peer.
+  The package has no React components, registry, DOM access or host imports.
 - `ToolSummary` is `(props, t) => string`: the host passes the render-time `Translator` from `useT()`
   (`getToolSummary(t, name, props)`), so a collapsed card or routine row recomputes its summary on a
   language change; a summary translates only through that `t`, never the global translator

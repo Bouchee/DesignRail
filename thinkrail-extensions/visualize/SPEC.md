@@ -18,7 +18,7 @@ Pure schemas and result helpers come from `@thinkrail/visualize`.
 
 The server descriptor exposes `sdkTools` without child tools or Skill packages.
 It uses the supplied run-grant check and workspace file checks.
-Arguments pass TypeBox and shape validation before Mermaid parsing or preview access.
+The server extension API checks TypeBox arguments before SDK execute. The visualization tool checks the relationships between fields before Mermaid parsing or preview access.
 Each failure identifies the relevant field and asks for a correction.
 A post-validation grant check prevents a late successful result after Stop.
 The result retains validated parameters in details and readable Markdown in content.

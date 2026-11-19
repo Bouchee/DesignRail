@@ -1,6 +1,5 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { TODO_STATUSES, type Todo, type TodoPatch, type TodoPlan } from "../core/index.ts";
 import type { TodoToolServices } from "./shared.ts";
 import {
@@ -65,16 +64,13 @@ function planCompleteNudge(plan: TodoPlan): string | undefined {
 }
 
 export function createTodoUpdate(services: TodoToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "todo_update",
 		description:
 			"Update one item by id (status, title, or note) — the tool for progressing your plan: flip an item to in_progress when you start it and done when you finish. Marking done is how items complete — they STAY in the list as history (don't remove them). This is the safe way to edit the list: it touches only the one item.",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const patch: TodoPatch = {};
 			if (params.status !== undefined) patch.status = params.status;
 			if (params.title !== undefined) patch.title = params.title;

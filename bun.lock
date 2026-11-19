@@ -175,6 +175,7 @@
       "dependencies": {
         "@thinkrail/contracts": "workspace:*",
         "@thinkrail/locales": "workspace:*",
+        "typebox": "catalog:",
       },
       "devDependencies": {
         "@openai/agents": "catalog:",
@@ -291,6 +292,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@openai/agents": "catalog:",
+        "@thinkrail/extension-api": "workspace:*",
         "@thinkrail/shared": "workspace:*",
         "typebox": "catalog:",
         "yaml": "catalog:",
@@ -305,6 +307,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@openai/agents": "catalog:",
+        "@thinkrail/extension-api": "workspace:*",
         "@thinkrail/shared": "workspace:*",
         "typebox": "catalog:",
       },
@@ -404,7 +407,6 @@
         "linkedom": "0.18.14",
         "mermaid": "catalog:",
         "react": "catalog:",
-        "typebox": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",

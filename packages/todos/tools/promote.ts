@@ -1,6 +1,5 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import type { TodoPromoteFailure } from "../core/index.ts";
 import type { TodoToolServices } from "./shared.ts";
 import { consistencyNudge, errorResult, storeFor, textResult, withNudges } from "./shared.ts";
@@ -30,16 +29,13 @@ const parameters = Type.Object({
 });
 
 export function createTodoPromote(services: TodoToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "todo_promote",
 		description:
 			'Promote one loose item into a group of its own in a single atomic step. The item disappears from the loose lane and a group inherits its id (and its title, unless you pass `title`). No duplicate window and no `todo_remove` dance — this IS the promotion. Use it the moment you take a loose item into work (typically a user-authored ask): one `todo_promote`, then `todo_add` the first step and flip it `in_progress`. The empty group is a valid "task taken, plan forming" state — don\'t backfill it with a synthetic placeholder.',
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const store = storeFor(services);
 			const result = store.promote(params.id, params.title);
 			if (!result.ok) {

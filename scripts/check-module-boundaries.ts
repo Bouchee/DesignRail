@@ -24,8 +24,8 @@ const MODULE_RULES: readonly ModuleRule[] = [
 	},
 	{ root: "packages/contracts", allowed: [] },
 	{ root: "packages/shared", allowed: ["packages/contracts"] },
-	{ root: "packages/todos", allowed: ["packages/shared"] },
-	{ root: "packages/spec-graph", allowed: ["packages/shared"] },
+	{ root: "packages/todos", allowed: ["packages/shared", "packages/extension-api"] },
+	{ root: "packages/spec-graph", allowed: ["packages/shared", "packages/extension-api"] },
 	{ root: "packages/workflow", allowed: [] },
 	{ root: "packages/visualize", allowed: [] },
 	{ root: "packages/ask-user-question", allowed: [] },
@@ -334,7 +334,11 @@ function sourceViolation(
 			if (rule.root === "packages/server" || (extension && half === "server"))
 				publicEntry = "server";
 		}
-		if (publicEntry && specifier !== `${target.name}/${publicEntry}`) {
+		const publicServerHelper =
+			publicEntry === "server" &&
+			target.root === "packages/extension-api" &&
+			specifier === `${target.name}/server/typeBoxTool`;
+		if (publicEntry && specifier !== `${target.name}/${publicEntry}` && !publicServerHelper) {
 			return `may use only public ${target.name}/${publicEntry}`;
 		}
 	}

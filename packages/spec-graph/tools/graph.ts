@@ -1,6 +1,5 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { graphSlice, LINK_KINDS, SLICE_DIRECTIONS } from "../core/index.ts";
 import type { SpecToolServices } from "./shared.ts";
 import { errorResult, getIndex, stringEnum, textResult } from "./shared.ts";
@@ -20,16 +19,13 @@ const parameters = Type.Object({
 });
 
 export function createSpecGraph(services: SpecToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "spec_graph",
 		description:
 			"Return a bounded slice of the spec-graph rooted at a node: `subtree` (down the parent tree), `ancestors` (up to the tree root), or `neighbors` (across a chosen edge and its reverse). Bounded by `depth` (default 1).",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const graph = getIndex(services.cwd).graph();
 			if (!graph.nodes.has(params.root)) {
 				return errorResult(`No spec with id "${params.root}".`);

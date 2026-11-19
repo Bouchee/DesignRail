@@ -1,5 +1,5 @@
-import { tool } from "@openai/agents";
 import { defineServerExtension } from "@thinkrail/extension-api/server";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import {
 	comparisonMarkdown,
 	fileMarkdown,
@@ -9,7 +9,6 @@ import {
 	VisualizeSchema,
 	validateShape,
 } from "@thinkrail/visualize";
-import { Value } from "typebox/value";
 import { strictMermaidValidator } from "./mermaid";
 import { saveVisualization } from "./save";
 
@@ -19,20 +18,13 @@ export default defineServerExtension({
 	description:
 		"Lets the agent draw Mermaid diagrams, side-by-side option comparisons, and rendered file previews or before/after mockups in chat.",
 	sdkTools: (session) => [
-		tool({
+		defineTypeBoxTool({
 			name: "visualize",
 			description: `Show a rich visualization. Use type 'diagram' with raw Mermaid source, 'comparison' with named options and pros/cons, or 'file' with an existing workspace-relative path. Set 'before' to another file for a before/after comparison. For UI proposals, write self-contained HTML mockups under \`${session.workspaceFiles.scratchDir}\` with inline CSS and data images only. Draw controls as styled elements. Diagrams and comparisons are also saved as Markdown artifacts in \`${session.workspaceFiles.artifactsDir}visualize/\`. File previews use the current file contents; copy a file to preserve an earlier proposal.`,
-			strict: false,
-			parameters: {
-				...VisualizeSchema,
-				required: VisualizeSchema.required ?? [],
-				additionalProperties: true,
-			},
-			errorFunction: null,
+			parameters: VisualizeSchema,
+			invalidArgumentsMessage: "Invalid visualization arguments",
 			async execute(params) {
 				session.assertActive();
-				if (!Value.Check(VisualizeSchema, params))
-					throw new Error("Invalid visualization arguments");
 				validateShape(params);
 				for (const { location, source } of mermaidSources(params)) {
 					try {

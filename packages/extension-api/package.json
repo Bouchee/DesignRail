@@ -6,7 +6,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./web": "./src/web.ts",
-		"./server": "./src/server.ts"
+		"./server": "./src/server.ts",
+		"./server/typeBoxTool": "./src/server/typeBoxTool.ts"
 	},
 	"scripts": {
 		"test": "bun test",
@@ -14,7 +15,8 @@
 	},
 	"dependencies": {
 		"@thinkrail/contracts": "workspace:*",
-		"@thinkrail/locales": "workspace:*"
+		"@thinkrail/locales": "workspace:*",
+		"typebox": "catalog:"
 	},
 	"peerDependencies": {
 		"@openai/agents": "catalog:",

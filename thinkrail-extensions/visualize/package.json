@@ -21,8 +21,7 @@
 		"mermaid": "catalog:",
 		"react": "catalog:",
 		"@thinkrail/visualize": "workspace:*",
-		"@openai/agents": "catalog:",
-		"typebox": "catalog:"
+		"@openai/agents": "catalog:"
 	},
 	"devDependencies": {
 		"@types/bun": "catalog:",

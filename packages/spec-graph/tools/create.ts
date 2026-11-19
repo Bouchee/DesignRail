@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import {
 	FIELDS,
 	type Frontmatter,
@@ -41,17 +40,14 @@ const parameters = Type.Object({
 });
 
 export function createSpecCreate(services: SpecToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "spec_create",
 		description:
 			"Create a new spec file with scaffolded frontmatter (id, type, title, an optional status, and any links) and a heading-only body stub chosen by type. Fails if the file already exists, the id is already in use, or the path is not an indexable root-relative .md path. Edit prose afterward with apply_patch.",
 		needsApproval: true,
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const resolved = resolveSpecPath(services.cwd, params.path);
 			if ("error" in resolved) return errorResult(resolved.error);
 			const { rel, abs } = resolved;

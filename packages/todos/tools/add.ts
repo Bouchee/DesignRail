@@ -1,6 +1,5 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import type { Todo, TodoInput } from "../core/index.ts";
 import type { TodoToolServices } from "./shared.ts";
 import {
@@ -35,16 +34,13 @@ const parameters = Type.Object({
 });
 
 export function createTodoAdd(services: TodoToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "todo_add",
 		description:
 			"Add one item to this chat's TODO plan without touching the rest. Pass `group` (the task it belongs to — created if new) to append it as that task's next step, `after` (the id of an existing step **inside a task**) to insert it right after that step, or omit both to drop a raw item into the loose queue — the shared pre-work scratchpad you and the user both write to. Loose is for unprocessed notes/kernels only; when you actually take a loose item into work you promote it into a group first (see the skill). An `after` pointing at a loose item is rejected. Prefer this over todo_write for a single addition, which never disturbs existing (esp. done) items.",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const store = storeFor(services);
 			if (params.after !== undefined) {
 				const plan = store.read();

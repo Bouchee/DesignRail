@@ -4,7 +4,7 @@ type: submodule-design
 status: active
 title: SDK Plan tools
 parent: module-pi-todos
-depends-on: [submodule-pi-todos-core, module-shared]
+depends-on: [submodule-pi-todos-core, module-shared, module-extension-api]
 tags: [agents-sdk, todos]
 ---
 
@@ -19,7 +19,7 @@ The tools do not create sessions or perform Git operations.
 The barrel exports `createTodoTools` and `TodoToolServices`.
 Services provide `cwd`, `sessionId` and `assertActive`.
 Each invocation checks the run grant before store access.
-TypeBox validates raw SDK arguments at the tool boundary.
+The server extension API checks TypeBox arguments before SDK execute. Invalid arguments never reach the run-grant check or the store.
 Status schemas derive from the core tuples.
 
 ## Plan rules
@@ -56,6 +56,6 @@ There is no configurable page size.
 
 ## Dependencies
 
-Allow the core barrel, public SDK tools, TypeBox, shared output helpers and Node built-ins.
+Allow the core barrel, server extension API, TypeBox, shared output helpers and Node built-ins.
 Only `TodoStore` owns project Plan persistence.
 Temporary output capture does not change that ownership.

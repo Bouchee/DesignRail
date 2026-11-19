@@ -362,7 +362,7 @@ for (const [file, relativeSpecifier] of [
 	["apps/web/src/leak.ts", "../../../packages/extension-api/src/web"],
 	["thinkrail-extensions/future/web/leak.ts", "../../../packages/extension-api/src/web"],
 ] as const) {
-	test.each(["", "/server", "/web/helpers", "/web/../server"])(
+	test.each(["", "/server", "/server/typeBoxTool", "/web/helpers", "/web/../server"])(
 		`${file} rejects extension-api entry %s`,
 		(suffix) => {
 			const root = sdkFixture();
@@ -492,7 +492,7 @@ test("accepts SDK edges, extension manifest unions, same-half sources, and publi
 	write(
 		root,
 		"thinkrail-extensions/future/server/index.ts",
-		'import "@thinkrail/extension-api/server"; import "@thinkrail/future"; import "@earendil-works/pi-coding-agent"; import "./helpers";',
+		'import "@thinkrail/extension-api/server"; import "@thinkrail/extension-api/server/typeBoxTool"; import "@thinkrail/future"; import "@earendil-works/pi-coding-agent"; import "./helpers";',
 	);
 	write(
 		root,

@@ -4,7 +4,7 @@ type: module-design
 status: active
 title: Project specification model and SDK tools
 parent: architecture
-depends-on: [module-shared]
+depends-on: [module-shared, module-extension-api]
 tags: [spec-graph, agents-sdk]
 ---
 
@@ -23,7 +23,7 @@ The package manifest declares its Skill roots through `skills`.
 `tools/` remains internal to the package.
 
 The host supplies the active worktree and run-grant check.
-Tool factories let SDK validation and execution failures propagate to the host invocation boundary, which records structured error results.
+Tool factories let argument validation and SDK execution failures propagate to the host invocation boundary, which records structured error results.
 Repository sessions and their children receive the Spec tools and rule.
 A child with an explicit tool list receives only the Spec tools in that list.
 Standalone chats and their children do not receive them.
@@ -58,7 +58,7 @@ The host adds this rule to SDK instructions.
 
 ## Dependencies and checks
 
-Allow the public SDK, TypeBox, shared output helpers, YAML and Node built-ins.
+Allow the server extension API, TypeBox, shared output helpers, YAML and Node built-ins.
 The core has no SDK or host dependency.
 Tools access the core through its barrel.
 Do not import server or UI internals.

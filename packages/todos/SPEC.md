@@ -4,7 +4,7 @@ type: module-design
 status: active
 title: Conversation Plan tools and store
 parent: architecture
-depends-on: [module-shared]
+depends-on: [module-shared, module-extension-api]
 references: [module-spec-graph, submodule-web-chat]
 tags: [agents-sdk, todos]
 ---
@@ -23,7 +23,7 @@ The package manifest declares its Skill roots through `skills`.
 
 `createTodoTools({ cwd, sessionId, assertActive })` returns seven SDK FunctionTools.
 The host supplies the active conversation identity and grant check.
-Tool factories let SDK validation and execution failures propagate to the host invocation boundary, which records structured error results.
+Tool factories let argument validation and SDK execution failures propagate to the host invocation boundary, which records structured error results.
 `TODO_RULE` gives the threshold for Plan creation and points to the todos Skill.
 A request with at least three substantive execution steps normally needs a Plan.
 Explicit user requests for a Plan also apply.
@@ -82,7 +82,7 @@ Host artifact hooks observe SDK tool completion and retain their existing owners
 
 ## Dependencies and checks
 
-Allow public SDK tools, TypeBox, shared output helpers and Node built-ins.
+Allow the server extension API, TypeBox, shared output helpers and Node built-ins.
 The core uses Node built-ins only.
 Do not import server or UI internals.
 Core tests cover persistence, isolation, reconciliation, promotion and completion data.

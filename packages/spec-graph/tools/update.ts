@@ -1,7 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { FIELDS, type FrontmatterEdit, updateFrontmatterText } from "../core/index.ts";
 import type { SpecToolServices } from "./shared.ts";
 import { errorResult, getIndex, textResult } from "./shared.ts";
@@ -30,17 +29,14 @@ const parameters = Type.Object({
 });
 
 export function createSpecUpdate(services: SpecToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "spec_update",
 		description:
 			"Edit a spec's frontmatter only (never its prose): set/overwrite scalar fields, remove fields, and add/remove entries in the list fields (depends-on/references/implements/covers/tags). Comments and any non-dialect fields are preserved. Prose is edited with apply_patch.",
 		needsApproval: true,
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const index = getIndex(services.cwd);
 			const record = index.recordForId(params.id);
 			if (!record) return errorResult(`No spec with id "${params.id}".`);

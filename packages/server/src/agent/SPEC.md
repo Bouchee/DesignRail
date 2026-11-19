@@ -700,6 +700,10 @@ Cleanup waits for all outcomes before reopening completion gates, including fail
 
 Function factories use `errorFunction: null` so SDK validation and executor failures reach the existing public `invoke` boundary with the original call identity. That boundary stores bounded structured error content and marks executed effects failed; malformed arguments rejected before executor admission have an error transcript result and no effect receipt. It rethrows after Stop or grant revocation. Successful text that resembles an error stays successful; structured `isError` results remain errors. MCP keeps its own redacted, bounded error projection.
 
+Plan, Spec and visualization factories validate their TypeBox arguments at their public invocation entry.
+A shape error raises the tool's argument error before SDK execute starts. The SDK still handles malformed JSON and approvals.
+`extensionToolInputs.test.ts` observes both rejected and admitted calls at the real SDK execute callback.
+
 Factory service contracts carry current grants and owned application services, without a second failure callback. `sdkSessionManager.test.ts` covers invalid Skill and workspace arguments, malformed Todo/Spec JSON, nonzero commands, successful error-shaped text, and Stop during executing tools.
 
 ## SDK model retry and kept tool defaults

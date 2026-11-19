@@ -1,7 +1,6 @@
-import { tool } from "@openai/agents";
+import { defineTypeBoxTool } from "@thinkrail/extension-api/server/typeBoxTool";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "@thinkrail/shared/toolOutput";
 import { Type } from "typebox";
-import { Value } from "typebox/value";
 import { countItems, flatItems, TODO_STATUSES, type TodoPlan } from "../core/index.ts";
 import type { TodoToolServices } from "./shared.ts";
 import {
@@ -34,16 +33,13 @@ const parameters = Type.Object({
 });
 
 export function createTodoList(services: TodoToolServices) {
-	return tool({
+	return defineTypeBoxTool({
 		name: "todo_list",
 		description:
 			"Read this chat's TODO plan — loose items plus named groups (optionally filtered by status). The plan is the source of truth and the user may edit it at any time, so re-read before choosing each next item, after user input, and before completion. A plan beyond the 2,000-line / 50 KiB output limit continues at the offset given in the result; oversized text is saved to a temporary file.",
-		strict: false,
-		parameters: { ...parameters, required: parameters.required ?? [], additionalProperties: true },
-		errorFunction: null,
+		parameters,
 		async execute(params) {
 			services.assertActive();
-			if (!Value.Check(parameters, params)) throw new Error("Invalid tool arguments");
 			const offset = params.offset ?? 0;
 			if (!Number.isSafeInteger(offset) || offset < 0)
 				return errorResult("Use a nonnegative integer offset.");

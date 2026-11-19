@@ -4,14 +4,14 @@ type: submodule-design
 status: active
 title: SDK specification tools
 parent: module-spec-graph
-depends-on: [submodule-spec-graph-core, module-shared]
+depends-on: [submodule-spec-graph-core, module-shared, module-extension-api]
 tags: [spec-graph, agents-sdk]
 ---
 
 ## Responsibility and public surface
 
 The barrel exports `createSpecTools` and `SpecToolServices`.
-Each tool checks the supplied run grant and validates raw arguments with TypeBox.
+The server extension API checks TypeBox arguments before SDK execute. Admitted calls then check the supplied run grant.
 Services provide `cwd` and `assertActive`.
 The tools use the core barrel and return text with structured details.
 The create, update and delete tools require approval.
@@ -59,7 +59,7 @@ The next read observes completed writes through the core cache rules.
 
 ## Dependencies
 
-Allow the core barrel, SDK tools, TypeBox, shared output helpers and Node built-ins.
+Allow the core barrel, server extension API, TypeBox, shared output helpers and Node built-ins.
 Do not import core leaf files, server internals or UI code.
 Project writes belong to the three write tools.
 Response capture uses only private temporary files.
