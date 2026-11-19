@@ -6,9 +6,11 @@ import {
 	Agent,
 	type AgentInputItem,
 	type AgentOptions,
+	type AgentOutputType,
 	handoff,
 	InputGuardrailTripwireTriggered,
 	MaxTurnsExceededError,
+	type RunConfig,
 	type RunContext,
 	Runner,
 	RunState,
@@ -129,6 +131,12 @@ import {
 	responsesClientSettings,
 } from "./modelConfiguration";
 import { assertCompletedPlanReviewResponse, planReviewOutput } from "./planReviewOutput";
+import {
+	SANDBOX_ARCHIVE_BYTES,
+	SandboxMemory,
+	SandboxMemoryRunner,
+	sandboxArchiveLimits,
+} from "./sandboxMemory";
 import { type StructuredToolResult, structuredToolResult } from "./sdkToolResult";
 import { workspaceTools } from "./sdkTools";
 import {
@@ -166,6 +174,7 @@ const agentNodes = new WeakMap<object, string>();
 interface ActiveRun {
 	state?: RunState<SessionContext, SessionAgent>;
 	sandbox?: UnixLocalSandboxSession;
+	memory?: SandboxMemory;
 	suspended?: boolean;
 	inputId?: string;
 	enabledExtensions: SdkExtensionSnapshot[];
@@ -211,6 +220,7 @@ interface ActiveRun {
 	approval?: {
 		request: ApprovalRequest;
 		agentNode?: string | undefined;
+		generation: boolean;
 		resolve: (approved: boolean) => void;
 		reject: (error: Error) => void;
 	};
@@ -342,7 +352,10 @@ function visibleState(entry: Entry): SessionState {
 	}
 	const handoffs = entry.store.record.handoffs;
 	if (handoffs) state.activeAgent = agentName(handoffs.activeNode);
-	if (entry.store.record.sandbox === true) state.sandbox = true;
+	if (entry.store.record.sandbox === true) {
+		state.sandbox = true;
+		if (!handoffs && entry.store.record.sandboxMemory) state.sandboxMemory = true;
+	}
 	return state;
 }
 export async function attachApprovalOwner(response: ExtUiResponse): Promise<void> {
@@ -773,7 +786,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 async function waitForApproval(
 	entry: Entry,
 	run: ActiveRun,
-	state: RunState<SessionContext, SessionAgent>,
+	state: RunState<SessionContext, SessionAgent> | undefined,
 	call: { callId: string; name: string; arguments: string },
 	agentNode?: string,
 ): Promise<boolean> {
@@ -786,7 +799,7 @@ async function waitForApproval(
 		entry.store.record.pendingApproval?.agentNode !== agentNode
 	)
 		throw new Error("The pending approval belongs to another agent");
-	const consent = sessionMcpApproval(entry.store.record.sessionId, call.name);
+	const consent = state && sessionMcpApproval(entry.store.record.sessionId, call.name);
 	if (saved?.policyFingerprint && saved.policyFingerprint !== consent?.fingerprint)
 		throw new Error("MCP approval configuration changed");
 	const request: ApprovalRequest =
@@ -808,20 +821,29 @@ async function waitForApproval(
 					toolInput: run.toolCalls.get(call.callId)?.arguments ?? {},
 				};
 	const approved = new Promise<boolean>((resolveApproval, reject) => {
-		run.approval = { request, agentNode, resolve: resolveApproval, reject };
+		run.approval = {
+			request,
+			agentNode,
+			generation: state === undefined,
+			resolve: resolveApproval,
+			reject,
+		};
 	});
 	entry.store.update((record) => {
+		const checkpoint = state?.toString() ?? "";
 		record.pendingApproval = {
 			request,
-			checkpoint: state.toString(),
+			checkpoint,
 			...(agentNode !== undefined ? { agentNode } : {}),
 		};
-		record.runCheckpoint = {
-			runId: run.id,
-			checkpoint: state.toString(),
-			granted: run.granted,
-			enabledExtensions: run.enabledExtensions,
-		};
+		if (state)
+			record.runCheckpoint = {
+				runId: run.id,
+				checkpoint,
+				granted: run.granted,
+				enabledExtensions: run.enabledExtensions,
+			};
+		else delete record.runCheckpoint;
 		record.state.needsInput = { interactionId: request.id, kind: "dialog", request };
 	});
 	publishDialog(request);
@@ -1046,12 +1068,13 @@ export function resolveExtUi(response: ExtUiResponse): void {
 				: {}),
 			...(pending.agentNode !== undefined ? { agentNode: pending.agentNode } : {}),
 		};
-		record.runCheckpoint = {
-			runId: run.id,
-			checkpoint: run.state?.toString() ?? record.pendingApproval?.checkpoint ?? "",
-			granted: run.granted,
-			enabledExtensions: run.enabledExtensions,
-		};
+		if (!pending.generation)
+			record.runCheckpoint = {
+				runId: run.id,
+				checkpoint: run.state?.toString() ?? record.pendingApproval?.checkpoint ?? "",
+				granted: run.granted,
+				enabledExtensions: run.enabledExtensions,
+			};
 		delete record.pendingApproval;
 		record.state.needsInput = null;
 	});
@@ -2651,6 +2674,7 @@ async function buildSessionAgent(
 		model: sdkModel,
 		tools: [
 			...applicationTools,
+			...(run.memory && sandboxSession ? [run.memory.readTool(sandboxSession, active)] : []),
 			...workspaceTools(
 				{
 					workspaceId: entry.store.record.workspaceId,
@@ -2717,6 +2741,42 @@ async function buildSessionAgent(
 	const agent = sandboxEnabled
 		? new SandboxAgent({ ...options, capabilities: [], baseInstructions: "" })
 		: new Agent(options);
+	trackWorkspaceTools(entry, run, agent, assertOwner);
+	if (definition) {
+		const aliases = new Set(
+			definition.tools?.flatMap((name) =>
+				["grep", "find", "ls"].includes(name) ? ["search"] : [name],
+			),
+		);
+		const excluded = childDefinition
+			? ["Agent", "get_subagent_result", "ask_user_question"]
+			: ["Agent", "get_subagent_result"];
+		agent.tools = agent.tools.filter(
+			(candidate) =>
+				candidate.type !== "function" ||
+				(!excluded.includes(candidate.name) && (!definition.tools || aliases.has(candidate.name))),
+		);
+	}
+	if (role.node !== undefined) agentNodes.set(agent, role.node);
+	captureStructuredToolResults(agent.tools, run);
+	attachToolGuardrails(agent.tools, run, run.guardrails);
+	if (agent instanceof SandboxAgent) {
+		const patch = agent.tools.find((candidate) => candidate.name === "apply_patch");
+		if (patch) agent.tools = agent.tools.filter((candidate) => candidate !== patch);
+		agent.capabilities = [
+			...(patch ? [filesystem({ configureTools: () => [patch] })] : []),
+			...(run.memory?.capabilities ?? []),
+		];
+	}
+	return agent;
+}
+
+function trackWorkspaceTools<TContext, TOutput extends AgentOutputType>(
+	entry: Entry,
+	run: ActiveRun,
+	agent: Agent<TContext, TOutput>,
+	assertOwner: () => void,
+): void {
 	agent.on("agent_tool_start", (_context, _tool, details) => {
 		assertOwner();
 		if (details.toolCall.type !== "function_call") return;
@@ -2759,32 +2819,6 @@ async function buildSessionAgent(
 			run.toolCalls.get(details.toolCall.callId)?.failed,
 		);
 	});
-	if (definition) {
-		const aliases = new Set(
-			definition.tools?.flatMap((name) =>
-				["grep", "find", "ls"].includes(name) ? ["search"] : [name],
-			),
-		);
-		const excluded = childDefinition
-			? ["Agent", "get_subagent_result", "ask_user_question"]
-			: ["Agent", "get_subagent_result"];
-		agent.tools = agent.tools.filter(
-			(candidate) =>
-				candidate.type !== "function" ||
-				(!excluded.includes(candidate.name) && (!definition.tools || aliases.has(candidate.name))),
-		);
-	}
-	if (role.node !== undefined) agentNodes.set(agent, role.node);
-	captureStructuredToolResults(agent.tools, run);
-	attachToolGuardrails(agent.tools, run, run.guardrails);
-	if (agent instanceof SandboxAgent) {
-		const patch = agent.tools.find((candidate) => candidate.name === "apply_patch");
-		if (patch) {
-			agent.tools = agent.tools.filter((candidate) => candidate !== patch);
-			agent.capabilities = [filesystem({ configureTools: () => [patch] })];
-		}
-	}
-	return agent;
 }
 
 /** Current rule files and configured credentials; read once per run. */
@@ -3090,6 +3124,53 @@ function commitReviewOutput(
 	assertActive(entry, run);
 }
 
+function createSandboxMemory(entry: Entry, run: ActiveRun, model: WireModel): SandboxMemory {
+	const active = () => assertActive(entry, run);
+	const session = () => {
+		if (!run.sandbox) throw new Error("The Sandbox session has not started");
+		return run.sandbox;
+	};
+	return new SandboxMemory(createConfiguredModel(model, entry.store.record.sessionId), {
+		session,
+		assertActive: active,
+		canGenerate: () => run.state?.toJSON().currentStep?.type === "next_step_final_output",
+		signal: () => run.controller.signal,
+		workspaceTools: (signal) =>
+			workspaceTools(
+				{
+					workspaceId: entry.store.record.workspaceId,
+					cwd: entry.store.record.cwd,
+					signal,
+					assertActive: active,
+				},
+				session,
+			).filter((candidate) => candidate.name !== "search"),
+		approve: async (call, signal) => {
+			signal.throwIfAborted();
+			const approval = waitForApproval(entry, run, undefined, call);
+			const cancel = () => run.approval?.reject(new Error("Memory approval cancelled"));
+			signal.addEventListener("abort", cancel, { once: true });
+			try {
+				return await approval;
+			} finally {
+				signal.removeEventListener("abort", cancel);
+				if (run.approval?.generation && run.approval.request.toolCallId === call.callId) {
+					delete run.approval;
+					entry.store.update((record) => {
+						delete record.pendingApproval;
+						record.state.needsInput = null;
+					});
+					notifyState(entry);
+				}
+			}
+		},
+		trackTools: (agent) => {
+			trackWorkspaceTools(entry, run, agent, active);
+			if (run.guardrails) attachToolGuardrails(agent.tools, run, run.guardrails);
+		},
+	});
+}
+
 async function executeRun(
 	entry: Entry,
 	run: ActiveRun,
@@ -3098,6 +3179,7 @@ async function executeRun(
 ): Promise<void> {
 	let terminal: AgentSettlement = { stopReason: "stop" };
 	let streamFailed = false;
+	let sandboxWorktree: string | undefined;
 	try {
 		assertActive(entry, run);
 		if (
@@ -3113,14 +3195,21 @@ async function executeRun(
 			: undefined;
 		if (!model) throw new Error("Configure a Responses-compatible model before sending a message");
 		assertActive(entry, run);
+		if (
+			entry.store.record.sandbox &&
+			entry.store.record.sandboxMemory &&
+			!entry.store.record.handoffs
+		)
+			run.memory = createSandboxMemory(entry, run, model);
 		const buildAgent = () => buildSessionGraph(entry, run, model);
 		let graph = await buildAgent();
 		configureLocalSdkTracing();
-		const runner = new Runner({
+		const runnerConfig: Partial<RunConfig> = {
 			...traceRunOptions(diagnosticIdentity(entry, run.id)),
 			toolExecution: { preApprovalInputGuardrails: true },
 			callModelInputFilter: ({ modelData, agent }) => {
 				assertActive(entry, run);
+				if (run.memory?.owns(agent)) return modelData;
 				assertOwnerAgent(entry, agent);
 				if (entry.store.record.runCheckpoint && !entry.store.record.pendingApproval)
 					entry.store.update((record) => {
@@ -3128,7 +3217,10 @@ async function executeRun(
 					});
 				return { ...modelData, input: modelHistoryView(entry, run, agent, modelData.input) };
 			},
-		});
+		};
+		const runner = run.memory
+			? new SandboxMemoryRunner(runnerConfig, run.memory)
+			: new Runner(runnerConfig);
 		run.diagnostics = attachRunDiagnostics(
 			runner,
 			diagnosticIdentity(entry, run.id),
@@ -3209,6 +3301,7 @@ async function executeRun(
 			if (process.platform !== "darwin" && process.platform !== "linux")
 				throw new Error("The Unix-local Sandbox requires macOS or Linux and trusted Python 3");
 			const cwd = await realpath(entry.store.record.cwd);
+			sandboxWorktree = cwd;
 			assertActive(entry, run);
 			if (cwd.trimEnd() !== cwd)
 				throw new Error(
@@ -3216,7 +3309,9 @@ async function executeRun(
 				);
 			// The SDK resolves its virtual root before looking for a host path grant.
 			const defaultRoot = "/workspace";
-			run.sandbox = await new UnixLocalSandboxClient().create(
+			run.sandbox = await new UnixLocalSandboxClient({
+				archiveLimits: sandboxArchiveLimits,
+			}).create(
 				new Manifest({
 					root:
 						cwd === defaultRoot || cwd.startsWith(`${defaultRoot}/`)
@@ -3225,6 +3320,18 @@ async function executeRun(
 					extraPathGrants: [{ path: cwd, readOnly: true }],
 				}),
 			);
+			const archive = entry.store.record.sandboxArchive;
+			if (run.memory && archive) {
+				assertActive(entry, run);
+				if (
+					archive.sessionId !== entry.store.record.sessionId ||
+					archive.workspaceId !== entry.store.record.workspaceId ||
+					archive.cwd !== cwd
+				)
+					throw new Error("Sandbox archive belongs to a different session or worktree");
+				await run.sandbox.hydrateWorkspace(Buffer.from(archive.data, "base64"));
+				assertActive(entry, run);
+			}
 		}
 		while (true) {
 			assertActive(entry, run);
@@ -3361,10 +3468,29 @@ async function executeRun(
 			run.state = next;
 		}
 		if (run.sandbox) {
+			const { sessionId, workspaceId, cwd, revision } = entry.store.record;
+			const archive = run.memory?.completed ? await run.sandbox.persistWorkspace() : undefined;
 			const close = run.sandbox.close();
 			delete run.sandbox;
 			await close;
 			assertActive(entry, run);
+			if (archive) {
+				if (!sandboxWorktree || (await realpath(cwd)) !== sandboxWorktree)
+					throw new Error("The Sandbox worktree changed during memory generation");
+				assertActive(entry, run);
+				if (archive.byteLength > SANDBOX_ARCHIVE_BYTES)
+					throw new Error("Sandbox archive exceeds its size limit");
+				const snapshot = {
+					sessionId,
+					workspaceId,
+					cwd: sandboxWorktree,
+					data: Buffer.from(archive).toString("base64"),
+				};
+				entry.store.update((record) => {
+					record.sandboxArchive = snapshot;
+				}, revision);
+			}
+			if (run.memory?.failed) notifyExtUi(sessionId, "Sandbox memory was not updated.", "warning");
 		}
 	} catch (error) {
 		run.markReady?.();
@@ -3622,6 +3748,7 @@ function observeStore(entry: Entry): void {
 function stageSteering(entry: Entry): void {
 	const run = entry.active;
 	if (!run?.state || !run.granted || run.controller.signal.aborted || entry.stopping) return;
+	if (run.approval?.generation) return;
 	const waiting = entry.store.record.queue.filter(
 		(input) => input.kind === "steering" && input.state === "pending",
 	);
@@ -4594,6 +4721,22 @@ export function setSessionSandbox(sessionId: string, enabled: boolean): void {
 	});
 	notifyState(entry);
 }
+export function setSessionSandboxMemory(sessionId: string, enabled: boolean): void {
+	if (typeof enabled !== "boolean") throw new Error("Sandbox memory setting must be a boolean");
+	const entry = mustGet(sessionId);
+	if (entry.store.record.childRun || !entry.store.record.sandbox)
+		throw new Error("Retained memory requires a Sandbox chat");
+	if (entry.store.record.handoffs)
+		throw new Error("Retained memory is unavailable in Handoff chats");
+	if (entry.active || entry.stopping)
+		throw new Error("Stop the active run before changing Sandbox memory");
+	if ((entry.store.record.sandboxMemory === true) === enabled) return;
+	entry.store.update((record) => {
+		record.sandboxMemory = enabled;
+	});
+	notifyState(entry);
+}
+
 export function acknowledgeCompletion(
 	sessionId: string,
 	completionId: string,

@@ -44,6 +44,7 @@ import {
 	createSession,
 	deleteSession,
 	disposeAllSessions,
+	ensureSessionAttached,
 	followUpSession,
 	getSessionMessages,
 	getSessionState,
@@ -64,6 +65,7 @@ import {
 	setSessionPublisher,
 	setSessionResourceCleanup,
 	setSessionSandbox,
+	setSessionSandboxMemory,
 	setSessionStatePublisher,
 	steerSession,
 	updateQueuedMessage,
@@ -404,6 +406,338 @@ function observeSandboxSessions() {
 	);
 	return { opened, probe };
 }
+
+test.skipIf(process.platform === "win32")(
+	"native Sandbox memory uses ordinary tools and restores the committed private archive",
+	async () => {
+		const summary = "The fixture bore is 20 mm.";
+		const model = new ScriptedModel([
+			done(),
+			modelResponder(({ request }) => {
+				expect(request.tools.every((candidate) => candidate.type === "function")).toBe(true);
+				expect(request.tools).toEqual([]);
+				expect(request.systemInstructions).toContain(
+					"Return exactly one JSON object with three string fields named rollout_summary, rollout_slug, and raw_memory. Omit Markdown wrappers and explanations.",
+				);
+				expect(request.systemInstructions).toContain(
+					'If the rollout falls below that gate, return {"rollout_summary":"","rollout_slug":"","raw_memory":""}.',
+				);
+				return modelResponse([
+					assistantMessage(
+						JSON.stringify({
+							rollout_summary: summary,
+							rollout_slug: "fixture",
+							raw_memory: summary,
+						}),
+					),
+				]).response;
+			}),
+			modelResponder(({ request }) => {
+				expect(request.systemInstructions).toContain(
+					"Start by calling read_memory with path memories/raw_memories.md.",
+				);
+				expect(request.systemInstructions).toContain(
+					"the rollout_summary_file entries under 'Current selected Phase 1 inputs' as the complete input inventory",
+				);
+				expect(request.systemInstructions).toContain(
+					"Each successful read_memory call returns the entire file within its size limit.",
+				);
+				expect(request.systemInstructions).toContain(
+					"Skip line counts, chunked reads, shell inventory, and skills directory searches.",
+				);
+				expect(request.systemInstructions).toContain(
+					"Use project worktree tools only for operations on the project worktree",
+				);
+				expect(request.systemInstructions).toContain(
+					"Once you have enough evidence, stop inventorying. Use save_memory with the full Markdown content",
+				);
+				const input = JSON.stringify(request.input);
+				expect(input).toContain("Current selected Phase 1 inputs:");
+				expect(input).toMatch(/rollout_summary_file=rollout_summaries\/[\w-]+_fixture\.md/);
+				return [
+					functionCall(
+						"read_memory",
+						{ path: "memories/raw_memories.md" },
+						{ callId: "memory-read-raw" },
+					),
+				];
+			}),
+			modelResponse([
+				functionCall(
+					"save_memory",
+					{ path: "memories/memory_summary.md", content: summary },
+					{ callId: "memory-save" },
+				),
+			]),
+			done(),
+			modelResponder(({ request }) => {
+				expect(request.systemInstructions).toContain(summary);
+				return done().response;
+			}),
+			modelResponse([
+				assistantMessage(
+					JSON.stringify({
+						rollout_summary: "",
+						rollout_slug: "",
+						raw_memory: "",
+					}),
+				),
+			]),
+			done(),
+			modelResponse([
+				functionCall("exec_command", { cmd: "pwd" }, { callId: "native-shell-rejected" }),
+			]),
+		]);
+		configureAgentModelFactory(() => model);
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		expect(() => setSessionSandboxMemory(sessionId, true)).toThrow("requires a Sandbox chat");
+		setSessionSandbox(sessionId, true);
+		setSessionSandboxMemory(sessionId, true);
+		await promptSession(sessionId, "Retain the fixture bore");
+		expect(model.calls).toHaveLength(5);
+		const first = readSessionRecord(sessionId);
+		expect(first?.sandboxArchive?.data).toBeTruthy();
+		expect(first?.effects["memory-read-raw"]?.result).toContain(summary);
+		expect(first?.effects["memory-save"]?.status).toBe("completed");
+		expect(getSessionState(sessionId).sandboxMemory).toBe(true);
+		await removeSession(sessionId);
+		writeFileSync(join(worktree, "current.txt"), "newer worktree text");
+		expect(await ensureSessionAttached(sessionId, "workspace", worktree)).toBe(true);
+		await promptSession(sessionId, "Read the saved fact");
+		expect(model.calls).toHaveLength(7);
+		expect(readSessionRecord(sessionId)?.sandboxArchive).toEqual(first?.sandboxArchive);
+		expect(readFileSync(join(worktree, "current.txt"), "utf8")).toBe("newer worktree text");
+		await promptSession(sessionId, "Try to use a tool outside the memory policy");
+		model.assertComplete();
+		expect(readSessionRecord(sessionId)?.sandboxArchive).toEqual(first?.sandboxArchive);
+		expect(readSessionRecord(sessionId)?.effects["native-shell-rejected"]).toBeUndefined();
+
+		model.enqueue(
+			done(),
+			modelResponse([
+				assistantMessage(
+					JSON.stringify({
+						rollout_summary: summary,
+						rollout_slug: "unknown",
+						raw_memory: summary,
+					}),
+				),
+			]),
+			command("memory-unknown", "pwd && pwd"),
+		);
+		const exec = spyOn(UnixLocalSandboxSession.prototype, "exec");
+		try {
+			await promptSession(sessionId, "Try an unknown command during memory generation");
+			model.assertComplete();
+			expect(exec).not.toHaveBeenCalled();
+			expect(pendingExtUiDialog(sessionId)).toBeNull();
+			expect(readSessionRecord(sessionId)?.sandboxArchive).toEqual(first?.sandboxArchive);
+		} finally {
+			exec.mockRestore();
+		}
+
+		const deadline = new AbortController();
+		const originalTimeout = AbortSignal.timeout;
+		const timeout = spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
+			ms === 120_000 ? deadline.signal : originalTimeout(ms),
+		);
+		const remove = join(worktree, "remove.txt");
+		writeFileSync(remove, "preserve the fixture");
+		model.enqueue(
+			done(),
+			modelResponse([
+				assistantMessage(
+					JSON.stringify({
+						rollout_summary: summary,
+						rollout_slug: "timeout",
+						raw_memory: summary,
+					}),
+				),
+			]),
+			command("memory-timeout", "rm -- remove.txt"),
+		);
+		try {
+			setExtUiPublisher((request) => {
+				if (request.kind === "confirm") queueMicrotask(() => deadline.abort());
+			});
+			await promptSession(sessionId, "Retain a second fact");
+			model.assertComplete();
+			expect(pendingExtUiDialog(sessionId)).toBeNull();
+			expect(existsSync(remove)).toBe(true);
+			expect(readSessionRecord(sessionId)?.sandboxArchive).toEqual(first?.sandboxArchive);
+		} finally {
+			timeout.mockRestore();
+		}
+		await removeSession(sessionId);
+		const saved = readSessionRecord(sessionId);
+		if (!saved?.sandboxArchive) throw new Error("Missing fixture archive");
+		writeSessionRecord({
+			...saved,
+			sandboxArchive: { ...saved.sandboxArchive, workspaceId: "other" },
+		});
+		expect(await ensureSessionAttached(sessionId, "workspace", worktree)).toBe(true);
+		await promptSession(sessionId, "Open the wrong archive");
+		expect(assistantMessages(sessionId).at(-1)?.errorMessage).toContain(
+			"different session or worktree",
+		);
+		await removeSession(sessionId);
+		const invalidArchive = { ...saved.sandboxArchive, data: "YQ==" };
+		writeSessionRecord({ ...saved, sandboxArchive: invalidArchive });
+		expect(await ensureSessionAttached(sessionId, "workspace", worktree)).toBe(true);
+		const calls = model.calls.length;
+		await promptSession(sessionId, "Open an invalid archive");
+		expect(getSessionState(sessionId).completion?.outcome).toBe("failed");
+		expect(model.calls).toHaveLength(calls);
+		expect(readSessionRecord(sessionId)?.sandboxArchive).toEqual(invalidArchive);
+		expect(readFileSync(join(worktree, "current.txt"), "utf8")).toBe("newer worktree text");
+	},
+	15_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"native memory preserves the committed archive when the SDK cannot write its selection",
+	async () => {
+		const model = new ScriptedModel([]);
+		const retain = (slug: string, summary: string) => {
+			model.enqueue(
+				done(),
+				modelResponse([
+					assistantMessage(
+						JSON.stringify({
+							rollout_summary: summary,
+							rollout_slug: slug,
+							raw_memory: summary,
+						}),
+					),
+				]),
+				modelResponse([
+					functionCall(
+						"save_memory",
+						{ path: "memories/memory_summary.md", content: summary },
+						{ callId: slug },
+					),
+				]),
+				done(),
+			);
+		};
+		configureAgentModelFactory(() => model);
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		setSessionSandbox(sessionId, true);
+		setSessionSandboxMemory(sessionId, true);
+		retain("fixture-first", "The fixture bore is 20 mm.");
+		await promptSession(sessionId, "Retain the first bore measurement");
+		const archive = readSessionRecord(sessionId)?.sandboxArchive;
+		if (!archive) throw new Error("Missing initial memory archive");
+
+		const materialize = UnixLocalSandboxSession.prototype.materializeEntry;
+		let rejectedSelectionWrite = false;
+		const write = spyOn(UnixLocalSandboxSession.prototype, "materializeEntry").mockImplementation(
+			async function (this: UnixLocalSandboxSession, args) {
+				if (args.path === "memories/phase_two_selection.json") {
+					rejectedSelectionWrite = await this.pathExists(args.path);
+					throw new Error("Cannot replace the previous SDK memory selection");
+				}
+				return materialize.call(this, args);
+			},
+		);
+		try {
+			retain("fixture-second", "The measured fixture bore is 22 mm.");
+			await promptSession(sessionId, "Retain the updated bore measurement");
+			model.assertComplete();
+			expect(rejectedSelectionWrite).toBe(true);
+			expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+			const record = readSessionRecord(sessionId);
+			expect(record?.effects["fixture-second"]?.result).toBe("Memory file saved.");
+			expect(record?.sandboxArchive?.data === archive.data).toBe(true);
+		} finally {
+			write.mockRestore();
+		}
+	},
+	15_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"native memory uses the chat's current worktree approvals and receipts",
+	async () => {
+		const remove = join(worktree, "remove.txt");
+		const notes = join(worktree, "notes.txt");
+		writeFileSync(remove, "waiting for approval");
+		writeFileSync(notes, "old");
+		const memory = "The fixture bore is 20 mm.";
+		const model = new ScriptedModel([
+			done(),
+			modelResponder(({ request }) => {
+				expect(request.tools).toEqual([]);
+				return modelResponse([
+					assistantMessage(
+						JSON.stringify({
+							rollout_summary: memory,
+							rollout_slug: "fixture",
+							raw_memory: memory,
+						}),
+					),
+				]).response;
+			}),
+			modelResponder(({ request }) => {
+				expect(request.tools.map(({ name }) => name).sort()).toEqual([
+					"apply_patch",
+					"bash",
+					"read",
+					"read_memory",
+					"save_memory",
+				]);
+				return [
+					functionCall("bash", { command: "pwd", timeoutMs: 1000 }, { callId: "memory-pwd" }),
+					functionCall(
+						"bash",
+						{ command: "rm -- remove.txt", timeoutMs: 1000 },
+						{ callId: "memory-rm" },
+					),
+					functionCall(
+						"apply_patch",
+						{ path: "notes.txt", original: "old", diff: "@@\n-old\n+new" },
+						{ callId: "memory-edit" },
+					),
+				];
+			}),
+			modelResponse([
+				functionCall(
+					"save_memory",
+					{ path: "memories/memory_summary.md", content: memory },
+					{ callId: "memory-save" },
+				),
+			]),
+			done(),
+		]);
+		configureAgentModelFactory(() => model);
+		const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+		setSessionSandbox(sessionId, true);
+		setSessionSandboxMemory(sessionId, true);
+		const approvals: Extract<ExtUiRequest, { kind: "confirm" }>[] = [];
+		setExtUiPublisher((request) => {
+			if (request.kind !== "confirm") return;
+			approvals.push(request);
+			expect(pendingExtUiDialog(sessionId)?.id).toBe(request.id);
+			expect(readSessionRecord(sessionId)?.runCheckpoint).toBeUndefined();
+			expect(readFileSync(notes, "utf8")).toBe("old");
+			expect(existsSync(remove)).toBe(true);
+			resolveExtUi(approvalResponse(request, true));
+		});
+		await promptSession(sessionId, "Use the fixture and retain the bore size");
+		model.assertComplete();
+		expect(approvals.map(({ toolCallId }) => toolCallId)).toEqual(["memory-rm", "memory-edit"]);
+		expect(approvals[0]?.id).not.toBe(approvals[1]?.id);
+		expect(approvals[0]?.runId).toBe(approvals[1]?.runId);
+		expect(existsSync(remove)).toBe(false);
+		expect(readFileSync(notes, "utf8")).toContain("new");
+		const record = readSessionRecord(sessionId);
+		expect(record?.effects["memory-pwd"]?.result).toContain(realpathSync(worktree));
+		expect(record?.effects["memory-rm"]?.status).toBe("completed");
+		expect(record?.effects["memory-edit"]?.status).toBe("completed");
+		expect(Object.keys(record?.decisions ?? {})).toHaveLength(2);
+		expect(record?.sandboxArchive?.data).toBeTruthy();
+	},
+);
 
 test.skipIf(process.platform === "win32")(
 	"Sandbox runs bare pwd directly, rejects unknown commands, and approves one-file removal",

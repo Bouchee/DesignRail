@@ -32,6 +32,7 @@ import {
 	type HandoffGraphSnapshot,
 	handoffTargets,
 } from "./handoffGraph";
+import { SANDBOX_ARCHIVE_BYTES } from "./sandboxMemory";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
 const log = logger("agent");
@@ -120,6 +121,10 @@ export interface SessionRecord {
 	model: WireModel | null;
 	thinkingLevel: ThinkingLevel;
 	sandbox?: boolean | undefined;
+	sandboxMemory?: boolean | undefined;
+	sandboxArchive?:
+		| { sessionId: string; workspaceId: string; cwd: string; data: string }
+		| undefined;
 	eventSeq: number;
 	revision: number;
 	history: AgentInputItem[];
@@ -404,6 +409,15 @@ const recordSchema = z
 		model: z.custom<WireModel | null>((v) => v === null || wireModelSchema.safeParse(v).success),
 		thinkingLevel: thinkingSchema,
 		sandbox: z.boolean().optional(),
+		sandboxMemory: z.boolean().optional(),
+		sandboxArchive: z
+			.object({
+				sessionId: idSchema,
+				workspaceId: z.string().min(1),
+				cwd: z.string().min(1),
+				data: z.base64().max(Math.ceil(SANDBOX_ARCHIVE_BYTES / 3) * 4),
+			})
+			.optional(),
 		eventSeq: z.number().int().nonnegative(),
 		revision: z.number().int().nonnegative(),
 		history: z.array(protocol.ModelItem),

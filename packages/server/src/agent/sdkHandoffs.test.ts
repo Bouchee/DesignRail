@@ -28,6 +28,8 @@ import {
 	setExtUiPublisher,
 	setSessionProjectResolver,
 	setSessionPublisher,
+	setSessionSandbox,
+	setSessionSandboxMemory,
 	setSessionStatePublisher,
 	settleSessionsForShutdown,
 } from "./sdkSessionManager";
@@ -433,6 +435,37 @@ const toolCalls = (input: unknown) =>
 		item.type === "function_call" ? [item.callId] : [],
 	);
 const inputOf = (model: ScriptedModel, index: number) => model.calls[index]?.request.input;
+
+test.skipIf(process.platform === "win32")(
+	"a Sandbox Handoff preserves the specialist's scope and skips saved retained memory",
+	async () => {
+		personalGraph(["analyst"], [["analyst", ["$root"], "without_tools"]]);
+		const model = new ScriptedModel([transfer("analyst", "h1"), done("ANALYST_ANSWER")]);
+		const sessionId = await session(model);
+		setSessionSandbox(sessionId, true);
+		expect(() => setSessionSandboxMemory(sessionId, true)).toThrow(
+			"Retained memory is unavailable in Handoff chats",
+		);
+		await removeSession(sessionId);
+		const record = readSessionRecord(sessionId);
+		if (!record) throw new Error("Missing fixture session");
+		writeSessionRecord({
+			...record,
+			sandboxMemory: true,
+			sandboxArchive: { sessionId, workspaceId: record.workspaceId, cwd: record.cwd, data: "YQ==" },
+		});
+		await getSessionMessages(sessionId, record.workspaceId, record.cwd);
+		expect(getSessionState(sessionId).sandboxMemory).toBeUndefined();
+		await promptSession(sessionId, "Ask the analyst");
+		model.assertComplete();
+		expect(model.calls[0]?.request.tools.map(({ name }) => name)).not.toContain("read_memory");
+		expect(model.calls[1]?.request.tools.map(({ name }) => name).sort()).toEqual([
+			"read",
+			"search",
+		]);
+		expect(getSessionState(sessionId).completion?.outcome).toBe("succeeded");
+	},
+);
 
 test("without_tools hides inherited tool records but keeps the target's own exchanges", async () => {
 	personalGraph(["builder"], [["builder", ["$root"], "without_tools"]]);

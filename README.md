@@ -36,6 +36,10 @@ the same approved file edits. It runs bare `pwd` directly and asks for approval 
 regular worktree file with `rm -- <relative-file>`. Other shell commands are rejected. Unix-local
 requires macOS or Linux and trusted Python 3. Shell commands run with host permissions.
 
+Turn on Retained memory in a Sandbox chat without a Handoff graph. The selected model saves SDK
+memory after a successful run. The next run can read the saved memory, including after a host
+restart. The chat owns its memory archive, and project files stay in the Git worktree.
+
 Restart restores saved conversations and pending interactions. Interrupted side effects are marked
 unknown and require a new user decision. `/compact` summarizes model memory while retaining the full
 conversation for display and search. Automatic summaries use the selected verified model's context

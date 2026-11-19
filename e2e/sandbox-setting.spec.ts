@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createWorkspaceViaDialog, openFixtureProject } from "./fixtures/app";
 import { E2eWire } from "./fixtures/wire";
 
-test("the Sandbox selection uses saved session state and survives browser refresh", async ({
+test("Sandbox and retained memory use saved session state after browser refresh", async ({
 	page,
 }) => {
 	await openFixtureProject(page);
@@ -17,16 +17,26 @@ test("the Sandbox selection uses saved session state and survives browser refres
 				sessionId: session.sessionId,
 			});
 		const toggle = page.getByRole("button", { name: "Sandbox", exact: true });
+		const memory = page.getByRole("button", { name: "Retained memory", exact: true });
 		await expect(toggle).toHaveAttribute("aria-pressed", "false");
+		await expect(memory).toHaveCount(0);
 		await toggle.click();
 		await expect(toggle).toHaveAttribute("aria-pressed", "true");
 		expect((await snapshot()).summary.state?.sandbox).toBe(true);
+		await expect(memory).toHaveAttribute("aria-pressed", "false");
+		await memory.click();
+		await expect(memory).toHaveAttribute("aria-pressed", "true");
+		expect((await snapshot()).summary.state?.sandboxMemory).toBe(true);
 
 		await page.reload();
 		await expect(toggle).toHaveAttribute("aria-pressed", "true");
+		await expect(memory).toHaveAttribute("aria-pressed", "true");
 		await toggle.click();
 		await expect(toggle).toHaveAttribute("aria-pressed", "false");
-		expect((await snapshot()).summary.state?.sandbox).toBeUndefined();
+		await expect(memory).toHaveCount(0);
+		const state = (await snapshot()).summary.state;
+		expect(state?.sandbox).toBeUndefined();
+		expect(state?.sandboxMemory).toBeUndefined();
 	} finally {
 		wire.close();
 	}

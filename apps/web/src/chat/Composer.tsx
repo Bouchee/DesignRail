@@ -5,6 +5,7 @@ import {
 	RiFileLine as FileIcon,
 	RiFolderLine as FolderIcon,
 	RiHistoryLine as History,
+	RiStickyNoteLine as Memory,
 	RiBox3Line as SandboxOff,
 	RiBox3Fill as SandboxOn,
 	RiSparkling2Line as Sparkles,
@@ -193,8 +194,11 @@ interface ComposerProps {
 	onSelectModel: (selection: ModelSelection) => void;
 	onSelectThinking: (level: ThinkingLevel) => void;
 	sandboxEnabled: boolean;
+	sandboxMemory: boolean;
+	sandboxMemoryAvailable: boolean;
 	sandboxPending: boolean;
 	onSetSandbox: (enabled: boolean) => void;
+	onSetSandboxMemory: (enabled: boolean) => void;
 	onSubmit: (
 		text: string,
 		attachments: ChatAttachment[],
@@ -243,8 +247,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		onSelectModel,
 		onSelectThinking,
 		sandboxEnabled,
+		sandboxMemory,
+		sandboxMemoryAvailable,
 		sandboxPending,
 		onSetSandbox,
+		onSetSandboxMemory,
 		onSubmit,
 		onAbort,
 		onEnterTranscript,
@@ -684,6 +691,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 							disabled={isStreaming || sandboxPending}
 							onClick={() => onSetSandbox(!sandboxEnabled)}
 						/>
+						{sandboxEnabled && (
+							<IconButton
+								icon={Memory}
+								label={t("chat.composer.sandboxMemory")}
+								tooltip={t(
+									sandboxMemoryAvailable
+										? "chat.composer.sandboxMemoryHint"
+										: "chat.composer.sandboxMemoryHandoff",
+								)}
+								aria-pressed={sandboxMemory}
+								selected={sandboxMemory}
+								disabled={isStreaming || sandboxPending || !sandboxMemoryAvailable}
+								onClick={() => onSetSandboxMemory(!sandboxMemory)}
+							/>
+						)}
 					</div>
 					<div
 						className={cn(

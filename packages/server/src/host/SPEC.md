@@ -129,6 +129,9 @@ revision ownership. Reply handlers attach the owning persisted session before pr
 completed receipts replay after restart without prior client hydration. Missing, closing or mismatched
 workspaces reject replies before continuation. SDK objects, full checkpoints and private keys remain on the host.
 
+`session.setSandboxMemory` changes the memory opt-in for an idle Sandbox chat without a Handoff
+graph. The public state contains the opt-in. Session storage owns the archive.
+
 The event publisher feeds `TurnTracker` and emits the same application event to clients. Turns retain
 actual before/after worktree snapshots; shutdown drains a still-recording receipt. Workspace watchers
 publish real file changes, re-anchor reviews and invalidate search. Repo metadata changes update the

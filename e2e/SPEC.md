@@ -173,6 +173,13 @@ PATH and isolated home, and waits for stale writer ownership to expire. It never
 browser suite host or reads developer credentials. Focused live checks use only the protected test
 configuration supplied to the public agent runner. They do not run the complete live suite.
 
+The same restart spec tests Sandbox approval and retained memory on Unix-local hosts. One case
+compares the pending approval before and after a crash. It repeats the completed approval after
+recreating the test file, then injects a started effect to check unknown-result recovery. The memory
+case waits for a committed SDK archive, restarts the host, and reads the saved summary through
+`read_memory`. Files and Diff must both show the newer worktree file. The no-agent Sandbox settings
+case checks opt-in and refresh without starting a model.
+
 ## Repository cloning
 
 `clone-project.spec.ts` clones disposable local `file:` repositories through the Welcome and rail menus,

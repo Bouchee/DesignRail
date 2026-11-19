@@ -67,6 +67,7 @@ import {
 	sessionResources,
 	setSessionModel,
 	setSessionSandbox,
+	setSessionSandboxMemory,
 	setSessionThinkingLevel,
 	steerSession,
 	stopBackgroundCommand,
@@ -1151,6 +1152,11 @@ const handlers: WsHandlers = {
 	},
 	"session.setSandbox": (p) => {
 		setSessionSandbox(p.sessionId, p.enabled);
+		return { ok: true } as const;
+	},
+
+	"session.setSandboxMemory": (p) => {
+		setSessionSandboxMemory(p.sessionId, p.enabled);
 		return { ok: true } as const;
 	},
 

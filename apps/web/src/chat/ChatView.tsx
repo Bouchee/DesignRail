@@ -108,6 +108,9 @@ export default function ChatView({
 		(s) => s.sessions[sessionId]?.thinkingLevel ?? EMPTY_RUNTIME.thinkingLevel,
 	);
 	const sandboxEnabled = useAppStore((s) => s.sessions[sessionId]?.hostState?.sandbox === true);
+	const sandboxMemory = useAppStore(
+		(s) => s.sessions[sessionId]?.hostState?.sandboxMemory === true,
+	);
 	const [sandboxPending, setSandboxPending] = useState(false);
 	const extUiStatus = useAppStore(
 		(s) => s.sessions[sessionId]?.extUiStatus ?? EMPTY_RUNTIME.extUiStatus,
@@ -504,10 +507,15 @@ export default function ChatView({
 		useAppStore.getState().setThinkingLevel(sessionId, level);
 		void requestLevel(level, thinkingLevel);
 	};
-	const setSandbox = (enabled: boolean) => {
+	const setSandbox = (enabled: boolean, memory = false) => {
 		setSandboxPending(true);
 		void Promise.resolve()
-			.then(() => getTransport().request("session.setSandbox", { sessionId, enabled }))
+			.then(() =>
+				getTransport().request(memory ? "session.setSandboxMemory" : "session.setSandbox", {
+					sessionId,
+					enabled,
+				}),
+			)
 			.catch((error: unknown) => toast.error(errorText(error), t("chat.view.sandboxChangeFailed")))
 			.finally(() => setSandboxPending(false));
 	};
@@ -959,8 +967,11 @@ export default function ChatView({
 					onSelectModel={onSelectModel}
 					onSelectThinking={onSelectThinking}
 					sandboxEnabled={sandboxEnabled}
+					sandboxMemory={sandboxMemory}
+					sandboxMemoryAvailable={activeAgent === undefined}
 					sandboxPending={sandboxPending}
 					onSetSandbox={setSandbox}
+					onSetSandboxMemory={(enabled) => setSandbox(enabled, true)}
 					onSubmit={onSubmit}
 					onAbort={onAbort}
 					onEnterTranscript={() => transcriptRef.current?.focusNewest()}

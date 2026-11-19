@@ -15,6 +15,10 @@ change through `session.setSandbox` and disables the control during a run or a p
 request. Runtime start failures use the existing persistent run error. The control explains that
 Unix-local shell commands retain host permissions.
 
+The Retained memory control appears in Sandbox chats. It sends the saved opt-in through
+`session.setSandboxMemory`. Handoff chats show a disabled control with an explanation. The local
+SDK archive stays on the host.
+
 An accepted `AssistantMessage.planReview` replaces provisional JSON in the existing same-ID markdown
 row with a read-only verdict, summary, findings and reading order. It uses current review labels;
 model-local finding IDs have no resolve/comment actions. `deriveRows` and `ChatTurnView` consume the

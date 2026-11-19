@@ -27,8 +27,27 @@ Tool failure status comes from invalid call JSON, SDK error callbacks, command e
 
 Each run creates a new AbortController and workspace-bound tools. Stop revokes the grant before aborting the model and subprocess group. Tools revalidate grant and an existing workspace record before effects. Read/search/edit paths use the filesystem resolver, including real paths, symlinks, new-file ancestors and `.git` checks. Ordinary chats use `runBounded` in the assigned worktree with time/output bounds. The host subprocess tools capture configured model-key environment references at run creation and exclude those names, plus common secret names, from child environments. Edits check original text, apply the SDK diff and replace atomically.
 
-The per-session Sandbox setting selects the SDK `SandboxAgent` and one Unix-local SDK session for the
-active run, including its Handoffs and approval continuations. Its manifest grants read-only access
+Sandbox chats without a Handoff graph can opt in to retained memory. The native SDK injects the
+shared session summary into agent instructions. Handoff chats keep their per-agent history and
+tool policies and leave retained memory disabled. The same Runner handles both native memory stages
+after a successful chat response. Extraction uses structured output. Consolidation uses the
+existing workspace tools and bounded private memory file tools. The raw memory file and selected
+rollout paths identify the private inputs. A successful private read returns the entire file within
+its size limit. Project shell commands operate on the worktree. Approval and effect receipts use
+the owning chat. Stop aborts generation. An interrupted generation leaves the last committed
+archive available. The host clears a pending generation decision after process loss because the
+SDK keeps its generation job inside the issuing Runner.
+
+The archive holds SDK workspace files under the session and worktree identity. Recovery checks the
+current grant before opening it in a fresh runtime. Git remains the authority for project files.
+After the summary is saved, the SDK writes `memories/phase_two_selection.json` for the current update.
+Only a successful selection write makes that update eligible for archiving. A rejected write preserves
+the previous archive even when the chat succeeds. The session record commits the archive against its
+current revision. Deleting the chat moves its session record and archive from active storage to the
+application Trash.
+
+The per-session Sandbox setting selects the SDK `SandboxAgent` and one Unix-local session for the
+active run, including Handoffs and approval continuations. Its manifest grants read-only access
 to the canonical worktree. Worktree paths ending in whitespace are rejected because the SDK trims
 them. A worktree at or under `/workspace` uses a distinct SDK virtual root so the host grant resolves
 to the assigned worktree. The model-facing `read` resolves worktree permissions first and reads
