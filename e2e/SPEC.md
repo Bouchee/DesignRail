@@ -683,8 +683,8 @@ source is seeded as a successful historical tool result (`isError: false`) so bo
 the renderer's plain-source fallback, not the tool-error branch. File previews write mockups into the shared
 fixture repository (removed in `finally`) and pin the HTML renderer in the card, the before/after 2-up diff,
 a region comment's Send carrying the card's chat `sessionId` over the wire, HTML design-width scaling and the
-width switch, full screen, Open in tab, and a before/after opened as a comparison diff tab that survives a
-reload. A huge comparison opts in through Show diff anyway while an unrelated file changes every 400 ms (each
+width switch, full screen, Open in tab, and a before/after opened as a comparison diff tab (paired frames
+with same-origin access only, swipe available) that survives a reload. A huge comparison opts in through Show diff anyway while an unrelated file changes every 400 ms (each
 write its own watcher frame, past the 300 ms quiet flush), so updates keep landing inside the expensive first
 mount. These regressions need no provider,
 prompt submission, route mock, or screenshot. Extension on/off coverage (`extensions-settings.spec.ts`) drives the
@@ -719,8 +719,9 @@ submits or nudges), and an open note closing on a background press or on focus l
 stealing the press aimed at a row or Add note below it (`ask-user-question.spec.ts`). `ask-previews.spec.ts` writes mockups
 into the fixture repository (removed in `finally`) and pins the question preview and the option pane (HTML,
 before/after, mermaid, none) at one card height, full-screen keys that never page or skip, a file removed
-under its preview, and the picked file's path in the persisted answer; `plan-ask.spec.ts` adds the same file
-preview on the plan page. These three specs also run in a **`webkit` Playwright project**: the macOS desktop
+under its preview, and the picked file's path in the persisted answer. It also checks full-screen comparison,
+synchronized HTML scrolling, focus during view changes, choosing a preview, and read-only comparison
+from the receipt. `plan-ask.spec.ts` adds the same file preview on the plan page. These three specs also run in a **`webkit` Playwright project**: the macOS desktop
 is the system WKWebView, whose Tab skips buttons without an explicit `tabindex` (the regression this lane
 exists for). CI installs WebKit with the system libraries it links, not its media plugins (`.github/SPEC.md`);
 Linux WebKit may not reproduce the macOS Tab rule,

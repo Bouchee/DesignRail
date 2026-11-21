@@ -54,6 +54,8 @@ Fork releases and updates come only from `Bouchee/raildesign`.
 JetBrains services, telemetry, attribution and surveys are removed. SDK tracing starts disabled.
 The interface keeps its bundled fonts and themes; font family names are not service integrations.
 
+Questions with visual options support full-screen comparison and selection in the workbench.
+
 ## Non-goals
 
 Personal accounts, per-user projects or credentials, RBAC, multi-tenant scheduling, new mechanical design

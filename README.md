@@ -53,6 +53,7 @@ The SDK tool graph includes admitted Skills and workspace instructions, question
 Plan and Spec Graph, configured MCP tools, and foreground or background child tasks. Resources retains
 child transcripts and background-command output, with ownership checks and Stop controls. The Resources
 dock can fold while work continues; inspect an MCP server for its status and this chat's calls.
+Compare question option previews full screen, side by side or in a grid, and choose an option from the preview.
 Plan review uses an independent SDK child with a validated verdict saved in its read-only transcript.
 Plan and Review show the recorded outcome and findings. Finish or stop pending reviews before updating;
 older pending review checkpoints stop explicitly.
