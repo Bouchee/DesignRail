@@ -57,6 +57,12 @@ const SUPPRESSION_DRAWN_ELSEWHERE: Record<string, { match: string; reason: strin
 	"chat/ChatImage.tsx": [
 		{ match: "relative inline-flex max-w-full", reason: "tabIndex=-1 programmatic target" },
 	],
+	"panels/SettingsDialog.tsx": [
+		{
+			match: "min-h-28 min-w-0 flex-1 bg-transparent tr-text-ui",
+			reason: "the search label draws focus-within:focus-ring",
+		},
+	],
 	"panels/PlanPane.tsx": [
 		{
 			match: "field-sizing-content max-h-[10rem]",

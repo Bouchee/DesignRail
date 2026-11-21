@@ -5,6 +5,7 @@ import {
 	openFixtureProject,
 	openPersistedChat,
 	pressPlatformShortcut,
+	selectMessageOrder,
 } from "./fixtures/app";
 import {
 	moveMouseToChatViewport,
@@ -91,15 +92,6 @@ function seedTallChat(name: string, needleAt = -1) {
 	});
 	utimesSync(session.path, new Date(BASE_TS + 100_000), new Date(BASE_TS + 100_000));
 	return session;
-}
-
-async function selectMessageOrder(page: Page, order: "oldest-first" | "newest-first") {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId(`chat-order-${order}`);
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
 }
 
 const row = (page: Page, text: string): Locator =>
@@ -757,17 +749,18 @@ test("a pending history jump yields permanently to a new composer pointer", asyn
 		await enterDefaultWorkspace(page);
 		await openPersistedChat(page, "keyboard cancelled jump");
 		await page.getByRole("tab", { name: "keyboard cancelled jump", exact: true }).click();
+		await waitForScrollStability(page.getByTestId("chat-scroll"));
+		await expect(row(page, "obsidian-keyboard-needle")).toHaveCount(0);
 		const input = page.getByTestId("chat-input");
 		await input.press("Control+r");
 		const query = page.getByTestId("history-query");
 		await query.fill("obsidian-keyboard-needle");
 		await expect(page.getByTestId("history-expand-hint")).toBeVisible();
 		await query.press("Tab");
-		await expect(
-			page
-				.locator('[data-testid="history-item"][data-kind="message"]')
-				.filter({ hasText: "obsidian-keyboard-needle" }),
-		).toBeVisible();
+		const result = page
+			.locator('[data-testid="history-item"][data-kind="message"]')
+			.filter({ hasText: "obsidian-keyboard-needle" });
+		await expect(result).toBeVisible();
 		const scroller = page.getByTestId("chat-transcript-scroll").locator("[data-virtuoso-scroller]");
 		await scroller.evaluate((element) => {
 			element.addEventListener(
@@ -784,7 +777,7 @@ test("a pending history jump yields permanently to a new composer pointer", asyn
 				{ once: true },
 			);
 		});
-		await query.press("Enter");
+		await result.getByRole("button").first().click();
 		await expect(page.getByTestId("history-overlay")).toBeHidden();
 		await expect(scroller).toHaveAttribute("data-jump-interrupted", "true");
 		await waitForScrollStability(page.getByTestId("chat-scroll"));

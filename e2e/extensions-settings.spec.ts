@@ -1,7 +1,12 @@
 import { realpathSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import type { AskUserQuestionArgs, AskUserQuestionResult } from "@thinkrail/ask-user-question/core";
-import { enterDefaultWorkspace, openFixtureProject, openPersistedChat } from "./fixtures/app";
+import {
+	closeSettingsDialog,
+	enterDefaultWorkspace,
+	openFixtureProject,
+	openPersistedChat,
+} from "./fixtures/app";
 import { E2E_FIXTURE_REPO } from "./fixtures/paths";
 import { seedWorkspaceSession } from "./fixtures/sessions";
 import { E2eWire } from "./fixtures/wire";
@@ -21,11 +26,6 @@ async function openExtensionsSettings(page: Page) {
 	await page.getByTestId("open-settings").click();
 	await page.getByTestId("settings-nav-extensions").click();
 	return page.getByTestId("settings-extensions");
-}
-
-async function closeSettings(page: Page): Promise<void> {
-	await page.keyboard.press("Escape");
-	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 }
 
 const WEB_ONLY = "hint-mode";
@@ -101,7 +101,7 @@ test("Settings → Extensions lists the web-only Hint mode after the host's exte
 
 	await toggle.click();
 	await expect(toggle).toHaveAttribute("aria-checked", "false");
-	await closeSettings(page);
+	await closeSettingsDialog(page);
 	await page.reload();
 	await openExtensionsSettings(page);
 	await expect(page.getByTestId(`extension-toggle-${WEB_ONLY}`)).toHaveAttribute(

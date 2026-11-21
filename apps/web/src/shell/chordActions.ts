@@ -78,7 +78,7 @@ export function focusProjects(toggleProjectsHome: () => void): void {
 	const state = useAppStore.getState();
 	const workspaceId = state.activeWorkspaceId;
 	if (workspaceId) {
-		state.requestToolView(workspaceId, "projects");
+		state.requestToolView(workspaceId, "projects", { focus: false });
 		focusToolBody("projects");
 		return;
 	}
@@ -93,7 +93,7 @@ export function showFiles(mode: "all" | "changed"): void {
 	const workspaceId = state.activeWorkspaceId;
 	if (!workspaceId) return;
 	state.setFilesMode(mode);
-	state.requestToolView(workspaceId, "files");
+	state.requestToolView(workspaceId, "files", { focus: false });
 	focusToolBody("files", (body) => body.querySelector(`[data-files-mode="${mode}"]`) !== null);
 }
 

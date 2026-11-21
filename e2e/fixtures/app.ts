@@ -25,6 +25,24 @@ export async function pressPlatformShortcut(page: Page, key: string): Promise<vo
 	await page.keyboard.press(`${apple ? "Meta" : "Control"}+${key}`);
 }
 
+export async function closeSettingsDialog(page: Page): Promise<void> {
+	const dialog = page.getByTestId("settings-dialog");
+	await dialog.getByRole("button", { name: "Close" }).click();
+	await expect(dialog).toBeHidden();
+}
+
+export async function selectMessageOrder(
+	page: Page,
+	order: "oldest-first" | "newest-first",
+): Promise<void> {
+	await page.getByTestId("open-settings").click();
+	await page.getByTestId("settings-nav-chat").click();
+	const option = page.getByTestId(`chat-order-${order}`);
+	await option.click();
+	await expect(option).toHaveAttribute("data-active", "true");
+	await closeSettingsDialog(page);
+}
+
 export async function hideAuxiliaryWorkbench(page: Page): Promise<void> {
 	for (const [testId, shortcut] of [
 		["left-stack", "B"],

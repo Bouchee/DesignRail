@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	closeSettingsDialog,
 	createWorkspaceViaDialog,
 	enterDefaultWorkspace,
 	openFixtureProject,
@@ -30,13 +31,7 @@ function controls(page: Page) {
 }
 
 async function closeSettings(page: Page): Promise<void> {
-	const dialog = page.getByTestId("settings-dialog");
-	if (!(await dialog.isVisible())) return;
-	await page.evaluate(() => {
-		if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-	});
-	await page.keyboard.press("Escape");
-	await expect(dialog).toBeHidden();
+	if (await page.getByTestId("settings-dialog").isVisible()) await closeSettingsDialog(page);
 }
 
 async function fixtureWorkspace(wire: E2eWire): Promise<string> {

@@ -1,23 +1,13 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
 	activeWorktreeRow,
 	createWorkspaceViaDialog,
 	openFixtureProject,
+	selectMessageOrder,
 	worktreeRow,
 } from "./fixtures/app";
 import { readChatViewportCenterOffsets } from "./fixtures/chatScroll";
 import { seedExternalCwdSessions, seedWorkspaceSession } from "./fixtures/sessions";
-
-type MessageOrder = "oldest-first" | "newest-first";
-
-async function selectMessageOrder(page: Page, order: MessageOrder) {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId(`chat-order-${order}`);
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
-}
 
 test("selecting a same-workspace message hit opens the chat and flashes the matched row", async ({
 	page,

@@ -564,7 +564,7 @@ after the host's push), else the opener's rows. Resolution, first match wins:
    row, the previous, the list's `data-focus-fallback`, the list's first focusable; then the outermost
    list's enclosing `data-focus-default`.
 4. **Safety net** — the active region's F6 landing target (`regionLandingTarget`, the record's region when
-   the active one is gone; a waiting question's `[data-focus-claim]` wins it, as for F6); inside a live dialog, its first focusable. A control that sat in no region and
+   the active one is gone); inside a live dialog, its first focusable. A control that sat in no region and
    no dialog (a field a page or extension injected into `<body>`) gets no safety net: focus stays where the
    browser put it.
 

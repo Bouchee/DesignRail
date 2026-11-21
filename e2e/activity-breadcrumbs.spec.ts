@@ -1,8 +1,13 @@
 import { readFileSync, realpathSync, renameSync, utimesSync, writeFileSync } from "node:fs";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import type { AssistantMessage, ToolResultMessage } from "@thinkrail/contracts";
 import type { SessionRecord } from "@thinkrail/server/agent";
-import { defaultWorkspaceRow, enterDefaultWorkspace, openFixtureProject } from "./fixtures/app";
+import {
+	defaultWorkspaceRow,
+	enterDefaultWorkspace,
+	openFixtureProject,
+	selectMessageOrder,
+} from "./fixtures/app";
 import {
 	moveMouseToChatViewport,
 	readChatScrollGeometry,
@@ -38,18 +43,6 @@ function appendMessage(path: string, id: string, message: AppendedMessage): void
 	const staged = `${path}.fixture-update`;
 	writeFileSync(staged, `${JSON.stringify(record)}\n`);
 	renameSync(staged, path);
-}
-
-async function selectMessageOrder(
-	page: Page,
-	order: "oldest-first" | "newest-first",
-): Promise<void> {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId(`chat-order-${order}`);
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
 }
 
 function seedNestedActivityChat(name: string) {

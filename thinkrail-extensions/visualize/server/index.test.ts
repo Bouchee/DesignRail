@@ -72,6 +72,7 @@ describe("visualize server half", () => {
 		expect(res.details).toEqual({
 			type: "diagram",
 			mermaid: "flowchart LR\n A[Start] --> B[Done]",
+			savedPath: expect.stringMatching(/^\.raildesign\/context\/visualize\/.+-diagram\.md$/),
 		});
 		expect(Object.getOwnPropertyDescriptor(globalThis, "window")).toEqual(windowDescriptor);
 		expect(Object.getOwnPropertyDescriptor(globalThis, "document")).toEqual(documentDescriptor);

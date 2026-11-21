@@ -377,7 +377,7 @@ function SettingsDialogContent({
 							const row = rowIdOf<HTMLElement>(event.target);
 							if (row !== null) lastFocused.current.set(selectedSection, row);
 						}}
-						className="min-h-0 min-w-0 flex-1 overflow-y-auto p-16 focus-visible:outline-none"
+						className="min-h-0 min-w-0 flex-1 overflow-y-auto p-16 focus-visible:focus-ring-inset"
 					>
 						{sectionLabel ? (
 							<h2 className="pb-16 tr-heading-sm text-text-default">{t(sectionLabel)}</h2>

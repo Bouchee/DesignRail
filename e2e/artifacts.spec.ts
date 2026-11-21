@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync 
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import {
+	closeSettingsDialog,
 	createWorkspaceViaDialog,
 	enterDefaultWorkspace,
 	loadPersistedWorkspaces,
@@ -259,7 +260,7 @@ test("Smart groups what the agent made by folder with its working files folded u
 	await page.getByTestId("open-settings").click();
 	await page.getByTestId("settings-nav-artifacts").click();
 	await page.getByTestId("artifacts-smart-toggle").click();
-	await page.keyboard.press("Escape");
+	await closeSettingsDialog(page);
 	await expect(page.getByTestId("artifacts-view-smart")).toHaveCount(0);
 	await expect(page.getByTestId("artifacts-view-list")).toHaveAttribute("data-active", "true");
 	await expect(artifact(page, "mockups/onboarding/gen.mjs")).toBeVisible();

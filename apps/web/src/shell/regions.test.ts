@@ -337,6 +337,11 @@ describe("delayed explicit focus", () => {
 	for (const type of ["keydown", "pointerdown", "blur"]) {
 		test(`a user's ${type} permanently cancels an older Files wait`, () => {
 			showFiles("changed");
+			expect(useAppStore.getState().layoutIntents.at(-1)).toMatchObject({
+				kind: "reveal-tool",
+				tool: "files",
+				focus: false,
+			});
 			gesture(type);
 			body = new FocusNode();
 			body.mode = "changed";

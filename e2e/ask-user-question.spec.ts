@@ -8,11 +8,13 @@ import type {
 } from "@thinkrail/ask-user-question/core";
 import type { ToolCall, ToolResponsePendingDetails } from "@thinkrail/contracts";
 import {
+	closeSettingsDialog,
 	enterDefaultWorkspace,
 	hideAuxiliaryWorkbench,
 	openFixtureProject,
 	openPersistedChat,
 	pressPlatformShortcut,
+	selectMessageOrder,
 } from "./fixtures/app";
 import { nestedVerticalScrollSurfaces, waitForScrollStability } from "./fixtures/chatScroll";
 import { E2E_FIXTURE_REPO } from "./fixtures/paths";
@@ -46,15 +48,6 @@ async function openPersistedChatAfterInput(page: Page, title: string): Promise<v
 	await chatTab.getByTestId("editor-tab-close").click();
 	await expect(chatTab).toHaveCount(0);
 	await openPersistedChat(page, title);
-}
-
-async function selectOldestFirst(page: Page): Promise<void> {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId("chat-order-oldest-first");
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
 }
 
 function seedQuestionnaire(
@@ -289,7 +282,7 @@ test("a tall questionnaire docks above the composer with pinned controls and a s
 	const session = seedTallQuestionnaire("tall persisted questionnaire", "ask-tall-pages");
 
 	try {
-		await selectOldestFirst(page);
+		await selectMessageOrder(page, "oldest-first");
 		await enterDefaultWorkspace(page);
 		await hideAuxiliaryWorkbench(page);
 		await openPersistedChatAfterInput(page, "tall persisted questionnaire");
@@ -1119,12 +1112,6 @@ async function openChatSettings(page: Page): Promise<Locator> {
 	const input = page.getByTestId("question-panel-height-input");
 	await expect(input).toBeVisible();
 	return input;
-}
-
-async function closeSettingsDialog(page: Page): Promise<void> {
-	const dialog = page.getByTestId("settings-dialog");
-	await dialog.getByRole("button", { name: "Close" }).click();
-	await expect(dialog).toBeHidden();
 }
 
 async function saveQuestionPanelHeight(input: Locator, value: number): Promise<void> {

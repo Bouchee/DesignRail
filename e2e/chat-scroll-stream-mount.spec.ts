@@ -1,6 +1,11 @@
 import { realpathSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { enterDefaultWorkspace, openFixtureProject, openPersistedChat } from "./fixtures/app";
+import {
+	enterDefaultWorkspace,
+	openFixtureProject,
+	openPersistedChat,
+	selectMessageOrder,
+} from "./fixtures/app";
 import { E2E_FIXTURE_REPO } from "./fixtures/paths";
 import { seedWorkspaceSession } from "./fixtures/sessions";
 import {
@@ -74,15 +79,6 @@ const readProbe = (page: Page) =>
 
 const now = (page: Page) => page.evaluate(() => performance.now());
 
-const selectNewestFirst = async (page: Page) => {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId("chat-order-newest-first");
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
-};
-
 const history = (exchanges: number) =>
 	Array.from({ length: exchanges }, (_, turn) => [
 		{ role: "user" as const, text: `Request ${turn}`, timestamp: BASE_TS + turn * 10_000 },
@@ -115,7 +111,7 @@ for (const { order, mode, viewport } of cases) {
 		if (viewport) await page.setViewportSize(viewport);
 		const wire = await interceptAppWire(page);
 		await openFixtureProject(page);
-		if (order === "newest-first") await selectNewestFirst(page);
+		if (order === "newest-first") await selectMessageOrder(page, "newest-first");
 		const title = `stream mount ${order} ${mode}${size}`;
 		const seeded = seedWorkspaceSession(realpathSync(E2E_FIXTURE_REPO), {
 			name: title,

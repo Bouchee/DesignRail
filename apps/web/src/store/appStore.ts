@@ -1630,7 +1630,7 @@ interface AppState {
 	setMarkdownOutlineVisible: (visible: boolean) => void;
 	setMarkdownOutlineSide: (side: MarkdownOutlineSide) => void;
 	applyConfig: (config: AppConfig) => void;
-	requestToolView: (workspaceId: string, tool: LayoutToolId) => void;
+	requestToolView: (workspaceId: string, tool: LayoutToolId, options?: { focus?: false }) => void;
 	requestChangesView: (workspaceId: string, path: string | null, scope?: GitDiffScope) => void;
 	revealChanges: (workspaceId: string) => void;
 	clearChangesRequest: () => void;
@@ -4948,7 +4948,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 	setMarkdownOutlineVisible: (markdownOutlineVisible) => set({ markdownOutlineVisible }),
 	setMarkdownOutlineSide: (markdownOutlineSide) => set({ markdownOutlineSide }),
 	applyConfig: (config) => set(configPatch(config)),
-	requestToolView: (workspaceId, tool) =>
+	requestToolView: (workspaceId, tool, options) =>
 		set((state) =>
 			state.removedWorkspaceIds[workspaceId]
 				? {}
@@ -4957,6 +4957,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 							kind: "reveal-tool",
 							workspaceId,
 							tool,
+							...options,
 						}),
 					},
 		),

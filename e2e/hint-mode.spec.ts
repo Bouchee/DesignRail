@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
+	closeSettingsDialog,
 	createWorkspaceViaDialog,
 	openFixtureProject,
 	pressPlatformShortcut,
@@ -83,10 +84,7 @@ async function openExtensionsSettings(page: Page): Promise<Locator> {
 }
 
 async function closeSettings(page: Page): Promise<void> {
-	const dialog = page.getByTestId("settings-dialog");
-	if (!(await dialog.isVisible())) return;
-	await page.keyboard.press("Escape");
-	await expect(dialog).toBeHidden();
+	if (await page.getByTestId("settings-dialog").isVisible()) await closeSettingsDialog(page);
 }
 
 async function setHintMode(page: Page, enabled: boolean): Promise<void> {

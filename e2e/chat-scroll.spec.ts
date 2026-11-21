@@ -1,6 +1,11 @@
 import { realpathSync, rmSync, utimesSync } from "node:fs";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { enterDefaultWorkspace, hideAuxiliaryWorkbench, openFixtureProject } from "./fixtures/app";
+import {
+	enterDefaultWorkspace,
+	hideAuxiliaryWorkbench,
+	openFixtureProject,
+	selectMessageOrder,
+} from "./fixtures/app";
 import {
 	moveMouseToChatViewport,
 	readChatScrollGeometry,
@@ -42,15 +47,6 @@ const orderCases: Array<{
 		latestWheel: -900,
 	},
 ];
-
-async function selectMessageOrder(page: Page, order: MessageOrder): Promise<void> {
-	await page.getByTestId("open-settings").click();
-	await page.getByTestId("settings-nav-chat").click();
-	const option = page.getByTestId(`chat-order-${order}`);
-	await option.click();
-	await expect(option).toHaveAttribute("data-active", "true");
-	await page.keyboard.press("Escape");
-}
 
 function seededRandom(seed: number): () => number {
 	let state = seed >>> 0;
