@@ -658,6 +658,9 @@ export function McpEmptyState({
 					size="m"
 					iconLeft={Plus}
 					data-testid="mcp-empty-add"
+					data-setting-id="mcp-add"
+					data-setting-row="mcp-add"
+					data-setting-stop=""
 					data-focus-fallback="mcp-servers"
 					disabled={disabled}
 					onClick={onAdd}
@@ -934,6 +937,9 @@ function McpWorkspaceSettings({ workspace }: { workspace: Workspace }) {
 						size="m"
 						iconLeft={Plus}
 						data-testid="mcp-add"
+						data-setting-id="mcp-add"
+						data-setting-row="mcp-add"
+						data-setting-stop=""
 						disabled={readOnly}
 						onClick={() => setAdding({ tier: "form", key: Date.now() })}
 					>

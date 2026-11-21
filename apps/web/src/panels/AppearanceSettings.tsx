@@ -404,10 +404,12 @@ export function AppearanceSettings() {
 						expanded={expanded}
 						testId="theme-pair-toggle"
 						settingId="theme-colors"
+						reveals={["light-theme", "dark-theme"]}
 						onToggle={() => setExpanded((value) => !value)}
 					>
 						<div className={cn(SETTINGS_ROWS_CONTAINER, "pb-12")}>
 							<SettingsRow
+								settingId="light-theme"
 								label={t("settings.appearance.lightTheme")}
 								control={
 									<ThemeDropdown
@@ -420,6 +422,7 @@ export function AppearanceSettings() {
 								}
 							/>
 							<SettingsRow
+								settingId="dark-theme"
 								label={t("settings.appearance.darkTheme")}
 								control={
 									<ThemeDropdown

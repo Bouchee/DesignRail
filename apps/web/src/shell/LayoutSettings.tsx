@@ -218,7 +218,7 @@ export function LayoutSettings() {
 
 	return (
 		<div data-testid="settings-layout" className={SETTINGS_ROWS_CONTAINER}>
-			<div className="grid gap-8 sm:grid-cols-2">
+			<div data-setting-id="layout-presets" className="grid gap-8 sm:grid-cols-2">
 				{presets.map((preset) => {
 					const isStoredDefault = preset.id === preferences.defaultPresetId;
 					const isEffectiveDefault = preset.id === selected.id;
@@ -234,6 +234,7 @@ export function LayoutSettings() {
 						<div
 							key={preset.id}
 							data-testid="layout-preset"
+							data-setting-row={`layout-preset-${preset.id}`}
 							data-default={isEffectiveDefault}
 							data-applied={isCurrentlyApplied}
 							className={`relative flex flex-col rounded-sm p-12 ${
@@ -497,6 +498,7 @@ export function LayoutSettings() {
 					onClick={() => setAdvancedOpen((v) => !v)}
 					aria-expanded={advancedOpen}
 					data-testid="layout-advanced-toggle"
+					data-setting-reveals="layout-group-limits"
 					className="flex w-full items-start gap-8 rounded-sm py-12 text-left transition-colors hover:bg-control-bg-hovered focus-visible:focus-ring-inset"
 				>
 					<span className="mt-2 shrink-0">
@@ -516,6 +518,7 @@ export function LayoutSettings() {
 							title={t("workbench.layoutSettings.groupLimits")}
 							description={t("workbench.layoutSettings.groupLimitsDescription")}
 							testId="layout-group-limits"
+							settingId="layout-group-limits"
 						>
 							<SettingsRow
 								label={t("workbench.layoutSettings.sideGroups")}

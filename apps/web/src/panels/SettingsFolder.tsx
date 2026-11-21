@@ -36,6 +36,7 @@ export function SettingsFolderRow({
 	folder,
 	hint,
 	testIdPrefix,
+	settingId,
 	noBorder = false,
 	onCopyFolder,
 	onRevealFolder,
@@ -44,11 +45,13 @@ export function SettingsFolderRow({
 	folder: string;
 	hint?: ReactNode;
 	testIdPrefix: string;
+	settingId: string;
 	noBorder?: boolean;
 }) {
 	const t = useT();
 	return (
 		<SettingsRow
+			settingId={settingId}
 			label={label}
 			description={
 				<>

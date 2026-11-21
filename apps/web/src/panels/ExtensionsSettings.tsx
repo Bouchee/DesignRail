@@ -44,6 +44,7 @@ export function withWebOnlyEntries(
 }
 
 interface SettingCopy {
+	id: string;
 	title: MessageKey;
 	description: MessageKey;
 }
@@ -51,6 +52,7 @@ interface SettingCopy {
 const SETTING_COPY: Readonly<Record<string, Readonly<Record<string, SettingCopy>>>> = {
 	"ask-user-question": {
 		richPreviews: {
+			id: "rich-previews",
 			title: "settings.extensions.ask-user-question.richPreviews.title",
 			description: "settings.extensions.ask-user-question.richPreviews.description",
 		},
@@ -74,6 +76,8 @@ function ExtensionSettingRow({
 	return (
 		<div
 			data-testid={`extension-setting-${entry.name}-${setting.key}`}
+			data-setting-id={copy.id}
+			data-setting-row={copy.id}
 			className="flex items-start justify-between gap-12 border-border-default border-l-2 pl-12"
 		>
 			<div className="flex min-w-0 flex-col gap-2">

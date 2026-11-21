@@ -698,7 +698,9 @@ a project picker, the prompt hero, and the reused
   in `settingsCatalog.ts`. Give each indexed row a stable `data-setting-id` and apply the same
   availability conditions in both the catalog and the page. The catalog includes only active RailDesign
   controls. Search matches labels, descriptions, keywords and section names. Selecting a result opens
-  its section, focuses the row's control when available and briefly highlights the target.
+  its section, focuses the row's control when available and briefly highlights the target. A
+  search jump can open an existing disclosure marked for its target. It does not change the
+  setting itself or enable an unavailable control.
   `settingsOpen`, `settingsSection` and the optional `settingsTarget` live in the store so the gear,
   Welcome banner and palette can open the same dialog. Arrow keys move along the tablist and through rows.
   The settings navigation and settings content have local keybinding scopes that share the editable

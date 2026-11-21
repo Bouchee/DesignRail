@@ -97,6 +97,12 @@ function deps(overrides: Partial<PaletteCatalogDeps> = {}): PaletteCatalogDeps {
 			hostPlatform: null,
 			voiceAvailable: false,
 			voiceEnabled: false,
+			activeWorkspace: false,
+			systemTheme: false,
+			themeFolder: false,
+			fontFolder: false,
+			localeFolder: false,
+			voiceFiles: false,
 		},
 		tabActions: [],
 		actions: {

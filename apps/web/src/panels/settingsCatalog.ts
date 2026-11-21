@@ -1,5 +1,6 @@
 import {
 	AUTO_SUMMARY_SETTINGS_PROTOCOL_VERSION,
+	EXTENSION_SETTINGS_PROTOCOL_VERSION,
 	FONTS_PROTOCOL_VERSION,
 	type HostPlatform,
 	OTHER_AGENT_SKILLS_PROTOCOL_VERSION,
@@ -7,17 +8,45 @@ import {
 	SUBAGENT_CATALOG_PROTOCOL_VERSION,
 	SUBAGENT_CONCURRENCY_PROTOCOL_VERSION,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
+	THEME_SYSTEM_PROTOCOL_VERSION,
 	WINDOWS_SHELL_SETTINGS_PROTOCOL_VERSION,
 } from "@thinkrail/contracts";
 import type { MessageKey } from "@thinkrail/locales";
-import { SettingsSection } from "@/store";
+import { SettingsSection, selectActiveWorkspace, type useAppStore } from "@/store";
 import type { SettingsNavGroup } from "./settingsNav";
 
-export interface SettingsCatalogContext {
+interface SettingVisibility {
+	activeWorkspace: boolean;
+	systemTheme: boolean;
+	themeFolder: boolean;
+	fontFolder: boolean;
+	localeFolder: boolean;
+	voiceFiles: boolean;
+}
+
+export interface SettingsCatalogContext extends SettingVisibility {
 	protocolVersion: number | null;
 	hostPlatform: HostPlatform | null;
 	voiceAvailable: boolean;
 	voiceEnabled: boolean;
+}
+
+export function selectSettingsCatalogContext(
+	state: ReturnType<typeof useAppStore.getState>,
+): SettingsCatalogContext {
+	return {
+		protocolVersion: state.protocolVersion,
+		hostPlatform: state.hostPlatform,
+		voiceAvailable: state.speech?.supported === true,
+		voiceEnabled: state.voiceInputEnabled,
+		activeWorkspace: selectActiveWorkspace(state) !== null,
+		systemTheme:
+			(state.protocolVersion ?? 0) >= THEME_SYSTEM_PROTOCOL_VERSION && state.themeMode === "system",
+		themeFolder: state.userThemes !== null,
+		fontFolder: state.userFonts !== null,
+		localeFolder: Boolean(state.localLocales?.dir),
+		voiceFiles: (state.speech?.diskBytes ?? 0) > 0,
+	};
 }
 
 interface SettingEntry {
@@ -29,6 +58,7 @@ interface SettingEntry {
 	requiresProtocolVersion?: number;
 	windowsOnly?: true;
 	voice?: "available" | "enabled";
+	visibleWhen?: keyof SettingVisibility;
 }
 
 const SETTINGS: readonly SettingEntry[] = [
@@ -92,6 +122,49 @@ const SETTINGS: readonly SettingEntry[] = [
 		requiresProtocolVersion: SUBAGENT_CATALOG_PROTOCOL_VERSION,
 	},
 	{
+		id: "subagents-workspace",
+		section: SettingsSection.Chat,
+		label: "settings.catalog.subagentsWorkspace.label",
+		requiresProtocolVersion: SUBAGENT_SETTINGS_PROTOCOL_VERSION,
+		visibleWhen: "activeWorkspace",
+	},
+	{
+		id: "subagents-workspace-limit",
+		section: SettingsSection.Chat,
+		label: "settings.catalog.subagentsWorkspaceLimit.label",
+		requiresProtocolVersion: SUBAGENT_CONCURRENCY_PROTOCOL_VERSION,
+		visibleWhen: "activeWorkspace",
+	},
+	{
+		id: "rich-previews",
+		section: SettingsSection.Extensions,
+		label: "settings.extensions.ask-user-question.richPreviews.title",
+		description: "settings.extensions.ask-user-question.richPreviews.description",
+		requiresProtocolVersion: EXTENSION_SETTINGS_PROTOCOL_VERSION,
+	},
+	{
+		id: "visible-models",
+		section: SettingsSection.Models,
+		label: "settings.visibleModels.title",
+	},
+	{
+		id: "mcp-add",
+		section: SettingsSection.Mcp,
+		label: "mcp.addDialog.title",
+		visibleWhen: "activeWorkspace",
+	},
+	{
+		id: "project-templates",
+		section: SettingsSection.Templates,
+		label: "settings.templates.projectTitle",
+		visibleWhen: "activeWorkspace",
+	},
+	{
+		id: "global-templates",
+		section: SettingsSection.Templates,
+		label: "settings.templates.globalTitle",
+	},
+	{
 		id: "theme-mode",
 		section: SettingsSection.Appearance,
 		label: "settings.appearance.themeMode",
@@ -116,8 +189,40 @@ const SETTINGS: readonly SettingEntry[] = [
 	{
 		id: "interface-font",
 		section: SettingsSection.Appearance,
-		label: "settings.appearance.fonts.font",
+		label: "settings.catalog.interfaceFont.label",
 		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+	},
+	{
+		id: "code-font",
+		section: SettingsSection.Appearance,
+		label: "settings.catalog.codeFont.label",
+		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+	},
+	{
+		id: "interface-fallbacks",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.fonts.interfaceFallbacks",
+		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+	},
+	{
+		id: "code-fallbacks",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.fonts.codeFallbacks",
+		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+	},
+	{
+		id: "custom-fonts",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.customFonts.title",
+		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+		visibleWhen: "fontFolder",
+	},
+	{
+		id: "fonts-folder",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.customFonts.folder",
+		requiresProtocolVersion: FONTS_PROTOCOL_VERSION,
+		visibleWhen: "fontFolder",
 	},
 	{
 		id: "ligatures",
@@ -169,7 +274,25 @@ const SETTINGS: readonly SettingEntry[] = [
 		id: "theme-colors",
 		section: SettingsSection.Appearance,
 		label: "settings.appearance.theme",
-		keywords: ["theme pair", "dark theme", "light theme"],
+		keywords: ["theme pair"],
+	},
+	{
+		id: "light-theme",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.lightTheme",
+		visibleWhen: "systemTheme",
+	},
+	{
+		id: "dark-theme",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.darkTheme",
+		visibleWhen: "systemTheme",
+	},
+	{
+		id: "theme-folder",
+		section: SettingsSection.Appearance,
+		label: "settings.appearance.custom.folder",
+		visibleWhen: "themeFolder",
 	},
 	{
 		id: "font-weight",
@@ -255,6 +378,35 @@ const SETTINGS: readonly SettingEntry[] = [
 		description: "settings.keyboard.doubleShiftHint",
 	},
 	{
+		id: "keyboard-shortcuts",
+		section: SettingsSection.Keyboard,
+		label: "settings.keyboard.shortcuts",
+	},
+	{
+		id: "language-folder",
+		section: SettingsSection.Language,
+		label: "settings.language.folder.label",
+		visibleWhen: "localeFolder",
+	},
+	{
+		id: "voice-files",
+		section: SettingsSection.Voice,
+		label: "settings.voice.delete",
+		visibleWhen: "voiceFiles",
+		voice: "available",
+	},
+	{
+		id: "layout-presets",
+		section: SettingsSection.Layout,
+		label: "settings.catalog.layoutPresets.label",
+	},
+	{
+		id: "layout-group-limits",
+		section: SettingsSection.Layout,
+		label: "workbench.layoutSettings.groupLimits",
+		description: "workbench.layoutSettings.groupLimitsDescription",
+	},
+	{
 		id: "settle-idle",
 		section: SettingsSection.Workspaces,
 		label: "settings.workspaces.title",
@@ -278,9 +430,10 @@ export function availableSettings(
 ): readonly SettingEntry[] {
 	const sections = new Set(groups.flatMap(({ sections }) => sections.map(({ id }) => id)));
 	return SETTINGS.filter(
-		({ section, windowsOnly, requiresProtocolVersion, voice }) =>
+		({ section, windowsOnly, requiresProtocolVersion, voice, visibleWhen }) =>
 			sections.has(section) &&
 			(!voice || (context.voiceAvailable && (voice !== "enabled" || context.voiceEnabled))) &&
+			(!visibleWhen || context[visibleWhen]) &&
 			(!windowsOnly || context.hostPlatform === "win32") &&
 			(requiresProtocolVersion === undefined ||
 				(context.protocolVersion ?? 0) >= requiresProtocolVersion),

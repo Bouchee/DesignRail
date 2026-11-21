@@ -41,7 +41,7 @@ export function SearchSettings({
 				/>
 			</div>
 			{shortcuts ? (
-				<div className="flex flex-col gap-8">
+				<div data-setting-id="keyboard-shortcuts" className="flex flex-col gap-8">
 					<h4 className="tr-title-compact text-text-default">{t("settings.keyboard.shortcuts")}</h4>
 					{shortcuts}
 				</div>

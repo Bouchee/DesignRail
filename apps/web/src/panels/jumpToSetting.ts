@@ -60,10 +60,20 @@ export async function jumpToSetting(
 	signal?: AbortSignal,
 ): Promise<boolean> {
 	let shown = false;
+	let expanded = false;
 	for (let frame = 0; frame < JUMP_FRAMES; frame += 1) {
 		if (!root.isConnected || signal?.aborted) return false;
 		if (revealSetting(root, id)) return true;
 		if (!shown) shown = showSetting(root, id) !== null;
+		if (!shown && !expanded) {
+			const disclosure = root.querySelector<HTMLButtonElement>(
+				`button[aria-expanded="false"][data-setting-reveals~="${CSS.escape(id)}"]`,
+			);
+			if (disclosure) {
+				disclosure.click();
+				expanded = true;
+			}
+		}
 		await nextFrame();
 	}
 	return false;

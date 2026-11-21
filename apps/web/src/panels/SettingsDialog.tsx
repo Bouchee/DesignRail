@@ -13,6 +13,7 @@ import { isImeComposing } from "@thinkrail/ui/keyboard";
 import { useLocalKeys } from "@thinkrail/ui/local-keys";
 import { cn } from "@thinkrail/ui/utils";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { LOCAL_KEY_DEFAULTS } from "@/keybindings";
 import { SettingsSection, useAppStore } from "@/store";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -28,6 +29,7 @@ import { ModelsSettings } from "./ModelsSettings";
 import { NotificationsSettings } from "./NotificationsSettings";
 import { ProvidersSettings } from "./ProvidersSettings";
 import { SettingsSearchResults } from "./SettingsSearchView";
+import { selectSettingsCatalogContext } from "./settingsCatalog";
 import { SettingsDialogContainer } from "./settingsDialogContainer";
 import { holdSettingsEscape } from "./settingsEscape";
 import { navAction, navIndex, walkAction, walkKey } from "./settingsKeys";
@@ -69,11 +71,11 @@ function SettingsDialogContent({
 	const rowKeys = useLocalKeys("settings", LOCAL_KEY_DEFAULTS.settings);
 	const section = useAppStore((s) => s.settingsSection);
 	const settingTarget = useAppStore((s) => s.settingsTarget);
-	const protocolVersion = useAppStore((s) => s.protocolVersion);
-	const hostPlatform = useAppStore((s) => s.hostPlatform);
-	const voiceAvailable = useAppStore((s) => s.speech?.supported === true);
-	const voiceEnabled = useAppStore((s) => s.voiceInputEnabled);
-	const filteredGroups = settingsNavGroups(protocolVersion, updateSettings !== undefined);
+	const settingsContext = useAppStore(useShallow(selectSettingsCatalogContext));
+	const filteredGroups = settingsNavGroups(
+		settingsContext.protocolVersion,
+		updateSettings !== undefined,
+	);
 	const selectedSection = resolveSettingsSection(section, filteredGroups);
 	const sections = filteredGroups.flatMap((group) => group.sections);
 	const sectionLabel = sections.find(({ id }) => id === selectedSection)?.label;
@@ -92,12 +94,7 @@ function SettingsDialogContent({
 	const [showingResults, setShowingResults] = useState(false);
 	const results = searchSettings(
 		query,
-		settingsSearchEntries(t, filteredGroups, {
-			protocolVersion,
-			hostPlatform,
-			voiceAvailable,
-			voiceEnabled,
-		}),
+		settingsSearchEntries(t, filteredGroups, settingsContext),
 		settingsSectionLabels(t, filteredGroups),
 	);
 	const icons = new Map(sections.map(({ id, icon }) => [id, icon]));

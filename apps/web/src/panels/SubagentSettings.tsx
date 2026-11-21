@@ -198,6 +198,7 @@ export function SubagentSettings({
 			) : null}
 			{workspace ? (
 				<SettingsRow
+					settingId="subagents-workspace"
 					label={t("settings.subagents.allow")}
 					control={
 						<span className="flex items-center gap-8">
@@ -219,6 +220,7 @@ export function SubagentSettings({
 			) : null}
 			{workspace && limitSupported ? (
 				<SettingsRow
+					settingId="subagents-workspace-limit"
 					label={t("settings.subagents.perChat")}
 					control={
 						<span className="flex items-start gap-8">

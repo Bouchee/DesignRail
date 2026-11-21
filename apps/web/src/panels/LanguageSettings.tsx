@@ -213,6 +213,7 @@ export function LanguagePage({
 						label={t("settings.language.folder.label")}
 						folder={folder}
 						testIdPrefix="language"
+						settingId="language-folder"
 						onCopyFolder={onCopyFolder}
 						onRevealFolder={onRevealFolder}
 					/>

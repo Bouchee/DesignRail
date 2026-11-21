@@ -10,6 +10,7 @@ export function SettingsDisclosure({
 	expanded,
 	testId,
 	settingId,
+	reveals,
 	onToggle,
 	children,
 }: {
@@ -18,6 +19,7 @@ export function SettingsDisclosure({
 	expanded: boolean;
 	testId: string;
 	settingId?: string;
+	reveals?: readonly string[];
 	onToggle: () => void;
 	children: ReactNode;
 }) {
@@ -30,6 +32,7 @@ export function SettingsDisclosure({
 				aria-expanded={expanded}
 				data-testid={testId}
 				data-setting-id={settingId}
+				data-setting-reveals={reveals?.join(" ")}
 				data-setting-row={settingId ?? testId}
 				data-setting-stop=""
 				className="flex w-full items-center gap-8 py-12 text-left transition-colors focus-visible:focus-ring-inset"

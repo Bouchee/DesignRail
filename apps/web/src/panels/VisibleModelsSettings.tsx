@@ -39,6 +39,9 @@ export function VisibleModelsSettings({ models }: Props) {
 			<button
 				type="button"
 				data-testid="visible-models-toggle"
+				data-setting-id="visible-models"
+				data-setting-row="visible-models"
+				data-setting-stop=""
 				aria-expanded={expanded}
 				aria-controls={listId}
 				onClick={() => setExpanded(!expanded)}

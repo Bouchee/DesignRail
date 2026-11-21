@@ -89,6 +89,7 @@ export function CustomFontsView({
 			title={t("settings.appearance.customFonts.title")}
 			description={t("settings.appearance.customFonts.description")}
 			testId="custom-fonts"
+			settingId="custom-fonts"
 		>
 			<section
 				aria-label={t("settings.appearance.customFonts.drop")}
@@ -179,6 +180,7 @@ export function CustomFontsView({
 				folder={snapshot.dir}
 				hint={t("settings.appearance.customFonts.removeHint")}
 				testIdPrefix="custom-fonts"
+				settingId="fonts-folder"
 				noBorder={issues.length === 0}
 				onCopyFolder={onCopyFolder}
 				onRevealFolder={onRevealFolder}

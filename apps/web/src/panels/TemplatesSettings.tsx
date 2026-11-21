@@ -216,6 +216,9 @@ function ProjectTemplatesSection({
 						size="m"
 						iconLeft={Plus}
 						data-testid="template-new-project"
+						data-setting-id="project-templates"
+						data-setting-row="project-templates"
+						data-setting-stop=""
 						data-focus-fallback="templates:project"
 						onClick={onNew}
 					>
@@ -306,6 +309,9 @@ function GlobalTemplatesSection({
 					size="m"
 					iconLeft={Plus}
 					data-testid="template-new-global"
+					data-setting-id="global-templates"
+					data-setting-row="global-templates"
+					data-setting-stop=""
 					data-focus-fallback="templates:global"
 					onClick={onNew}
 				>

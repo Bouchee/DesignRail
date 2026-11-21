@@ -71,6 +71,7 @@ export function CustomThemesGroup({
 				label={t("settings.appearance.custom.folder")}
 				folder={folder}
 				testIdPrefix="custom-themes"
+				settingId="theme-folder"
 				noBorder={issues.length === 0}
 				onCopyFolder={onCopyFolder}
 				onRevealFolder={onRevealFolder}

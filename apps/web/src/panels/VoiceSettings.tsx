@@ -174,6 +174,7 @@ export function VoiceSettings() {
 			) : null}
 			{status.diskBytes > 0 ? (
 				<SettingsRow
+					settingId="voice-files"
 					label={t("settings.voice.delete")}
 					description={t("settings.voice.deleteDescription", {
 						size: megabytes(status.diskBytes),

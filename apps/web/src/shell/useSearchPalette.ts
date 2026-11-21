@@ -7,6 +7,7 @@ import { canStartProjectlessChat, startProjectlessChat } from "../panels/chatAct
 import { enterDefaultWorkspace } from "../panels/defaultWorkspace";
 import { startChatInTab } from "../panels/openChat";
 import { openFileInTab } from "../panels/openTabs";
+import { selectSettingsCatalogContext } from "../panels/settingsCatalog";
 import { settingsNavGroups } from "../panels/settingsNav";
 import {
 	canSettleWorkspace,
@@ -133,10 +134,8 @@ export interface SearchPaletteOptions {
 export function useSearchPalette(options: SearchPaletteOptions): SearchPaletteProps {
 	const t = useT();
 	const status = useAppStore((s) => s.status);
-	const protocolVersion = useAppStore((s) => s.protocolVersion);
-	const hostPlatform = useAppStore((s) => s.hostPlatform);
-	const voiceAvailable = useAppStore((s) => s.speech?.supported === true);
-	const voiceEnabled = useAppStore((s) => s.voiceInputEnabled);
+	const settingsContext = useAppStore(useShallow(selectSettingsCatalogContext));
+	const { protocolVersion } = settingsContext;
 	const projects = useAppStore((s) => s.projects);
 	const workspaces = useAppStore((s) => s.workspaces);
 	const sessionStateByWorkspace = useAppStore((s) => s.sessionStateByWorkspace);
@@ -269,7 +268,7 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 			settled,
 			settleBlocked,
 			settingsGroups,
-			settingsContext: { protocolVersion, hostPlatform, voiceAvailable, voiceEnabled },
+			settingsContext,
 			tabActions,
 			actions: {
 				newWorkspace: options.openNewWorkspace,
@@ -343,9 +342,7 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 		t,
 		online,
 		settingsGroups,
-		hostPlatform,
-		voiceAvailable,
-		voiceEnabled,
+		settingsContext,
 		activeWorkspace,
 		historySessionId,
 		readAction,

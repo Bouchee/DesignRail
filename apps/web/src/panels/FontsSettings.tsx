@@ -448,7 +448,7 @@ export function FontsGroup() {
 		return (
 			<>
 				<SettingsRow
-					settingId="interface-font"
+					settingId={`${role}-font`}
 					label={t("settings.appearance.fonts.font")}
 					testId={`font-${role}-row`}
 					control={
@@ -496,6 +496,7 @@ export function FontsGroup() {
 		const choice = choices[role];
 		return (
 			<SettingsRow
+				settingId={`${role}-fallbacks`}
 				label={
 					role === "interface"
 						? t("settings.appearance.fonts.interfaceFallbacks")
@@ -584,6 +585,7 @@ export function FontsGroup() {
 				summary={t("settings.appearance.fonts.advancedSummary")}
 				expanded={advanced}
 				testId="font-advanced-toggle"
+				reveals={["interface-fallbacks", "code-fallbacks"]}
 				onToggle={() => setAdvanced((value) => !value)}
 			>
 				<div className={cn(SETTINGS_ROWS_CONTAINER, "pb-12")}>

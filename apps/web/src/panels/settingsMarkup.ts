@@ -13,12 +13,6 @@ export const SETTING_ATTR = {
 	flash: "data-setting-flash",
 } as const;
 
-export const SETTINGS_KEY_SCOPE = {
-	nav: "settings.nav",
-	content: "settings",
-	list: "settings.list",
-} as const;
-
 const has = (name: string) => `[${name}]`;
 
 export const SETTING_SELECTOR = {

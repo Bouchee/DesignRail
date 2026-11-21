@@ -46,6 +46,29 @@ test("search jumps to the setting and Escape returns through the results and nav
 	await expect(dialog).toBeHidden();
 });
 
+test("search finds question previews and the code font controls inside Appearance", async ({
+	page,
+}) => {
+	await openSettings(page, "appearance");
+	const search = page.getByTestId("settings-search");
+	const jump = async (query: string, id: string) => {
+		await search.fill(query);
+		const result = page.locator(`[data-result-id="${id}"]`);
+		await expect(result).toBeVisible();
+		await result.press("Enter");
+	};
+	await jump("Rich previews in questions", "rich-previews");
+	await expect(page.getByRole("switch", { name: "Rich previews in questions" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(page.locator('[data-result-id="rich-previews"]')).toBeFocused();
+	await jump("Code font", "code-font");
+	await expect(page.getByTestId("font-code-trigger")).toBeFocused();
+	await expect(page.getByTestId("font-advanced-toggle")).toHaveAttribute("aria-expanded", "false");
+	await jump("Code fallback fonts", "code-fallbacks");
+	await expect(page.getByTestId("font-advanced-toggle")).toHaveAttribute("aria-expanded", "true");
+	await expect(page.getByTestId("font-code-fallbacks-add")).toBeFocused();
+});
+
 test("arrows walk from the settings nav into rows, and Delete resets the selected row", async ({
 	page,
 }) => {
