@@ -173,7 +173,9 @@ Registered `"bare"`: the card owns its full-width frame and never folds. Behavio
   offers **Compare**, which opens the same overlay read-only on the chosen option. Rejected: turning the
   options into one generated interactive HTML page with the switcher and the pick inside it — it needs
   scripts in the frame, lets a mockup pick an answer for the user, works only for HTML, and loses the card's
-  keys, theme and locales. Scripts in mockups and opening one in a browser are separate, unbuilt asks.
+  keys, theme and locales. Mockups the agent writes under `scratchDir` do run their own scripts in a browser — in their
+  own frames, sandboxed without network ([[module-resource-renderers]]) — so a prototype's tabs and toggles work
+  in every pane while choosing stays the overlay's.
 - **Discuss first.** A ghost **Discuss** toggle beside each question (or `d` on an option) marks it; a
   panel under the question offers optional reason chips (Unclear / Not relevant / Need more context) and
   optional text. The options stay visible, muted; choosing one, checking one, opening a
@@ -299,3 +301,7 @@ question text, option labels, selection multiplicity and unique selections. Sett
 checks come from the fresh run services. SDK `needsApproval` is an internal pause boundary; the host presents
 the existing questionnaire, records an owned response, then resumes the tool. A deferred composer reply uses
 the portable chat acknowledgement. The host contains no questionnaire name, schema or answer validation.
+
+The questionnaire declares the artifact paths previewed by a successful call and the preview selected by a confirmed answer. Artifact indexing stays with the host.
+
+Question HTML uses the same resource-renderer isolation as other mockup previews. The browser permits inline behavior in qualifying mockup files without network, while the native webview renders them static.

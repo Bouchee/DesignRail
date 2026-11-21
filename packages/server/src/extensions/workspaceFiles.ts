@@ -1,12 +1,13 @@
 import { lstatSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { WORKSPACE_MOCKUP_DIR } from "@thinkrail/contracts";
 import type { WorkspaceFiles } from "@thinkrail/extension-api/server";
 import { seedArtifactsDir } from "@thinkrail/shared/artifactsDir";
 import { WORKSPACE_CONTEXT_DIR } from "@thinkrail/shared/paths";
 import { loadProjects, loadWorkspaces } from "../persistence";
 
-export const MOCKUP_DIR = `${WORKSPACE_CONTEXT_DIR}/mockups/`;
+export const MOCKUP_DIR = `${WORKSPACE_MOCKUP_DIR}/`;
 
 function inside(root: string, candidate: string): string | null {
 	const rel = relative(root, candidate);

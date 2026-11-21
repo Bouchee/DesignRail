@@ -2,7 +2,7 @@ import { mkdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import type { AskUserQuestionArgs } from "@thinkrail/ask-user-question/core";
+import type { AskUserQuestionArgs, AskUserQuestionResult } from "@thinkrail/ask-user-question/core";
 import type { ToolCall, ToolResponsePendingDetails } from "@thinkrail/contracts";
 import {
 	enterDefaultWorkspace,
@@ -33,20 +33,23 @@ function seedQuestionnaire(
 	name: string,
 	toolCallId: string,
 	args: AskUserQuestionArgs & ToolCall["arguments"],
+	result?: AskUserQuestionResult,
 ) {
 	const ack: ToolResponsePendingDetails = { kind: "ack" };
 	const session = seedWorkspaceSession(realpathSync(E2E_FIXTURE_REPO), {
 		name,
 		state: {
 			execution: "idle",
-			runId: `${toolCallId}-run`,
-			needsInput: {
-				interactionId: toolCallId,
-				kind: "tool-response",
-				toolCallId,
-				runId: `${toolCallId}-run`,
-				revision: 0,
-			},
+			runId: result ? null : `${toolCallId}-run`,
+			needsInput: result
+				? null
+				: {
+						interactionId: toolCallId,
+						kind: "tool-response",
+						toolCallId,
+						runId: `${toolCallId}-run`,
+						revision: 0,
+					},
 			completion: null,
 			completionUnread: false,
 			queuedCount: 0,
@@ -72,7 +75,7 @@ function seedQuestionnaire(
 				toolCallId,
 				toolName: "ask_user_question",
 				content: [{ type: "text", text: "Questions shown to the user; awaiting an answer." }],
-				details: ack,
+				details: result ?? ack,
 				isError: false,
 				timestamp: BASE_TS + 2_000,
 			},
@@ -296,14 +299,14 @@ const COMPARE_ROUND = {
 	],
 } satisfies AskUserQuestionArgs;
 
-function pairedScrolls(page: Page): Promise<number[]> {
-	return page.evaluate(() =>
-		[
-			...document.querySelectorAll<HTMLIFrameElement>(
-				'[data-testid="ask-compare"] [data-testid="html-diff"] iframe',
-			),
-		].map((frame) => frame.contentDocument?.scrollingElement?.scrollTop ?? -1),
-	);
+async function pairedScrolls(page: Page): Promise<number[]> {
+	const frames = page.locator('[data-testid="ask-compare"] [data-testid="html-diff"] iframe');
+	const tops: number[] = [];
+	for (const element of await frames.elementHandles()) {
+		const frame = await element.contentFrame();
+		tops.push(frame ? await frame.evaluate(() => document.scrollingElement?.scrollTop ?? -1) : -1);
+	}
+	return tops;
 }
 
 function clippedHtmlPanes(page: Page): Promise<string[]> {
@@ -402,7 +405,45 @@ test("the compare overlay flips through the options, scrolls a pair together and
 		await expect(options.first()).toHaveAttribute("data-selected", "true");
 		await expect(options.first()).toBeFocused();
 
-		await card.getByTestId("ask-submit").click();
+		await expect(card.getByTestId("ask-submit")).toBeEnabled();
+	} finally {
+		rmSync(session.path, { force: true });
+		cleanup();
+	}
+});
+
+test("an answered questionnaire opens the chosen preview in a read-only comparison", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1400, height: 900 });
+	await openFixtureProject(page);
+	const question = COMPARE_ROUND.questions[0];
+	const option = question?.options[0];
+	if (!question || !option) throw new Error("The comparison receipt fixture needs an option");
+	const cleanup = writeMockups(COMPARE_FILES);
+	const session = seedQuestionnaire(
+		"compared options receipt",
+		"ask-compare-receipt",
+		COMPARE_ROUND,
+		{
+			cancelled: false,
+			answers: [
+				{
+					questionIndex: 0,
+					question: question.question,
+					kind: "option",
+					answer: option.label,
+				},
+			],
+		},
+	);
+
+	try {
+		await enterDefaultWorkspace(page);
+		await hideAuxiliaryWorkbench(page);
+		await openPersistedChat(page, "compared options receipt");
+		const overlay = page.getByTestId("ask-compare");
+		const shown = overlay.getByTestId("ask-compare-pane");
 		const receipt = page.locator('[data-testid="ask-user-question"][data-tone="answered"]');
 		await receipt.getByTestId("ask-receipt-compare").click();
 		await expect(overlay).toBeVisible();
@@ -410,6 +451,131 @@ test("the compare overlay flips through the options, scrolls a pair together and
 		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
 		await expect(overlay.getByTestId("ask-compare-choose")).toHaveCount(0);
 		await expect(overlay.getByTestId("ask-compare-legend")).toContainText("Esc close");
+	} finally {
+		rmSync(session.path, { force: true });
+		cleanup();
+	}
+});
+
+const interactiveMockup = (host: string) => `<!doctype html><html><body>
+<main>
+<button id="toggle" onclick="document.getElementById('state').textContent = 'Expanded'">Toggle</button>
+<p id="state">Collapsed</p>
+<p id="network">checking</p>
+<button id="leave" onclick="location.href = 'data:text/html,left'">Leave</button>
+<button id="replace" onclick="location.replace('data:text/html,' + encodeURIComponent('<script>parent.postMessage({ probe: typeof RTCPeerConnection }, '*')<' + '/script>'))">Replace</button>
+</main>
+<script>
+const report = [];
+const done = (name, value) => {
+	report.push(name + ": " + value);
+	if (report.length === 3) document.getElementById("network").textContent = report.sort().join(", ");
+};
+done("rtc", typeof RTCPeerConnection === "undefined" ? "blocked" : "open");
+fetch(${JSON.stringify(`${host}/health`)}).then(() => done("fetch", "open"), () => done("fetch", "blocked"));
+try {
+	const socket = new WebSocket(${JSON.stringify(`${host.replace(/^http/, "ws")}/ws`)});
+	socket.onopen = () => done("socket", "open");
+	socket.onerror = () => done("socket", "blocked");
+} catch {
+	done("socket", "blocked");
+}
+</script>
+</body></html>`;
+
+test("an agent mockup runs its own scripts without network and is stopped when it leaves its page", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1100 });
+	await openFixtureProject(page);
+	const cleanup = writeMockups({
+		"interactive.html": interactiveMockup(new URL(page.url()).origin),
+	});
+	const session = seedQuestionnaire("interactive mockup", "ask-interactive-mockup", {
+		questions: [
+			{
+				question: "Should the settings panel collapse?",
+				header: "Collapse",
+				options: [
+					{
+						label: "Collapsible (Recommended)",
+						description: "A toggle hides the panel.",
+						previewFile: `${MOCKUPS}/interactive.html`,
+					},
+					{ label: "Always open", description: "No toggle." },
+				],
+			},
+		],
+	});
+
+	try {
+		const card = await openRound(page, "interactive mockup");
+		const pane = card.getByTestId("ask-preview");
+		const iframe = pane.locator("iframe");
+		await expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+		const mockup = pane.frameLocator("iframe");
+		await expect(mockup.locator("#network")).toHaveText(
+			"fetch: blocked, rtc: blocked, socket: blocked",
+		);
+		await mockup.locator("#toggle").click();
+		await expect(mockup.locator("#state")).toHaveText("Expanded");
+
+		await mockup.locator("#leave").press("Enter");
+		await expect(pane.getByTestId("html-left-page")).toBeVisible();
+		await expect(iframe).toHaveCount(0);
+		await pane.getByTestId("html-left-page-reload").click();
+		await expect(mockup.locator("#state")).toHaveText("Collapsed");
+
+		await page.evaluate(() => {
+			const probes: unknown[] = [];
+			Reflect.set(window, "__replacementProbes", probes);
+			window.addEventListener("message", (event) => {
+				if (event.data && typeof event.data === "object" && "probe" in event.data) {
+					probes.push(event.data.probe);
+				}
+			});
+		});
+		await mockup.locator("#replace").press("Enter");
+		await expect(pane.getByTestId("html-left-page")).toBeVisible();
+		await page.waitForTimeout(1500);
+		expect(await page.evaluate(() => Reflect.get(window, "__replacementProbes"))).toEqual([]);
+	} finally {
+		rmSync(session.path, { force: true });
+		cleanup();
+	}
+});
+
+test("a mockup that replaces itself while it is still loading is stopped too", async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1100 });
+	await openFixtureProject(page);
+	const cleanup = writeMockups({
+		"early-leave.html": `<!doctype html><html><body><p>first</p><script>
+parent.postMessage({ source: "thinkrail-html-scroll", kind: "loaded", top: 0, left: 0 }, "*");
+location.replace("data:text/html,left");
+</script><p>never</p></body></html>`,
+	});
+	const session = seedQuestionnaire("early leave", "ask-early-leave", {
+		questions: [
+			{
+				question: "Which banner?",
+				header: "Banner",
+				options: [
+					{
+						label: "Animated (Recommended)",
+						description: "Moves.",
+						previewFile: `${MOCKUPS}/early-leave.html`,
+					},
+					{ label: "Static", description: "Still." },
+				],
+			},
+		],
+	});
+
+	try {
+		const card = await openRound(page, "early leave");
+		const pane = card.getByTestId("ask-preview");
+		await expect(pane.getByTestId("html-left-page")).toBeVisible();
+		await expect(pane.locator("iframe")).toHaveCount(0);
 	} finally {
 		rmSync(session.path, { force: true });
 		cleanup();

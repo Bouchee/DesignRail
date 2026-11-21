@@ -39,11 +39,22 @@ export interface InteractiveTool {
 	describeResponse?: (args: unknown, response: unknown) => string | undefined;
 }
 
+export interface ArtifactTool {
+	presented?: (args: unknown, details: unknown) => readonly string[];
+	picked?: (args: unknown, details: unknown) => readonly string[];
+}
+
+export interface ArtifactTool {
+	presented?: (args: unknown, details: unknown) => readonly string[];
+	picked?: (args: unknown, details: unknown) => readonly string[];
+}
+
 export interface ServerExtension {
 	name: string;
 	title?: string;
 	description?: string;
 	interactiveTools?: Record<string, InteractiveTool>;
+	artifactTools?: Record<string, ArtifactTool>;
 	sdkTools?: (session: SdkToolServices) => Tool[];
 	settings?: Record<string, ExtensionSetting>;
 	sdkChildTools?: (session: SdkToolServices) => Tool[];

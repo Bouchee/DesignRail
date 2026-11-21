@@ -3,6 +3,7 @@ export type {
 	SdkToolServices,
 	ToolResponse,
 } from "@thinkrail/extension-api/server";
+export { type ArtifactTools, artifactTools } from "./artifactTools";
 export { listExtensionCatalog } from "./catalog";
 export { type ExtensionDisabled, type InteractiveTools, interactiveTools } from "./interactive";
 export { type ServerExtensionEntry, serverExtensions } from "./registry";

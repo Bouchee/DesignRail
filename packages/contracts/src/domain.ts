@@ -336,6 +336,23 @@ export type FileKind = "file" | "dir";
 
 export type WorkspaceArtifactState = "live" | "deleted";
 
+export type ArtifactRole = "result" | "working";
+
+export type ArtifactRoleReason =
+	| "picked"
+	| "shown"
+	| "linked"
+	| "document"
+	| "working-folder"
+	| "script"
+	| "data"
+	| "unshown";
+
+export interface ArtifactRound {
+	sessionId: string;
+	startedAt: number;
+}
+
 export interface WorkspaceArtifact {
 	path: string;
 	state: WorkspaceArtifactState;
@@ -343,6 +360,9 @@ export interface WorkspaceArtifact {
 	changedAt: number;
 	firstSeenAt: number;
 	sessionId?: string;
+	role?: ArtifactRole;
+	reason?: ArtifactRoleReason;
+	rounds?: ArtifactRound[];
 }
 
 export interface WorkspaceIgnoredOutput {
@@ -353,6 +373,12 @@ export interface WorkspaceIgnoredOutput {
 	changedAt: number;
 	sessionId?: string;
 }
+
+/** Where agents write HTML mockups; a browser UI runs their scripts (sandboxed, no network). */
+export const WORKSPACE_MOCKUP_DIR = ".raildesign/context/mockups";
+
+/** The host route that serves a workspace file for a browser tab (sandboxed, see the host spec). */
+export const WORKSPACE_VIEW_ROUTE = "/view/";
 
 export interface WorkspaceArtifactsSnapshot {
 	workspaceId: string;

@@ -185,7 +185,13 @@ test(
 			expect(visualizations).toHaveLength(2);
 			const saved: Record<string, string> = {};
 			for (const artifact of visualizations) {
-				expect(artifact).toMatchObject({ state: "live", sessionId });
+				expect(artifact).toMatchObject({
+					state: "live",
+					sessionId,
+					role: "result",
+					reason: "shown",
+					rounds: [expect.objectContaining({ sessionId })],
+				});
 				const text = (
 					await wire.request("fs.readFile", { workspaceId: workspace.id, path: artifact.path })
 				).content;
@@ -212,6 +218,7 @@ test(
 				"One — ✅ Recommended",
 			])
 				expect(comparison).toContain(text);
+			await expect(page.getByTestId("turn-divider-artifacts")).toHaveText("3 artifacts");
 			proof.phase = "v2";
 			const second = await sendTurn(
 				page,
@@ -264,6 +271,7 @@ test(
 				)
 				.toBe("deleted");
 			await revealWorkbenchTool(page, "artifacts");
+			await page.getByTestId("artifacts-view-list").click();
 			await expect(artifactRow(page, PATH)).toHaveAttribute("data-state", "deleted");
 			await artifactRow(page, PATH).getByTestId("artifact-restore").click();
 			await expect(artifactRow(page, PATH)).toHaveAttribute("data-state", "live");

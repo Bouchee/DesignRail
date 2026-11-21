@@ -9,6 +9,10 @@ references: [central-integration]
 tags: [ui]
 ---
 
+The Artifacts toolbar switches between a newest-first list and a compact folder tree.
+Both views use the same host snapshot and filters. The view and per-workspace folder expansion
+are local preferences. Both views preserve file attribution, restore and file actions.
+
 ## RailDesign execution controls
 
 Active panels retain Plan rendering and expose independent SDK Plan review through the existing Check it and Check all controls. Continue-to-workspace execution and streaming plan send remain unavailable. A prompt directed to an existing busy chat is restored to its draft instead of being queued. New Workspace preserves Skills catalog management and project-trust actions alongside templates, models and normal creation. MCP configuration, validation, trust and OAuth remain available through Settings. Configured tools execute through the SDK graph with per-call consent; the panel shows no execution-unavailable notice. Subagent settings expose inheritance, limits and real persistence callbacks for SDK child execution.
@@ -345,8 +349,13 @@ treatment.
   reveals only if the active file differs from the persisted `seenActivePath`, and then skips the scroll
   restore so the two cannot fight. Auto-reveal never switches the side tab or the mode. Clicks still open
   the editor. Right-clicking a file or folder row (a touch long-press, or the Context Menu key / Shift+F10 on
-  a focused row) opens its menu: **Copy path** (absolute, through `joinWorkspacePath`) and **Copy relative
-  path** (worktree-relative). A compacted folder copies its deepest path, matching its label, and copying
+  a focused row) opens its menu: **Open in browser** first for an HTML file from a host at
+  `BROWSER_VIEW_PROTOCOL_VERSION` (v122; `OpenInBrowserMenuItem`, also in the Artifacts row menu after
+  Reveal, and `OpenInBrowserButton` in the file tab's toolbar and, through `ResourceHost.OpenInBrowser`, in
+  every framed preview), then **Copy path** (absolute, through `joinWorkspacePath`) and **Copy relative
+  path** (worktree-relative). "Open in browser" opens the host's `/view/` URL with `window.open(…,
+  "noopener,noreferrer")`: a new tab on the web, the system browser on the desktop
+  ([[submodule-server-host]] serves it sandboxed, [[module-desktop]] routes it to the OS). A compacted folder copies its deepest path, matching its label, and copying
   neither opens nor selects the row. The row stays highlighted while its menu is open. From a host at
   `FS_MUTATIONS_PROTOCOL_VERSION` (v118) the menu adds the tree's two mutations, both host-owned and
   watcher-refreshed, never patched into the rows (`fileTreeActions`): **Copy** puts the row's entry — file,
@@ -394,8 +403,9 @@ treatment.
   The `ChangesPanel` secondary toolbar paints **no surface of its own**: like the right-panel tab strip
   it shows the panel's `container-sidebar-bg`, so the two chrome rows read as one continuous surface. The **file-style tree row** (chevron/spacer
   lead, folder/file icon, truncated label, trailing slot; `min-w-0` so a row can shrink when it shares a
-  flex line with a trailing control) is the shared **`TreeRow`**, used by both
-  `FileTree` and `ChangesTree` so the two trees stay identical. `TreeRow`'s optional `onWarm` reports
+  flex line with a trailing control) is the shared **`TreeRow`**, used by `FileTree`, `ChangesTree`
+  and the Artifacts tree so the trees stay identical; its optional `icon` replaces the file glyph (the
+  Artifacts tree's type icons). `TreeRow`'s optional `onWarm` reports
   `hover` (pointer enter) or `focus`. `FileTree` file rows warm at once on focus and through
   `warmOnHover` on hover, which keeps one pending row and fires after the pointer rests 150 ms, so a
   sweep across the tree loads nothing. A warm preloads the code view
@@ -684,7 +694,8 @@ a project picker, the prompt hero, and the reused
   create dialog.) **`SettingsDialog`** is the app-settings surface the shell's topbar gear opens — a
   **store-driven two-pane shell**: one nav list, rendered once, beside a scrollable content pane. At `md`+
   the list is a rail grouped **Agent** (Models, Providers, MCP servers, Prompt templates, Environment) ·
-  **Interface** (Chat, Appearance, Language, Layout, Terminal) · **System** (Workspaces, Integrations, Extensions,
+  **Interface** (Chat, Appearance, Language, Layout, Terminal, Artifacts — the per-client Smart view switch, from
+  host v124) · **System** (Workspaces, Integrations, Extensions,
   Notifications, Privacy, Updates). Integrations keeps section id `github`: today it is the GitHub CLI page
   and it is the home for further integrations. Below `md` the same list is a horizontal scrolling strip without group labels. The
   Feedback card (`settings-nav-feedback`, “Share feedback”) belongs to that list at
@@ -2277,8 +2288,9 @@ menu has closed, because a closing menu returns focus to its row; disabled
   list inside it is `role=none`, so the hierarchy is the explicit `aria-level` (VS Code's flat-tree
   markup) rather than nested `group`s, which Biome's semantic-element rules reject on lists. Chats and
   Projects are two trees (Projects: project → workspaces and creations → the Settled header as an
-  expandable item → settled rows and *Show more*); so are Artifacts (flat; the name is the treeitem) and
-  Other agent files (an output folder is its own toggle), their headings outside the trees. No tree is
+  expandable item → settled rows and *Show more*); so are Artifacts (List: flat, the name is the
+  treeitem; Tree: a folder row is its own toggle) and Other agent files (an output folder is its own
+  toggle), their headings outside the trees. No tree is
   virtualized, so the model is DOM-driven: the visible rows are the tree's treeitems in DOM order, parent and first child come from `aria-level`
   (the pure move rule is `lib`'s `resolveTreeMove`, which the virtualized chat transcript applies to rows it derives from data),
   and →/← click the row's `[data-tree-toggle]` (a Files/Changes folder row is its own toggle; Specs,
@@ -2517,3 +2529,5 @@ focus uses the existing settling lifecycle and releases on user intent outside t
 The Review panel guards its own pending focus request after the file opener's synchronous navigation
 step, through a cold read until acknowledgement. User intent/navigation/modal/unmount cancels only
 that request by identity; network latency itself is not a focus timeout.
+
+Smart Artifacts groups final results, drafts and supporting files from the host snapshot. The Artifacts setting controls this view, and the toolbar keeps List and Tree available.

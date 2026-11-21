@@ -1057,7 +1057,10 @@ plain-text diagnostic excerpt and truncation flag, and the same optional `delive
 subagent completion (`wake` | `run` | `appended` — how the result reached the agent; absent in
 transcripts written before it, which keep the old round rules). The guards do not validate it; the
 shared `completionDelivery(details)` reader returns the marker or `undefined`, so an unknown value
-reads as absent everywhere. The conversation may render that historical notice,
+reads as absent everywhere. **`opensChatRound(message)`** is the message-level twin of the chat's
+turn-level `opensRound` ([[submodule-web-chat]]): a user prompt other than a control message, a
+`todo-review-fix`, a continuation request, a handoff, or a completion not delivered as `run`. The host
+uses it to cut artifact round markers where the chat cuts rounds; a web test pins the two together. The conversation may render that historical notice,
 but must never infer current resource authority from it; logs and controls still use scoped reads.
 
 Every read/control validates workspace membership and parent lineage, not merely a syntactically
@@ -1283,6 +1286,9 @@ or compatibility methods are introduced.
 - **Bundle gate:** `bun build` the web app and confirm **no** `@anthropic-ai/sdk` /
   `openai` / `node:fs` appears.
 
+The `WORKSPACE_VIEW_ROUTE` value identifies the resource preview route `/view/`. The UI exposes
+external opening when the host supports `BROWSER_VIEW_PROTOCOL_VERSION` (127).
+
 ## Consumed by
 
 `web` (types + the runtime exports listed above) and `server` (same, + implementing the `session.*` host routes). The
@@ -1303,3 +1309,5 @@ while `WireImage` also permits inline `ImageContent` for local upload echoes and
 inline bytes. Queue removal/clear/abort restoration and creation dismissal return those bytes for resend.
 
 Artifacts are introduced at protocol 125. `artifacts.list/restore/discard`, `workspace.artifactsChanged`, and contained `fs.rename/move` share this capability version; existing capability versions remain independent. Artifacts retain latest regular-file bytes, not turn history.
+
+Protocol 128 carries artifact roles, reasons and record attribution to one or more chat rounds through the existing workspace artifact snapshot.

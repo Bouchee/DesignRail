@@ -59,6 +59,10 @@ The key is stored outside AppConfig and never included in settings broadcasts.
   It does not buffer the entire blob.
 - Both routes classify a bounded 8 KiB head, use the shared extension/type fallback and send nosniff.
   HTML/XHTML/SVG receive `Content-Security-Policy:sandbox; default-src 'none'`.
+- `/view/<workspaceId>/<relpath>` serves a deliberate external-browser preview with the same
+  filesystem containment as `/files/`. GET and HEAD use no-store, nosniff and standard MIME types
+  for associated assets. Active HTML/XHTML/SVG has an opaque sandbox origin. Its CSP permits local
+  page assets within that workspace and blocks fetch, WebSocket, workers and forms. Keep CORS disabled.
 - `/fonts/<file>` GET serves validated user-font types with no-cache; PUT requires the non-simple
   `X-ThinkRail-Request:font-upload` header. Header absence is 403; size, count, invalid font and I/O
   errors retain their 413/409/422/500 results. Other methods, including preflight, receive 405 with
@@ -253,3 +257,5 @@ The host publishes owned resource lifecycle changes and routes parent-addressed 
 The composition root maps canonical SessionEvent start/settled/tool boundaries to artifacts, retaining producer IDs while using getSessionOwnerId for openable parent-chat attribution. Agent start prewarms the existing watcher. Filesystem nudges feed the same artifacts owner, which publishes pathless workspace.artifactsChanged at capability125. No extra watcher or execution loop is created.
 
 artifacts.list/restore/discard require live open workspace ownership; restore/discard and fs.rename use the existing workspace change lock. Cross-workspace fs.move locks both IDs in sorted order, emits source subtree/destination invalidations and marks successful user removal. Workspace/chat record deletion precedes kept-store cleanup. New mutation parameters are validated before side effects.
+
+The artifact event mapper projects canonical session messages and tool results into the workspace artifact index. Child tools retain an openable parent chat owner.

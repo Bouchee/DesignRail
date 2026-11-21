@@ -817,7 +817,9 @@ host's `artifacts.list` snapshot), **`artifactsTickByWorkspace`** (`noteArtifact
 `workspace.artifactsChanged` nudge and read through `selectArtifactsTick`) and **`artifactsSeenByWorkspace`**
 (`markArtifactsSeen`, a watermark that only moves forward; the first snapshot of a workspace seeds it), all
 dropped in `applyWorkspaceRemoved`, plus the app-wide **`artifactsShowIgnored`** toggle; the seen watermarks
-and the toggle hydrate from per-client preferences (`hydrateArtifactsPreferences`).
+and the toggle hydrate from per-client preferences (`hydrateArtifactsPreferences`). The same
+preferences store `artifactsView` and `artifactsTreeExpandedByWorkspace`. Removing a workspace
+drops its tree expansion state.
 Artifacts Mention carries optional `pasteText` on the existing composerFocusRequest. The same identity guards paste and focus until ChatView consumes it; cancellation removes both. Composer.pasteText inserts at the textarea selection, preserving the rest of the draft. No host editor command is restored.
 **`selectActiveFilePath`** is the path of the active file or diff tab, else `null`.
 **`diffScopeByWorkspace`** + **`setDiffScope(workspaceId, scope)`** hold *what* each workspace's Changes
@@ -932,3 +934,5 @@ branch's review — a commit sha means nothing in another worktree — and dropp
   (`ConnectionStatus`, **type-only**); `@thinkrail/locales` (default chat/terminal names, settled-reason
   copy and toasts, resolved when created); `zustand`.
 - **Forbidden:** `server`/`shared`/`pi`; importing `panels`, shell runtime (the web-local layout state edge is type-only), or transport runtime.
+
+Smart Artifacts derives its groups from role metadata in the current host snapshot. Its enablement and selected view are client preferences.

@@ -11,9 +11,9 @@ system trash. File-tree menus and file or Diff tabs also offer Copy path.
 Chat prose defaults to 80 columns and file views to 120. Wide code, tables, diagrams and tool results
 can grow past the prose column within the pane. Saved width choices keep their values.
 Images in chat history and tool results load on demand, with a Retry action when unavailable.
-Artifacts lists workspace deliverables with their writing chat and keeps the latest copy after an
+Artifacts shows workspace deliverables in Smart, list, or folder tree views with their writing chat and keeps the latest copy after an
 external deletion; opening a deleted artifact restores it first. Diagrams and comparisons also save as
-Markdown artifacts. Files and Artifacts share Cut/Paste, rename and move; ignored build outputs are listed without kept copies.
+Markdown artifacts. Final results also appear with the chat round that produced them. Files and Artifacts share Cut/Paste, rename and move; ignored build outputs are listed without kept copies.
 An accent line marks the focused workbench region; keyboard arrivals briefly show a frame.
 F6 first highlights the current region, then cycles regions while the frame is visible; Mod+L focuses
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
@@ -53,6 +53,9 @@ The SDK tool graph includes admitted Skills and workspace instructions, question
 Plan and Spec Graph, configured MCP tools, and foreground or background child tasks. Resources retains
 child transcripts and background-command output, with ownership checks and Stop controls. The Resources
 dock can fold while work continues; inspect an MCP server for its status and this chat's calls.
+Open workspace HTML in your browser from its preview, tab, or Files menu. Browser workbench
+mockup previews can run inline behavior in an isolated frame without network access. Desktop previews
+show the static version.
 Compare question option previews full screen, side by side or in a grid, and choose an option from the preview.
 Plan review uses an independent SDK child with a validated verdict saved in its read-only transcript.
 Plan and Review show the recorded outcome and findings. Finish or stop pending reviews before updating;

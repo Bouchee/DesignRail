@@ -499,3 +499,5 @@ actions do not rely on it: they focus what they revealed themselves. Neither doe
 focused row unmounts: the chat transcript moves focus to its own list container in the row's unmount
 cleanup, before the browser drops it, so recovery sees focus held and the list keeps its cursor
 ([[submodule-web-chat]], *Transcript keyboard model*).
+
+The resource host enables network-free interactive HTML for workspace mockup paths on the browser. The native bridge keeps desktop previews static.

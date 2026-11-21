@@ -97,6 +97,29 @@ async function validatedSdkArgs(session: SdkToolServices, args: unknown) {
 	return args;
 }
 
+function previewedPaths(args: unknown): string[] {
+	return isAskUserQuestionArgs(args) ? previewFileSources(args).map(({ path }) => path) : [];
+}
+
+function pickedPaths(args: unknown, details: unknown): string[] {
+	if (!isAskUserQuestionArgs(args) || !isAskUserQuestionResult(details) || details.cancelled)
+		return [];
+	return details.answers.flatMap((answer) => {
+		const question = args.questions[answer.questionIndex];
+		if (!question) return [];
+		const labels =
+			answer.kind === "option"
+				? [answer.answer]
+				: answer.kind === "multi"
+					? (answer.selected ?? [])
+					: [];
+		const paths = question.options.flatMap((option) =>
+			labels.includes(option.label) && option.previewFile ? [option.previewFile] : [],
+		);
+		return paths;
+	});
+}
+
 export default defineServerExtension({
 	name: "ask-user-question",
 	title: "Ask user question",
@@ -105,6 +128,9 @@ export default defineServerExtension({
 	settings: { richPreviews: { type: "boolean", default: true } },
 	interactiveTools: {
 		[ASK_USER_QUESTION_TOOL_NAME]: { describeResponse, validateArgs, parseResponse },
+	},
+	artifactTools: {
+		[ASK_USER_QUESTION_TOOL_NAME]: { presented: previewedPaths, picked: pickedPaths },
 	},
 	sdkTools: (session) => [
 		tool({

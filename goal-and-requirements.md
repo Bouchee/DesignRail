@@ -54,7 +54,8 @@ Fork releases and updates come only from `Bouchee/raildesign`.
 JetBrains services, telemetry, attribution and surveys are removed. SDK tracing starts disabled.
 The interface keeps its bundled fonts and themes; font family names are not service integrations.
 
-Questions with visual options support full-screen comparison and selection in the workbench.
+Questions with visual options support full-screen comparison and selection in the workbench. Browser
+HTML mockups support network-free sandboxed interaction. Desktop previews are static.
 
 ## Non-goals
 
@@ -62,4 +63,4 @@ Personal accounts, per-user projects or credentials, RBAC, multi-tenant scheduli
 functions and cloud orchestration are outside this development plan. A later private server is one
 shared instance for one person or a trusted team.
 
-Artifacts is a host-owned workspace catalog of regular deliverables in .raildesign/context, excluding TODO state and scaffold/build dependencies. It keeps latest bytes, records the openable writing chat, and offers explicit Restore or Discard for external deletions. User Delete/Rename/Cut do not resurrect files; ignored outputs are live counts only. Client filters, seen watermarks and layout stay window-local. Diagram/comparison visualizations save validated Markdown through the active run's contained host capability. Completed task-specs remain status: done and are hidden from default task search.
+Artifacts is a host-owned workspace catalog of regular deliverables in .raildesign/context, excluding TODO state and scaffold/build dependencies. It keeps latest bytes, records the openable writing chat, groups results in Smart view and by chat round, provides a list and folder tree, and offers explicit Restore or Discard for external deletions. User Delete/Rename/Cut do not resurrect files; ignored outputs are live counts only. Client filters, seen watermarks and layout stay window-local. Diagram/comparison visualizations save validated Markdown through the active run's contained host capability. Completed task-specs remain status: done and are hidden from default task search.

@@ -8,6 +8,7 @@ export {
 	ResourceHostProvider,
 	type ResourceMarkdown,
 	type ResourceMarkdownProps,
+	type ResourceOpenInBrowserProps,
 	type ResourcePreferences,
 	ResourcePreferencesProvider,
 	type ResourceReviewSendProps,
@@ -52,7 +53,10 @@ export { SOURCE_RENDERER_ID } from "./renderers/code";
 export { createAskAgentRequest } from "./renderers/code/changeBlocks";
 export { HtmlViewportSwitch } from "./renderers/html/ViewportSwitch";
 export type { HtmlViewport } from "./renderers/html/viewport";
-export { registerBundledResourceRenderers } from "./renderers/register";
+export {
+	type BundledRendererOptions,
+	registerBundledResourceRenderers,
+} from "./renderers/register";
 export { ReviewDraftContext, type ReviewDraftPersistence } from "./renderers/reviewDraftState";
 export {
 	FramedResourcePreview,

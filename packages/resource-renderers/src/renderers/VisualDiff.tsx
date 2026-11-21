@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { AnchorDraft, DiffSideLabels, SurfaceReview } from "../registry";
 import { RegionReviewSurface } from "./RegionReviewSurface";
 import { placedRegionThreadIds, type Region, type Size } from "./regionReview";
+
 import { swipeDividerValue } from "./swipeDivider";
 
 const NO_THREADS: ReadonlySet<string> = new Set();

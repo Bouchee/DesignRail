@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_CONTEXT_DIR } from "@thinkrail/shared/paths";
 import { checkWorkspaceFile, createWorkspaceFiles, MOCKUP_DIR } from "./workspaceFiles";
 
 describe("workspace file checks shared by extension server halves", () => {
@@ -50,6 +51,7 @@ describe("workspace file checks shared by extension server halves", () => {
 
 	test("names the gitignored scratch directory for mockups", () => {
 		expect(MOCKUP_DIR).toBe(".raildesign/context/mockups/");
+		expect(MOCKUP_DIR.startsWith(`${WORKSPACE_CONTEXT_DIR}/`)).toBe(true);
 	});
 });
 

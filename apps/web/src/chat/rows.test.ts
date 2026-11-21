@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { AssistantMessage, TurnChangeSet } from "@thinkrail/contracts";
+import type {
+	AssistantMessage,
+	TurnChangeSet,
+	WorkspaceArtifactsSnapshot,
+} from "@thinkrail/contracts";
 import {
 	type ChatRow,
 	deriveRows,
 	matchTurnReceipt,
 	projectRows,
+	sessionRoundArtifacts,
 	stabilizeRows,
 	turnDivider,
 } from "./rows";
@@ -687,7 +692,7 @@ test("turnDivider splits specs from code changes via isSpec, each path on exactl
 });
 
 test("turnDivider counts a gitignored scratch spec as a spec, not as a (never-visible) change", () => {
-	const path = ".thinkrail/context/TASK-todo-linear-groups.md";
+	const path = ".raildesign/context/TASK-todo-linear-groups.md";
 	const turns: ChatTurn[] = [
 		user("u1", 0),
 		assistantWithPaths("a1", [
@@ -716,6 +721,74 @@ test("turnDivider lets the spec side win a tie — a path reached by both routes
 	const d = turnDivider(turns, 2);
 	expect(d?.specs).toEqual([path]);
 	expect(d?.changedFiles).toEqual([]);
+});
+
+test("a round's artifacts are the ones a run of this chat created or changed within the round", () => {
+	const snapshot: WorkspaceArtifactsSnapshot = {
+		workspaceId: "w1",
+		dir: ".raildesign/context",
+		outputs: null,
+		artifacts: [
+			{
+				path: ".raildesign/context/mockups/a.html",
+				state: "live",
+				size: 1,
+				changedAt: 1,
+				firstSeenAt: 1,
+				role: "result",
+				rounds: [
+					{ sessionId: "s1", startedAt: 1_500 },
+					{ sessionId: "s1", startedAt: 20_500 },
+				],
+			},
+			{
+				path: ".raildesign/context/mockups/_scratch/a.png",
+				state: "live",
+				size: 1,
+				changedAt: 1,
+				firstSeenAt: 1,
+				role: "working",
+				rounds: [{ sessionId: "s1", startedAt: 1_600 }],
+			},
+			{
+				path: ".raildesign/context/other-chat.md",
+				state: "live",
+				size: 1,
+				changedAt: 1,
+				firstSeenAt: 1,
+				role: "result",
+				rounds: [{ sessionId: "s2", startedAt: 1_600 }],
+			},
+			{
+				path: ".raildesign/context/gone.md",
+				state: "deleted",
+				size: 1,
+				changedAt: 1,
+				firstSeenAt: 1,
+				role: "result",
+				rounds: [{ sessionId: "s1", startedAt: 1_600 }],
+			},
+		],
+	};
+	const turns: ChatTurn[] = [
+		user("u1", 1_000),
+		assistantWithPaths("a1", [], 5_000),
+		user("u2", 10_000),
+		assistantWithPaths("a2", [], 12_000),
+		user("u3", 20_000),
+		assistantWithPaths("a3", [], 22_000),
+	];
+	const results = sessionRoundArtifacts(snapshot, "s1", true);
+	expect(turnDivider(turns, 1, undefined, [], undefined, results)?.artifacts).toEqual([
+		{ path: ".raildesign/context/mockups/a.html", label: "mockups/a.html" },
+	]);
+	expect(turnDivider(turns, 3, undefined, [], undefined, results)?.artifacts).toEqual([]);
+	expect(turnDivider(turns, 5, undefined, [], undefined, results)?.artifacts).toHaveLength(1);
+	const everything = sessionRoundArtifacts(snapshot, "s1", false);
+	expect(
+		turnDivider(turns, 1, undefined, [], undefined, everything)?.artifacts.map((a) => a.label),
+	).toEqual(["mockups/_scratch/a.png", "mockups/a.html"]);
+	expect(sessionRoundArtifacts(undefined, "s1", true)).toEqual([]);
 });
 
 describe("stabilizeRows identity", () => {

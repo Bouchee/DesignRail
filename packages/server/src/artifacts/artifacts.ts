@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
+	ArtifactRound,
 	Workspace,
 	WorkspaceArtifact,
 	WorkspaceArtifactsSnapshot,
@@ -44,6 +45,7 @@ import {
 	type OutputKind,
 	outputChangedSince,
 } from "./outputs";
+import { artifactRole, type Presented, replyPathCandidates } from "./roles";
 
 const log = logger("artifacts");
 
@@ -64,6 +66,7 @@ const BUILD_DIRS: ReadonlySet<string> = new Set([
 ]);
 const LINK_UNSUPPORTED = new Set<unknown>(["EXDEV", "EPERM", "EMLINK", "ENOTSUP", "EOPNOTSUPP"]);
 const WRITER_TOOLS = new Set(["apply_patch", "spec_create"]);
+const MAX_ROUNDS = 16;
 
 interface ArtifactRecord {
 	path: string;
@@ -77,6 +80,9 @@ interface ArtifactRecord {
 	sessionId?: string;
 	kept?: string;
 	keptCopy?: true;
+	presented?: Presented;
+	picked?: true;
+	rounds?: ArtifactRound[];
 }
 
 interface OutputRecord {
@@ -112,8 +118,16 @@ interface RunWindow {
 export type ArtifactSessionEvent =
 	| { type: "agent_start" }
 	| { type: "agent_settled" }
+	| { type: "round_start"; at: number }
+	| { type: "assistant_message"; text: string }
 	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: unknown }
-	| { type: "tool_execution_end"; toolCallId: string; toolName: string };
+	| {
+			type: "tool_execution_end";
+			toolCallId: string;
+			toolName: string;
+			presented?: readonly string[];
+			picked?: readonly string[];
+	  };
 
 const states = new Map<string, WorkspaceArtifacts>();
 const running = new Map<string, Map<string, string>>();
@@ -122,6 +136,8 @@ const writers = new Map<
 	Map<string, { sessionId: string; producerId: string; toolCallId: string }>
 >();
 const windows = new Map<string, RunWindow>();
+const roundStarts = new Map<string, Map<string, ArtifactRound>>();
+const replies = new Map<string, Map<string, string>>();
 const removals = new Map<string, Map<string, number>>();
 const generations = new Map<string, number>();
 let publisher: ((workspaceId: string) => void) | null = null;
@@ -215,7 +231,28 @@ function parseArtifact(value: unknown): ArtifactRecord | null {
 		...(sessionId ? { sessionId } : {}),
 		...(kept ? { kept } : {}),
 		...(value.keptCopy === true ? { keptCopy: true as const } : {}),
+		...(value.presented === "shown" || value.presented === "linked"
+			? { presented: value.presented }
+			: {}),
+		...(value.picked === true ? { picked: true as const } : {}),
+		...parseRounds(value.rounds),
 	};
+}
+
+function parseRounds(value: unknown): { rounds?: ArtifactRound[] } {
+	if (!Array.isArray(value)) return {};
+	const rounds = value
+		.filter(
+			(round): round is ArtifactRound =>
+				isObject(round) &&
+				typeof round.sessionId === "string" &&
+				STORAGE_ID.test(round.sessionId) &&
+				typeof round.startedAt === "number" &&
+				Number.isFinite(round.startedAt),
+		)
+		.map(({ sessionId, startedAt }) => ({ sessionId, startedAt }))
+		.slice(-MAX_ROUNDS);
+	return rounds.length ? { rounds } : {};
 }
 
 function parseOutput(value: unknown): OutputRecord | null {
@@ -478,11 +515,24 @@ function covered(marks: Map<string, number> | undefined, path: string): boolean 
 	return false;
 }
 
-function writerOf(workspaceId: string, path: string): string | undefined {
+function writerOf(
+	workspaceId: string,
+	path: string,
+): { sessionId: string; round?: ArtifactRound } | undefined {
+	const rounds = roundStarts.get(workspaceId);
 	const explicit = writers.get(workspaceId)?.get(path);
-	if (explicit) return explicit.sessionId;
-	const owners = new Set(running.get(workspaceId)?.values());
-	return owners.size === 1 ? [...owners][0] : undefined;
+	if (explicit) {
+		const round = rounds?.get(explicit.producerId);
+		return { sessionId: explicit.sessionId, ...(round ? { round } : {}) };
+	}
+	const active = running.get(workspaceId);
+	const owners = new Set(active?.values());
+	if (!active || owners.size !== 1) return undefined;
+	const sessionId = [...owners][0];
+	if (!sessionId) return undefined;
+	const starts = new Set([...active.keys()].map((producer) => rounds?.get(producer)));
+	const round = starts.size === 1 ? [...starts][0] : undefined;
+	return { sessionId, ...(round ? { round } : {}) };
 }
 
 export function isSameFile(
@@ -500,6 +550,19 @@ function applyStat(record: ArtifactRecord, file: ScannedFile): void {
 	record.size = file.size;
 	record.mtimeMs = file.mtimeMs;
 	record.changedAt = Math.round(file.mtimeMs);
+}
+
+function attribute(record: ArtifactRecord, writer: ReturnType<typeof writerOf>): void {
+	if (!writer) return;
+	record.sessionId = writer.sessionId;
+	const { round } = writer;
+	if (!round) return;
+	const rounds = record.rounds ?? [];
+	if (
+		rounds.some((item) => item.sessionId === round.sessionId && item.startedAt === round.startedAt)
+	)
+		return;
+	record.rounds = [...rounds, round].slice(-MAX_ROUNDS);
 }
 
 function reconcile(workspace: Workspace): boolean {
@@ -522,8 +585,7 @@ function reconcile(workspace: Workspace): boolean {
 		const relinked = file.dev !== record.dev || file.ino !== record.ino;
 		if (!relinked && file.size === record.size && file.mtimeMs === record.mtimeMs) continue;
 		applyStat(record, file);
-		const writer = writerOf(workspaceId, record.path);
-		if (writer) record.sessionId = writer;
+		attribute(record, writerOf(workspaceId, record.path));
 		if (relinked || record.keptCopy || !record.kept) keep(workspaceId, root, record, state);
 		changed = true;
 	}
@@ -573,9 +635,12 @@ function reconcile(workspace: Workspace): boolean {
 			mtimeMs: file.mtimeMs,
 			changedAt: Math.round(file.mtimeMs),
 			firstSeenAt: prior?.firstSeenAt ?? Date.now(),
+			...(prior?.sessionId ? { sessionId: prior.sessionId } : {}),
+			...(prior?.presented ? { presented: prior.presented } : {}),
+			...(prior?.picked ? { picked: prior.picked } : {}),
+			...(prior?.rounds ? { rounds: prior.rounds } : {}),
 		};
-		const writer = writerOf(workspaceId, file.path) ?? prior?.sessionId;
-		if (writer) record.sessionId = writer;
+		attribute(record, writerOf(workspaceId, file.path));
 		keep(workspaceId, root, record, state);
 		state.records.set(file.path, record);
 		changed = true;
@@ -644,6 +709,7 @@ export async function withUserRemoval<T>(
 }
 
 function toWire(record: ArtifactRecord): WorkspaceArtifact {
+	const { role, reason } = artifactRole(record.path.slice(CONTEXT_PREFIX.length), record);
 	return {
 		path: record.path,
 		state: record.state,
@@ -651,6 +717,9 @@ function toWire(record: ArtifactRecord): WorkspaceArtifact {
 		changedAt: record.changedAt,
 		firstSeenAt: record.firstSeenAt,
 		...(record.sessionId ? { sessionId: record.sessionId } : {}),
+		role,
+		reason,
+		...(record.rounds ? { rounds: record.rounds } : {}),
 	};
 }
 
@@ -926,6 +995,15 @@ function toolPath(args: unknown): string | null {
 	return typeof path === "string" && path ? path : null;
 }
 
+function artifactPathOf(workspace: Workspace, path: string | null): string | null {
+	if (!path) return null;
+	const root = resolve(workspace.worktreePath);
+	const abs = resolve(root, path.startsWith("@") ? path.slice(1) : path);
+	if (!isInside(root, abs)) return null;
+	const rel = relative(root, abs).split(sep).join("/");
+	return isArtifactPath(rel) ? rel : null;
+}
+
 function rememberWriter(
 	workspace: Workspace,
 	sessionId: string,
@@ -933,13 +1011,8 @@ function rememberWriter(
 	toolCallId: string,
 	args: unknown,
 ): void {
-	const path = toolPath(args);
-	if (!path) return;
-	const root = resolve(workspace.worktreePath);
-	const abs = resolve(root, path);
-	if (!isInside(root, abs)) return;
-	const rel = relative(root, abs).split(sep).join("/");
-	if (!isArtifactPath(rel)) return;
+	const rel = artifactPathOf(workspace, toolPath(args));
+	if (!rel) return;
 	let map = writers.get(workspace.id);
 	if (!map) {
 		map = new Map();
@@ -982,6 +1055,82 @@ function openWindow(workspace: Workspace, sessionId: string): void {
 	});
 }
 
+function markRecords(
+	state: WorkspaceArtifacts,
+	paths: Iterable<string>,
+	mark: (record: ArtifactRecord) => boolean,
+): boolean {
+	const records = state.records;
+	let changed = false;
+	for (const path of paths) {
+		const record = records.get(path);
+		if (record?.state === "live" && mark(record)) changed = true;
+	}
+	return changed;
+}
+
+function toolArtifactPaths(workspace: Workspace, raw: readonly string[] | undefined): string[] {
+	return (raw ?? []).flatMap((path) => artifactPathOf(workspace, path) ?? []);
+}
+
+function replyArtifactPaths(workspace: Workspace, text: string): string[] {
+	const paths = new Set<string>();
+	for (const candidate of replyPathCandidates(text)) {
+		const direct = artifactPathOf(workspace, candidate);
+		if (direct) paths.add(direct);
+		if (!isAbsolute(candidate) && !candidate.startsWith(CONTEXT_PREFIX))
+			paths.add(`${CONTEXT_PREFIX}${candidate}`);
+	}
+	return [...paths];
+}
+
+const markShown = (record: ArtifactRecord) => {
+	if (record.presented === "shown") return false;
+	record.presented = "shown";
+	return true;
+};
+
+const markLinked = (record: ArtifactRecord) => {
+	if (record.presented) return false;
+	record.presented = "linked";
+	return true;
+};
+
+const markPicked = (record: ArtifactRecord) => {
+	if (record.picked) return false;
+	record.picked = true;
+	return true;
+};
+
+function markReply(workspace: Workspace, sessionId: string): boolean {
+	const reply = replies.get(workspace.id)?.get(sessionId);
+	forgetSession(replies, workspace.id, sessionId);
+	if (!reply) return false;
+	const state = copyState(load(workspace.id));
+	if (!markRecords(state, replyArtifactPaths(workspace, reply), markLinked)) return false;
+	save(workspace.id, state);
+	return true;
+}
+
+function sessionMap<T>(maps: Map<string, Map<string, T>>, workspaceId: string): Map<string, T> {
+	let map = maps.get(workspaceId);
+	if (!map) {
+		map = new Map();
+		maps.set(workspaceId, map);
+	}
+	return map;
+}
+
+function forgetSession<T>(
+	maps: Map<string, Map<string, T>>,
+	workspaceId: string,
+	sessionId: string,
+): void {
+	const map = maps.get(workspaceId);
+	map?.delete(sessionId);
+	if (map?.size === 0) maps.delete(workspaceId);
+}
+
 export async function observeArtifactSessionEvent(
 	workspaceId: string,
 	sessionId: string,
@@ -994,6 +1143,8 @@ export async function observeArtifactSessionEvent(
 			forgetToolWriter(workspaceId, sessionId, event.toolCallId);
 		if (event.type === "agent_settled") {
 			forgetWriters(workspaceId, sessionId);
+			forgetSession(roundStarts, workspaceId, sessionId);
+			forgetSession(replies, workspaceId, sessionId);
 			const active = running.get(workspaceId);
 			active?.delete(sessionId);
 			if (active?.size === 0) {
@@ -1013,6 +1164,25 @@ export async function observeArtifactSessionEvent(
 			active.set(sessionId, ownerSessionId);
 			openWindow(workspace, ownerSessionId);
 			if (reconcile(workspace)) publish(workspaceId);
+			const rounds = sessionMap(roundStarts, workspaceId);
+			if (!rounds.has(sessionId)) {
+				const round = rounds.get(ownerSessionId);
+				if (round) rounds.set(sessionId, round);
+				else if (sessionId === ownerSessionId)
+					rounds.set(sessionId, { sessionId, startedAt: Date.now() });
+			}
+			return;
+		}
+		case "assistant_message":
+			if (event.text.trim()) sessionMap(replies, workspaceId).set(sessionId, event.text);
+			else forgetSession(replies, workspaceId, sessionId);
+			return;
+		case "round_start": {
+			if (sessionId !== ownerSessionId) return;
+			const changed = reconcile(workspace);
+			const linked = markReply(workspace, sessionId);
+			sessionMap(roundStarts, workspaceId).set(sessionId, { sessionId, startedAt: event.at });
+			if (changed || linked) publish(workspaceId);
 			return;
 		}
 		case "tool_execution_start":
@@ -1026,6 +1196,15 @@ export async function observeArtifactSessionEvent(
 			} finally {
 				forgetToolWriter(workspaceId, sessionId, event.toolCallId);
 			}
+			if (event.presented?.length || event.picked?.length) {
+				const state = copyState(load(workspaceId));
+				const shown = markRecords(state, toolArtifactPaths(workspace, event.presented), markShown);
+				const picked = markRecords(state, toolArtifactPaths(workspace, event.picked), markPicked);
+				if (shown || picked) {
+					save(workspaceId, state);
+					changed = true;
+				}
+			}
 			if (changed) publish(workspaceId);
 			return;
 		}
@@ -1034,8 +1213,11 @@ export async function observeArtifactSessionEvent(
 			let window: RunWindow | undefined;
 			try {
 				changed = reconcile(workspace);
+				changed = markReply(workspace, sessionId) || changed;
 			} finally {
 				forgetWriters(workspaceId, sessionId);
+				forgetSession(roundStarts, workspaceId, sessionId);
+				forgetSession(replies, workspaceId, sessionId);
 				const active = running.get(workspaceId);
 				active?.delete(sessionId);
 				if (active?.size === 0) {
@@ -1058,6 +1240,8 @@ export function removeWorkspaceArtifacts(workspaceId: string): void {
 	running.delete(workspaceId);
 	writers.delete(workspaceId);
 	windows.delete(workspaceId);
+	roundStarts.delete(workspaceId);
+	replies.delete(workspaceId);
 	removals.delete(workspaceId);
 	try {
 		const dir = storeDir(workspaceId);
@@ -1076,6 +1260,8 @@ export function resetArtifactsForTests(): void {
 	running.clear();
 	writers.clear();
 	windows.clear();
+	roundStarts.clear();
+	replies.clear();
 	removals.clear();
 	generations.clear();
 	publisher = null;

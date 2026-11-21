@@ -7,7 +7,6 @@ import type {
 	ServerWelcome,
 	SessionCreatedPayload,
 	SessionDeletedPayload,
-	SessionEvent,
 	SessionStateRecord,
 	TerminalTabsPush,
 	WorkspaceFsChangedPayload,
@@ -27,6 +26,7 @@ import {
 	USER_FONTS_ROUTE,
 	USER_THEMES_PROTOCOL_VERSION,
 	WORKSPACE_CREATION_PROTOCOL_VERSION,
+	WORKSPACE_VIEW_ROUTE,
 	WS_CHANNELS,
 	WS_MAX_FRAME_BYTES,
 } from "@thinkrail/contracts";
@@ -68,12 +68,12 @@ import {
 	watchUserMcpConfig,
 } from "../agent";
 import {
-	type ArtifactSessionEvent,
 	noteArtifactPathsChanged,
 	observeArtifactSessionEvent,
 	setArtifactsPublisher,
 } from "../artifacts";
 import { forgetOpenBranchReview } from "../branch-review";
+import { artifactTools } from "../extensions";
 import { watchUserFonts } from "../fonts";
 import { ignoredPaths } from "../git";
 import { forgetImageSession, resetImages, serveImage, setImageSource } from "../images";
@@ -140,6 +140,7 @@ import {
 	syncWorkspaceBranch,
 	type WorkspaceLifecycleEvent,
 } from "../workspaces";
+import { createArtifactEventMapper } from "./artifactEvents";
 import { seesChats } from "./chats";
 import {
 	clearContinuations,
@@ -147,7 +148,13 @@ import {
 	observeContinuation,
 	setContinuationPublisher,
 } from "./continuations";
-import { BLOB_PREFIX, FILES_PREFIX, serveBlob, serveWorktreeFile } from "./fileRoutes";
+import {
+	BLOB_PREFIX,
+	FILES_PREFIX,
+	serveBlob,
+	serveWorktreeFile,
+	serveWorktreeView,
+} from "./fileRoutes";
 import { serveUserFonts } from "./fontRoutes";
 import { setFsNudgePublisher } from "./fsNudge";
 import { applyGitCeiling } from "./gitCeiling";
@@ -215,25 +222,6 @@ const warnSlowConsumer = (message: string, error: SlowConsumerError): void =>
 	log.warn(message, error);
 
 const isRequestId = (id: unknown): id is string => typeof id === "string";
-
-function artifactSessionEvent(event: SessionEvent): ArtifactSessionEvent | null {
-	switch (event.type) {
-		case "agent_start":
-		case "agent_settled":
-			return { type: event.type };
-		case "tool_execution_start":
-			return {
-				type: event.type,
-				toolCallId: event.toolCallId,
-				toolName: event.toolName,
-				args: event.args,
-			};
-		case "tool_execution_end":
-			return { type: event.type, toolCallId: event.toolCallId, toolName: event.toolName };
-		default:
-			return null;
-	}
-}
 
 const onScratchDirPath = (path: string) =>
 	path === WORKSPACE_CONTEXT_DIR ||
@@ -440,6 +428,9 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 				}
 				if (url.pathname.startsWith(BLOB_PREFIX)) {
 					return serveBlob(url.pathname, req.signal);
+				}
+				if (url.pathname.startsWith(WORKSPACE_VIEW_ROUTE)) {
+					return serveWorktreeView(req.method, url);
 				}
 				if (url.pathname.startsWith(USER_FONTS_ROUTE)) {
 					return serveUserFonts(req, url.pathname);
@@ -946,8 +937,12 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 			{ workspaceId, belowProtocol: ARTIFACTS_PROTOCOL_VERSION },
 		);
 	});
+	const artifactEventFor = createArtifactEventMapper(() => {
+		const disabled = getConfig().disabledExtensions;
+		return artifactTools((name) => disabled.includes(name));
+	});
 	setSessionPublisher((payload, workspaceId) => {
-		const artifactEvent = artifactSessionEvent(payload.event);
+		const artifactEvent = artifactEventFor(payload.sessionId, payload.event);
 		if (artifactEvent) {
 			if (artifactEvent.type === "agent_start") void ensureWatch(workspaceId, { prewarm: true });
 			const ownerId = getSessionOwnerId(payload.sessionId);

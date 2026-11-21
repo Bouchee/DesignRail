@@ -83,6 +83,8 @@ export {
 	USER_FONT_EXTENSIONS,
 	USER_FONT_UPLOAD_HEADER,
 	USER_FONTS_ROUTE,
+	WORKSPACE_MOCKUP_DIR,
+	WORKSPACE_VIEW_ROUTE,
 } from "./domain";
 export type { KeybindingModifier, KeybindingOverrides } from "./keybindingChord";
 export {

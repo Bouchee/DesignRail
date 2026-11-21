@@ -1,5 +1,5 @@
 const FILE_PREVIEWS = (scratchDir: string) =>
-	`- To show how something would look, write a self-contained HTML mockup under \`${scratchDir}\` (inline CSS and data: images only — scripts, form controls and external resources are stripped) and reference it with previewFile instead of pasting HTML or ASCII art; add previewBefore (a mockup of the current state) for a before → after diff. Any workspace file works too (SVG, image, markdown, code). Write the file before asking.`;
+	`- To show how something would look, write a self-contained HTML mockup under \`${scratchDir}\` (inline CSS, inline scripts and data images only. Browser mockups run in a sandbox without network access. Desktop mockups are static, so include a useful static view. Use addEventListener for behavior because scripts and handlers inserted at runtime are blocked) and reference it with previewFile instead of pasting HTML or ASCII art; add previewBefore (a mockup of the current state) for a before → after diff. Any workspace file works too (SVG, image, markdown, code). Write the file before asking.`;
 
 export function thinkrailGuidance(filePreviews: boolean, scratchDir: string): string {
 	return `Ask the user one or more structured, multiple-choice questions during execution, instead of guessing. Use when:

@@ -15,10 +15,12 @@ import {
 	RiPaletteLine,
 	RiPlugLine,
 	RiPuzzleLine,
+	RiShapesLine,
 	RiTerminalBoxLine,
 	RiTranslate2,
 } from "@remixicon/react";
 import {
+	ARTIFACT_ROLES_PROTOCOL_VERSION,
 	DEFAULT_MODEL_PROTOCOL_VERSION,
 	EXTENSION_CATALOG_PROTOCOL_VERSION,
 	HOST_ENVIRONMENT_PROTOCOL_VERSION,
@@ -95,6 +97,12 @@ const NAV_GROUPS: SettingsNavGroup[] = [
 				requiresProtocolVersion: SPEECH_PROTOCOL_VERSION,
 			},
 			{ id: SettingsSection.Terminal, label: "settings.nav.terminal", icon: RiTerminalBoxLine },
+			{
+				id: SettingsSection.Artifacts,
+				label: "settings.nav.artifacts",
+				icon: RiShapesLine,
+				requiresProtocolVersion: ARTIFACT_ROLES_PROTOCOL_VERSION,
+			},
 		],
 	},
 	{

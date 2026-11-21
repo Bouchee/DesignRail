@@ -673,7 +673,11 @@ and counts, the Monaco preview and the open-at-line selection overlay, the resto
 and the `Aa` / `W` toggles, the limit banner, the Project Home scope entering the Default workspace, the
 palette command, double Shift staying inert over the window, the window staying inside a short and a
 narrow window (`expectDialogContained`), and the older-host notice with no `search.text` frame on the
-wire. Visualize coverage
+wire. Open-in-browser coverage (`open-in-browser.spec.ts`) writes a page and its sibling stylesheet into the
+fixture repository and pins the visualize card's action opening a new page at `/view/<workspace>/<path>` whose
+sibling sheet applies, whose inline script runs and whose `fetch` to the host is blocked, the Files tree menu
+offering it for an HTML file and not for Markdown, and the file tab's toolbar carrying it — for an `.xhtml`
+file too, whose single renderer would otherwise hide the toolbar. Visualize coverage
 (`visualize.spec.ts`) independently seeds short historical tool-call/result transcripts through the
 sanctioned session fixture before workspace entry. It pins completed/default-expanded diagrams,
 fullscreen SVG growth, pan/reset/Escape and claimed WebKit pinch gestures, exact comparison pros/cons
@@ -683,8 +687,9 @@ source is seeded as a successful historical tool result (`isError: false`) so bo
 the renderer's plain-source fallback, not the tool-error branch. File previews write mockups into the shared
 fixture repository (removed in `finally`) and pin the HTML renderer in the card, the before/after 2-up diff,
 a region comment's Send carrying the card's chat `sessionId` over the wire, HTML design-width scaling and the
-width switch, full screen, Open in tab, and a before/after opened as a comparison diff tab (paired frames
-with same-origin access only, swipe available) that survives a reload. A huge comparison opts in through Show diff anyway while an unrelated file changes every 400 ms (each
+width switch, full screen, Open in tab, and a before/after opened as a comparison diff tab (mockups
+interactive with scripts only, Preview switching to static frames with same-origin access only, swipe
+available) that survives a reload. A huge comparison opts in through Show diff anyway while an unrelated file changes every 400 ms (each
 write its own watcher frame, past the 300 ms quiet flush), so updates keep landing inside the expensive first
 mount. These regressions need no provider,
 prompt submission, route mock, or screenshot. Extension on/off coverage (`extensions-settings.spec.ts`) drives the
@@ -773,3 +778,5 @@ command row and log through reload, including the absence of Stop authority for 
 Actual parent, child and stop-all process termination is covered by SDK tests with live OS processes.
 
 Artifacts coverage uses ordinary workspace files and public list/restore/file APIs. The no-agent suite covers kept restore, user deletion/rename/cut, arrival markers and local preferences, Mention preserving draft/selection, and keyboard landing/recovery. artifacts.live.spec uses a fresh SDK UI chat with two explicit turns, exact approvals and new completion IDs: real apply_patch v1→v2, two saved visualizations, ignored output and explicit latest-byte Restore. No private Pi history or kept-store fixture supplies execution evidence; browser reload is not host restart acceptance.
+
+HTML mockup browser cases verify interactive previews and diff frames, local paths, sandbox network denial, and static desktop fallback through native-bridge detection.

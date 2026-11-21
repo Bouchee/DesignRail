@@ -47,6 +47,10 @@ The host retains registration, lifecycle and ordering; `define*` helpers preserv
     response is still pending": the host writes it on restart repair, and a tool returns it (with
     `terminate: true`) when `awaitToolResponse` resolves `deferred`. It is the one shape both sides read
     (`contracts`: `isToolResponsePending`); a tool must not use it for a real result.
+- **Artifact tools.** `ServerExtension.artifactTools?: Record<toolName, ArtifactTool>` tells the host which
+  files a successful call put in front of the person (`presented(args, details)`) and which of them the
+  person chose (`picked(args, details)`), as raw path strings the host resolves. The host feeds them to
+  its artifact index and never learns a tool's argument shape itself; a failed call counts for nothing.
 - `ToolRegistrationOptions.width` (`ToolWidth`) is `"column"` by default; `"content"` lets the chat grow
   the renderer's frame past its text column to the content's width, up to the pane, while the user fits
   chat to the pane. It is opt-in because only the extension knows its content reads better wide; the
@@ -136,3 +140,5 @@ The SDK import is server-only and type-only in this contract package; browser en
 SDK tool factories use `errorFunction: null`; the host public invocation boundary owns failure projection with the original tool-call identity. `SdkToolServices` does not expose a parallel failure-marker callback. Stop and revoked grants propagate instead of becoming successful fallback text.
 
 `WorkspaceFiles.createArtifact(name, content)` is a run-scoped host capability: it creates only an exclusive Markdown file below the current live workspace context/visualize directory, rechecking the run grant and workspace identity after asynchronous preparation. The host owns its destination; extension arguments cannot choose another cwd. `artifactsDir` names the workspace-relative artifacts root. Services remain outside checkpoint context.
+
+An SDK extension may declare `artifactTools` to identify artifact paths shown or picked by its own successful tool results. The host resolves paths against the owning workspace before updating the artifact index.
