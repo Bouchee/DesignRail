@@ -59,21 +59,24 @@ const assistantShell = (timestamp: number): AssistantMessage => ({
 	timestamp,
 });
 
-export const textStreamReplay = (
-	sessionId: string,
-	text: string,
-	timestamp: number,
-): StreamReplay => {
-	let seq = sequenceBySession.get(sessionId) ?? 0;
-	const runId = `replay-${timestamp}-${seq + 1}`;
-	const push = (event: SessionEvent) => {
-		seq += 1;
+function replayFrame(sessionId: string, runId: string) {
+	return (event: SessionEvent) => {
+		const seq = (sequenceBySession.get(sessionId) ?? 0) + 1;
 		sequenceBySession.set(sessionId, seq);
 		return JSON.stringify({
 			channel: WS_CHANNELS.sessionEvent,
 			data: { sessionId, runId, seq, event },
 		} satisfies WsPush);
 	};
+}
+
+export const textStreamReplay = (
+	sessionId: string,
+	text: string,
+	timestamp: number,
+): StreamReplay => {
+	const runId = `replay-${timestamp}-${(sequenceBySession.get(sessionId) ?? 0) + 1}`;
+	const push = replayFrame(sessionId, runId);
 	const message = { ...assistantShell(timestamp), id: `message-${runId}` };
 	const start = [
 		push({ type: "agent_start" }),
@@ -124,6 +127,40 @@ export const textStreamReplay = (
 		finalTail: text.slice(-40),
 	};
 };
+
+type ToolCall = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
+
+export function toolCallReplay(
+	sessionId: string,
+	runId: string,
+	toolCall: ToolCall,
+	timestamp: number,
+) {
+	const push = replayFrame(sessionId, runId);
+	const message = {
+		...assistantShell(timestamp),
+		id: `message-${runId}`,
+		stopReason: "toolUse",
+	} as const;
+	const final: AssistantMessage = { ...message, content: [toolCall] };
+	return [
+		push({ type: "agent_start" }),
+		push({ type: "turn_start" }),
+		push({ type: "message_start", message }),
+		push({
+			type: "message_update",
+			message: final,
+			assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: final },
+		}),
+		push({ type: "message_end", message: final }),
+		push({
+			type: "tool_execution_start",
+			toolCallId: toolCall.id,
+			toolName: toolCall.name,
+			args: toolCall.arguments,
+		}),
+	];
+}
 
 export const interceptAppWire = async (page: Page) => {
 	let current: WebSocketRoute | null = null;

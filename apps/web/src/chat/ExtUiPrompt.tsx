@@ -3,7 +3,7 @@ import { AttentionLine } from "@thinkrail/ui/attention-line";
 import { Button } from "@thinkrail/ui/button";
 import { isImeComposing } from "@thinkrail/ui/keyboard";
 import { cn } from "@thinkrail/ui/utils";
-import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACTIVITY_BREADCRUMB_HEIGHT } from "./activityBreadcrumbs";
 import { useChatActions } from "./ChatActions";
 import { ToolArgList, toolArgEntries } from "./ToolArgList";
@@ -21,14 +21,16 @@ export function ExtUiPrompt({
 	onReply,
 	draft,
 	onDraftChange,
-	claimReveal,
+	revealOpen,
+	onRevealed,
 	className,
 }: {
 	request: ExtUiDialogRequest;
 	onReply: ExtUiReply;
 	draft?: string | undefined;
 	onDraftChange?: ((text: string) => void) | undefined;
-	claimReveal?: (() => boolean) | undefined;
+	revealOpen?: (() => boolean) | undefined;
+	onRevealed?: (() => void) | undefined;
 	className?: string;
 }) {
 	const t = useT();
@@ -48,12 +50,12 @@ export function ExtUiPrompt({
 	const anchored = request.toolCallId !== undefined;
 	const toolArgs = request.toolInput ? toolArgEntries(request.toolInput) : [];
 
-	useEffect(() => {
-		if (!anchored) return;
+	useLayoutEffect(() => {
+		if (!anchored || !revealOpen?.()) return;
 		const yieldToUser = () => actions?.cancelAutomaticReveal();
 		const frame = requestAnimationFrame(() => {
 			const root = rootRef.current;
-			if (!root || !claimReveal?.()) return;
+			if (!root) return;
 			window.addEventListener("pointerdown", yieldToUser, { capture: true, once: true });
 			window.addEventListener("keydown", yieldToUser, { capture: true, once: true });
 			window.addEventListener("wheel", yieldToUser, { capture: true, once: true, passive: true });
@@ -64,6 +66,7 @@ export function ExtUiPrompt({
 				stability: "bounded",
 				topInset: ACTIVITY_BREADCRUMB_HEIGHT,
 			});
+			onRevealed?.();
 		});
 		return () => {
 			cancelAnimationFrame(frame);
@@ -71,7 +74,7 @@ export function ExtUiPrompt({
 			window.removeEventListener("keydown", yieldToUser, { capture: true });
 			window.removeEventListener("wheel", yieldToUser, { capture: true });
 		};
-	}, [actions, anchored, claimReveal]);
+	}, [actions, anchored, revealOpen, onRevealed]);
 
 	const answer: ExtUiReply = (value) => {
 		const held = document.activeElement;
@@ -210,7 +213,8 @@ export interface PendingExtUi {
 	reply: ExtUiReply;
 	draft: () => string | undefined;
 	rememberDraft: (text: string) => void;
-	claimReveal: () => boolean;
+	revealOpen: () => boolean;
+	closeReveal: () => void;
 }
 
 export function PendingExtUiPrompt({
@@ -227,7 +231,8 @@ export function PendingExtUiPrompt({
 			onReply={pending.reply}
 			draft={pending.draft()}
 			onDraftChange={pending.rememberDraft}
-			claimReveal={pending.claimReveal}
+			revealOpen={pending.revealOpen}
+			onRevealed={pending.closeReveal}
 			{...(className ? { className } : {})}
 		/>
 	);

@@ -588,7 +588,7 @@ two routes:
 
 Worked example: the `ask_user_question` flow in [tools/SPEC.md](tools/SPEC.md).
 
-**Extension dialogs ask inside the chat, never in a modal** (`ExtUiPrompt.tsx`). Every pi
+**Extension dialogs ask inside the chat, never in a modal** (`ExtUiPrompt.tsx`). A host
 `select`/`confirm`/`input`/`editor` request renders as an inline prompt under the shared
 `AttentionLine` (`@thinkrail/ui/attention-line`: "Your input is needed · Agent is waiting", also used by
 `ask_user_question`): a select is
@@ -602,21 +602,21 @@ labels, and below a 28rem prompt
 (`@container` / `@max-md`) every row stacks into one column so no two choices sit side by side by
 accident (the MCP order keeps Deny furthest from Always allow). It never takes focus from the composer.
 **Arrival:** `ChatTranscript` keeps one always-mounted polite live region outside virtualization and
-fills it a frame after each new request ("Your input is needed: <question>"), once per request; an
-anchored prompt's first mount reveals itself (`revealChatElement`, `automatic-attention`, `block:
-"nearest"` under the breadcrumb inset; the first pointer/key/wheel yields), later remounts do not
-(`PendingExtUi.claimReveal`). A row virtualized away gets no reveal; the live
-region and the needs-input marker still tell the user. **Bounds:** the docked prompt is capped at 60% of
+fills it a frame after each new request ("Your input is needed: <question>"). An anchored prompt can
+reveal its card during the request's first two animation frames, allowing a tool row arriving in the
+same update to mount. After the reveal or the arrival window closes, a later remount leaves the
+reader's position alone. A chat mounted with a pending request starts with that reveal window
+closed. The request uses `revealChatElement` with `automatic-attention` and `block: "nearest"` under
+the breadcrumb inset. The first pointer, key or wheel interaction yields. The live region and needs-input marker
+still announce a request whose card stays outside the virtualized view. **Bounds:** the docked prompt is capped at 60% of
 the chat height (`max-h-[60cqh]`); its body (question, field, select options) scrolls while Cancel/Submit
 and the hint stay put, and the editor is capped at 40%. On the way out it follows the
 `ask_user_question` hand-off ([tools/SPEC.md](tools/SPEC.md)): answering unmounts the focused control, so
 when the prompt still holds `:focus-visible` focus it hands focus back to the composer
 (`ChatActions.focusComposer`) instead of stranding it on `<body>`; a tap/click answer leaves focus alone. `ChatTranscript` owns the session's
-`pendingExtUi`, its `session.extUiReply`, and `PendingExtUiContext`. The typed input/editor draft lives
-in that per-request `PendingExtUi` (`draft()` / `rememberDraft`), not in the prompt: folding a group
-open or shut, virtualization and the dock-to-card move remount the prompt, and the draft must survive
-them; a reply or dismissal ends the request and its draft with it. The draft is not persisted across a
-chat-view remount. A request whose `toolCallId` is in the
+`pendingExtUi`, its `session.extUiReply`, and `PendingExtUiContext`. A request-local draft survives
+folding, virtualization and the dock-to-card move. The next request starts with its own prefill.
+The in-memory draft belongs to the chat-view lifetime. A request whose `toolCallId` is in the
 rows (`rowsHaveToolCall`) asks **on that tool**: the tool shell — `ToolCard`, the routine step row and a
 bare tool's wrapper — renders `ToolPromptSlot` under its header regardless of the tool's own fold, so no
 renderer needs prompt code (the MCP approval included). A request carrying `toolInput` lists it **inside

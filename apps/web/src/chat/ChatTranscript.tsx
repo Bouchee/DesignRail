@@ -41,7 +41,7 @@ import { ACTIVITY_BREADCRUMB_HEIGHT, ActivityBreadcrumbTrail } from "./activityB
 import { type ChatActions, ChatActionsContext } from "./ChatActions";
 import type { ChatMessageOrder } from "./chatPreferences";
 import { refreshContinuation, requestContinuation } from "./continuations";
-import { type PendingExtUi, PendingExtUiContext, PendingExtUiPrompt } from "./ExtUiPrompt";
+import { PendingExtUiContext, PendingExtUiPrompt } from "./ExtUiPrompt";
 import { workspaceFileTarget } from "./fileTargets";
 import { FoldGeometryProvider } from "./foldState";
 import {
@@ -54,6 +54,7 @@ import {
 } from "./interactionState";
 import { deriveMessageActions } from "./messageActions";
 import { openWorkspace } from "./openWorkspace";
+import { usePendingExtUi } from "./pendingExtUi";
 import { turnAnchorText } from "./recentPrompts";
 import { estimateChatRowHeights } from "./rowHeightEstimates";
 import {
@@ -647,21 +648,18 @@ const ChatTranscript = forwardRef<
 	);
 
 	const pendingExtUiRequest = useAppStore((s) => s.sessions[sessionId]?.pendingExtUi ?? null);
-	const pendingExtUi = useMemo<PendingExtUi | null>(() => {
-		if (!pendingExtUiRequest) return null;
-		let draft: string | undefined;
-		let revealed = false;
-		let replying = false;
-		return {
-			request: pendingExtUiRequest,
-			reply: (value) => {
-				const { id, runId, revision, toolCallId } = pendingExtUiRequest;
-				if (replying) return;
+	const [replyingExtUi] = useState(() => new WeakSet());
+	const pendingExtUi = usePendingExtUi(
+		pendingExtUiRequest,
+		useCallback(
+			(request, value) => {
+				const { id, runId, revision, toolCallId } = request;
+				if (replyingExtUi.has(request)) return;
 				if (runId === undefined || revision === undefined) {
 					toast.error(translate("app.transport.requestFailedFallback"));
 					return;
 				}
-				replying = true;
+				replyingExtUi.add(request);
 				getTransport()
 					.request("session.extUiReply", {
 						response: {
@@ -673,23 +671,20 @@ const ChatTranscript = forwardRef<
 							...(toolCallId ? { toolCallId } : {}),
 						},
 					})
-					.then(() => useAppStore.getState().clearPendingExtUi(sessionId, id))
+					.then(() => {
+						const store = useAppStore.getState();
+						if (store.sessions[sessionId]?.pendingExtUi === request) {
+							store.clearPendingExtUi(sessionId, id);
+						}
+					})
 					.catch((error: unknown) => {
-						replying = false;
+						replyingExtUi.delete(request);
 						toast.error(errorText(error));
 					});
 			},
-			draft: () => draft,
-			rememberDraft: (text) => {
-				draft = text;
-			},
-			claimReveal: () => {
-				if (revealed) return false;
-				revealed = true;
-				return true;
-			},
-		};
-	}, [pendingExtUiRequest, sessionId]);
+			[sessionId, replyingExtUi],
+		),
+	);
 	const pendingExtUiId = pendingExtUiRequest?.id ?? null;
 	const [announcedExtUiId, setAnnouncedExtUiId] = useState<string | null>(null);
 	useEffect(() => {
