@@ -48,9 +48,9 @@ export function createWorkspaceFiles(
 			resolve(workspace.worktreePath) !== resolve(cwd) ||
 			!project ||
 			project.closed ||
-			realpathSync(cwd) !== root ||
 			current?.dev !== identity.dev ||
-			current.ino !== identity.ino
+			current.ino !== identity.ino ||
+			realpathSync(cwd) !== root
 		)
 			throw new Error("The artifact workspace is no longer available");
 	};
@@ -62,7 +62,10 @@ export function createWorkspaceFiles(
 			assertCurrent();
 			if (!name || basename(name) !== name || /[/\\\0]/.test(name) || !name.endsWith(".md"))
 				throw new Error("Invalid artifact name");
-			await realpath(cwd);
+			await realpath(cwd).catch((error: unknown) => {
+				assertCurrent();
+				throw error;
+			});
 			assertCurrent();
 			const context = seedArtifactsDir(root);
 			const dir = join(context, "visualize");
