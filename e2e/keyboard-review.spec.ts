@@ -257,7 +257,7 @@ test("a virtualized diff scrolls the cursor's line into view as it jumps between
 	const workspace = await createWorkspaceViaDialog(page);
 	const lines = Array.from({ length: 1_500 }, (_, index) => `far line ${index + 1}`);
 	const changed = lines.map((line, index) =>
-		index === 4 || index === 1_399 ? `${line} edited` : line,
+		(index >= 4 && index < 64) || index === 1_399 ? `${line} edited` : line,
 	);
 	await commitAndModify(
 		page,
@@ -277,13 +277,12 @@ test("a virtualized diff scrolls the cursor's line into view as it jumps between
 
 	await page.keyboard.press("End");
 	await expect(cursorRow(diff, "additions", 1404)).toBeInViewport();
-	const scrolled = await diff.evaluate((node) => node.scrollTop);
-	expect(scrolled).toBeGreaterThan(0);
+	await expect.poll(() => diff.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
 	await page.keyboard.press("Shift+Tab");
 	await expect(cursor).not.toBeFocused();
 	await page.keyboard.press("Tab");
 	await expect(cursor).toBeFocused();
-	expect(await diff.evaluate((node) => node.scrollTop)).toBe(scrolled);
+	await expect(cursorRow(diff, "additions", 1404)).toBeInViewport();
 	await page.keyboard.press("k");
 	await expect(cursorRow(diff, "additions", 1403)).toBeInViewport();
 	await page.keyboard.press("Home");

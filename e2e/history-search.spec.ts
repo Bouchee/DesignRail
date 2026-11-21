@@ -657,7 +657,9 @@ test("Ctrl+R from an active file tab switches to the chat and opens history sear
 	await expect(page.getByTestId("history-query")).toBeFocused();
 });
 
-test("the Ctrl+R and Ctrl+S chords fire on a non-Latin keyboard layout", async ({ page }) => {
+test("the Ctrl+R and platform Save chords fire on a non-Latin keyboard layout", async ({
+	page,
+}) => {
 	await openWorkspaceChat(page);
 	seedExternalCwdSessions();
 
@@ -669,18 +671,23 @@ test("the Ctrl+R and Ctrl+S chords fire on a non-Latin keyboard layout", async (
 		.filter({ hasText: "fix the flaky watcher test" });
 
 	const cdp = await page.context().newCDPSession(page);
-	const pressCyrillicChord = async (key: string, code: string, virtualKeyCode: number) => {
+	const pressCyrillicChord = async (
+		key: string,
+		code: string,
+		virtualKeyCode: number,
+		modifiers: number,
+	) => {
 		for (const type of ["keyDown", "keyUp"] as const) {
 			await cdp.send("Input.dispatchKeyEvent", {
 				type,
 				key,
 				code,
-				modifiers: 2,
+				modifiers,
 				windowsVirtualKeyCode: virtualKeyCode,
 			});
 		}
 	};
-	const pressCtrlR = () => pressCyrillicChord("к", "KeyR", 82);
+	const pressCtrlR = () => pressCyrillicChord("к", "KeyR", 82, 2);
 
 	await page.getByTestId("chat-input").click();
 	await pressCtrlR();
@@ -692,7 +699,8 @@ test("the Ctrl+R and Ctrl+S chords fire on a non-Latin keyboard layout", async (
 	await expect(scopeBadge).toHaveAttribute("data-scope", "all");
 	await expect(promptRow).toBeVisible();
 
-	await pressCyrillicChord("ы", "KeyS", 83);
+	const apple = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform));
+	await pressCyrillicChord("ы", "KeyS", 83, apple ? 4 : 2);
 	await expect(overlay).toBeHidden();
 	await expect(page.getByTestId("template-editor-dialog")).toBeVisible();
 	await expect(page.getByTestId("template-body-input")).toHaveValue("fix the flaky watcher test");

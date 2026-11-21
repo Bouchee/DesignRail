@@ -1089,8 +1089,13 @@ test("opening a far-off base-side comment scrolls its card into view in the virt
 	const deletions = pierreDeletionsSide(diff);
 	await expect(deletions.getByText("far line 6", { exact: false }).first()).toBeVisible();
 
-	await diff.evaluate((node) => node.scrollTo({ top: node.scrollHeight }));
-	await expect(deletions.getByText("far line 1980", { exact: false }).first()).toBeVisible();
+	const distantLine = deletions.getByText("far line 1980", { exact: false }).first();
+	await expect
+		.poll(async () => {
+			await diff.evaluate((node) => node.scrollTo({ top: node.scrollHeight }));
+			return distantLine.isVisible();
+		})
+		.toBe(true);
 	await selectPierreLine(deletions, "far line 1980", "first");
 	await page.getByTestId("review-composer-input").fill("Far-off base remark.");
 	await page.getByTestId("review-composer-save").click();

@@ -255,7 +255,7 @@ test.describe("templates management", () => {
 		await promptRow.hover();
 		await expect(promptRow.getByTestId("history-save-template")).toBeVisible();
 
-		await query.press("Control+s");
+		await query.press("ControlOrMeta+s");
 		await expect(overlay).toBeHidden();
 		const editor = page.getByTestId("template-editor-dialog");
 		await expect(editor).toBeVisible();

@@ -1,6 +1,7 @@
 import { realpathSync, rmSync } from "node:fs";
 import { expect, type Locator, type Page, test, type WebSocketRoute } from "@playwright/test";
 import {
+	closeSettingsDialog,
 	createWorkspaceViaDialog,
 	defaultWorkspaceRow,
 	enterDefaultWorkspace,
@@ -990,8 +991,7 @@ test("applying the Review preset preserves resources and installs its vertical c
 	await expect(sideGroups(page, "right")).toHaveCount(2);
 	await expect(page.getByTestId("bottom-group")).toHaveCount(1);
 	await expect(page.getByTestId("bottom-group")).toContainText("Terminal 1");
-	await page.keyboard.press("Escape");
-	await expect(page.getByRole("heading", { name: "Layout" })).toBeHidden();
+	await closeSettingsDialog(page);
 	await expect
 		.poll(async () => {
 			const workbench = await page.getByTestId("workbench").boundingBox();
