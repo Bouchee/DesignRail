@@ -1,4 +1,5 @@
 import { isControlMessage, isTranscriptMessageRole } from "@thinkrail/contracts";
+import { stripAnsi } from "@thinkrail/shared/stripAnsi";
 import { z } from "zod";
 
 export interface HistoryEntry {
@@ -69,6 +70,6 @@ export function extractSession(json: string): ExtractedSession | null {
 			entryId: message.id,
 		});
 	}
-	const title = record.title?.trim();
+	const title = stripAnsi(record.title ?? "").trim();
 	return { id: record.sessionId, cwd: record.cwd, ...(title ? { title } : {}), entries };
 }

@@ -62,6 +62,7 @@ import {
 	SUBAGENT_COMPLETION_CUSTOM_TYPE,
 } from "@thinkrail/contracts";
 import { CodedError } from "@thinkrail/shared/codedError";
+import { stripAnsi } from "@thinkrail/shared/stripAnsi";
 import { truncateHead } from "@thinkrail/shared/toolOutput";
 import { createSpecTools, SPEC_RULE } from "@thinkrail/spec-graph";
 import { createTodoTools, TODO_RULE } from "@thinkrail/todos";
@@ -159,7 +160,6 @@ import {
 	skillInstructions,
 	workspaceInstructions,
 } from "./skillTools";
-import { stripAnsi } from "./stripAnsi";
 import { readWebAccessKey, webFetch, webSearch } from "./webAccess";
 import { createWorkspaceActions } from "./workspaceActions";
 
@@ -385,6 +385,7 @@ function idleState(): SessionState {
 }
 function stateRecord(entry: Entry): SessionStateRecord {
 	const record = entry.store.record;
+	const title = stripAnsi(record.title ?? "").trim();
 	const firstPrompt = firstPromptOfTexts(
 		record.messages.flatMap((message) =>
 			message.role === "user" ? [textOf(message.content)] : [],
@@ -395,7 +396,7 @@ function stateRecord(entry: Entry): SessionStateRecord {
 		workspaceId: record.workspaceId,
 		projectId: projectOf(record.workspaceId) ?? "",
 		state: visibleState(entry),
-		...(record.title ? { title: record.title } : {}),
+		...(title ? { title } : {}),
 		...(firstPrompt ? { firstPrompt } : {}),
 	};
 }
@@ -503,7 +504,7 @@ function summaryOf(entry: Entry): SessionSummary {
 	return {
 		sessionId: record.sessionId,
 		workspaceId: record.workspaceId,
-		title: record.title ?? "",
+		title: state.title ?? "",
 		...(state.firstPrompt ? { firstPrompt: state.firstPrompt } : {}),
 		model: record.model,
 		thinkingLevel: record.thinkingLevel,
@@ -4673,7 +4674,7 @@ export function renameSession(
 	name: string,
 	options: { onlyIfUnnamed?: boolean; assertActive?: () => void } = {},
 ): Promise<boolean> {
-	const title = normalizeSessionTitle(name);
+	const title = normalizeSessionTitle(stripAnsi(name));
 	if (!title) return Promise.reject(new Error("Invalid session title"));
 	return ensureSessionAttached(sessionId, workspaceId, cwd).then((attached) => {
 		if (!attached) throw new Error("Unknown session");

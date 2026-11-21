@@ -101,8 +101,8 @@ fields, including notify text, after child-title prefixing and image-related mes
 Live publication, pending-dialog reads and state/transcript summaries use the same projection.
 It removes complete CSI/OSC/DCS/APC and related ESC/C1 sequences. For a broken sequence it drops only
 the control byte and preserves the following text; ordinary Unicode, tabs and newlines remain.
-The small deterministic stripAnsi scanner owns this rule: existing platform stripping functions do
-not preserve the required incomplete-sequence behavior. This is display-only. Canonical approval
+The shared plain-text scanner preserves the required incomplete-sequence behavior
+(see the shared module's display text contract). This is display-only. Canonical approval
 requests, toolInput/arguments, RunState/checkpoints, ordinary transcripts/tool output and PTYs keep
 original values. MCP select options are exact consent decision tokens and are never rewritten.
 
@@ -436,7 +436,9 @@ The retained title service uses `renameSession(...,{onlyIfUnnamed:true}):Promise
 atomic conditional title write. The check and write share the attached session entry; an automatic
 proposal cannot replace a manual title or a previously accepted automatic title. The normal manual
 rename operation remains unconditional. SDK title tools use the host-injected service and recheck
-the run grant before applying a title or workspace proposal.
+the run grant before applying a title or workspace proposal. The service strips terminal escapes
+before validating and saving the title. State pushes and session lists project titles as plain text
+without rewriting stored records.
 
 ## Stage 3 child and resource execution
 

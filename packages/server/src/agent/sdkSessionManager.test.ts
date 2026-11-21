@@ -49,6 +49,8 @@ import {
 	getSessionMessages,
 	getSessionState,
 	getSessionStats,
+	listSessionStates,
+	listSessions,
 	liveSessionIdsOf,
 	notifyExtUi,
 	nudgeSession,
@@ -116,6 +118,7 @@ afterEach(() => {
 	configureAgentModelFactory();
 	setExtUiPublisher(() => {});
 	setSessionPublisher(() => {});
+	setSessionStatePublisher(() => {});
 	for (const [name, value] of Object.entries({
 		THINKRAIL_DATA_DIR: originalEnvironment.data,
 		OPENAI_API_KEY: originalEnvironment.key,
@@ -1790,6 +1793,47 @@ test("patch validates original text, symlinks, new ancestors, .git and revoked g
 		}),
 	).toThrow("revoked");
 	expect(readFileSync(join(outside, "secret.txt"), "utf8")).toBe("secret\n");
+});
+
+test("renames publish and store plain titles, rejecting titles made of terminal sequences", async () => {
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	const frames: SessionEventPayload[] = [];
+	const publishState = mock(() => {});
+	setSessionPublisher((frame) => frames.push(frame));
+	setSessionStatePublisher(publishState);
+	const title = `\x1b[32m${"x".repeat(80)}\x1b[0m`;
+
+	expect(await renameSession(sessionId, "workspace", worktree, title)).toBe(true);
+	const plainTitle = "x".repeat(80);
+	expect(frames.map(({ event }) => event)).toContainEqual({
+		type: "session_info_changed",
+		name: plainTitle,
+	});
+	expect(publishState).toHaveBeenCalledWith(
+		expect.objectContaining({ sessionId, title: plainTitle }),
+	);
+	expect(readSessionRecord(sessionId)?.title).toBe(plainTitle);
+	await expect(renameSession(sessionId, "workspace", worktree, "\x1b[0m")).rejects.toThrow(
+		"Invalid session title",
+	);
+	expect(readSessionRecord(sessionId)?.title).toBe(plainTitle);
+});
+
+test("session lists project stored titles as plain text without changing the record", async () => {
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	await removeSession(sessionId);
+	const saved = readSessionRecord(sessionId);
+	if (!saved) throw new Error("Missing test record");
+	const storedTitle = "\x1b[31mSaved chat title\x1b[0m";
+	writeSessionRecord({ ...saved, title: storedTitle });
+
+	expect(await listSessions("workspace", worktree)).toEqual([
+		expect.objectContaining({ sessionId, title: "Saved chat title" }),
+	]);
+	expect(
+		await listSessionStates([{ id: "workspace", projectId: "project", cwd: worktree }]),
+	).toEqual([expect.objectContaining({ sessionId, title: "Saved chat title" })]);
+	expect(readSessionRecord(sessionId)?.title).toBe(storedTitle);
 });
 
 test("automatic titles cannot overwrite a manual title or another accepted automatic title", async () => {

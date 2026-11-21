@@ -28,6 +28,12 @@ Truncation preserves complete UTF-8 lines and reports the original size and outp
 An oversized first line produces empty preview text and an explicit flag.
 Plan and Spec tools use this helper without an engine dependency.
 
+## Display text
+
+`@thinkrail/shared/stripAnsi` removes terminal sequences from fields that are displayed as plain text.
+An incomplete sequence drops only the control byte. Transcript payloads and terminal output remain
+untouched by this utility.
+
 ## Boundary
 
 - **Owns:** host-side runtime helpers that are neither engine- nor transport-specific, and the native

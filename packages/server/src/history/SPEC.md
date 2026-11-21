@@ -24,7 +24,8 @@ search projection; the agent module owns execution and canonical session persist
 ## Storage and indexing
 
 Read flat `<dataDir>/sessions/<sessionId>.json` records with `version: 2`, sessionId, cwd, optional title
-and messages. Each transcript message has a stable ID. Extract only user/assistant text, skip control
+and messages. Project titles as plain text with the shared terminal-sequence scanner. Each
+transcript message has a stable ID. Extract only user/assistant text, skip control
 prompts and preserve indices from the renderable transcript, including non-text/tool rows. Host-only
 model history, checkpoints and credentials are never returned by this projection.
 

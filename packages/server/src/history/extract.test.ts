@@ -85,6 +85,13 @@ describe("extractSession", () => {
 			expect(extractSession(value)).toBeNull();
 	});
 
+	test("strips terminal escapes from searchable titles", () => {
+		expect(extractSession(record([], { title: " \x1b[31mMy chat\x1b[0m " }))?.title).toBe(
+			"My chat",
+		);
+		expect(extractSession(record([], { title: "\x1b[0m" }))?.title).toBeUndefined();
+	});
+
 	test("clearing a title leaves no stale name", () => {
 		expect(extractSession(record([], { title: "  " }))?.title).toBeUndefined();
 	});
