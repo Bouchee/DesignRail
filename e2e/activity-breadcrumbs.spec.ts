@@ -635,3 +635,113 @@ test("sticky activity breadcrumbs expose the off-screen Activity â†’ Thinking â†
 	await trail.getByRole("button", { name: "Jump to Thinking" }).click();
 	await expect(thinking.getByTestId("thinking-group-toggle")).toBeFocused();
 });
+
+test("sticky activity breadcrumb segments do not overlap when tool metadata is long", async ({
+	page,
+}) => {
+	await openFixtureProject(page);
+	const chat = seedWorkspaceSession(repoCwd(), {
+		name: "long breadcrumb overlap",
+		messages: [{ role: "user", text: "Check the watcher regression.", timestamp: BASE_TS }],
+	});
+	const assistantId = `${chat.id}-a1`;
+	const longCommand = `echo ${"watcher-checkpoint-".repeat(25)}`;
+	appendMessage(chat.path, assistantId, {
+		role: "assistant",
+		content: [
+			{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "watch.ts" } },
+			{ type: "thinking", thinking: "Check the watcher fixtures." },
+			{ type: "toolCall", id: "read-2", name: "read", arguments: { path: "watch.test.ts" } },
+			{ type: "toolCall", id: "bash-long", name: "bash", arguments: { command: longCommand } },
+		],
+		usage,
+		stopReason: "toolUse",
+		timestamp: BASE_TS + 1_000,
+	});
+	for (const [toolCallId, toolName, output] of [
+		["read-1", "read", "source"],
+		["read-2", "read", "test"],
+		[
+			"bash-long",
+			"bash",
+			Array.from({ length: 120 }, (_, index) => `output line ${index + 1}`).join("\n"),
+		],
+	] as const) {
+		appendMessage(chat.path, `${chat.id}-${toolCallId}`, {
+			role: "toolResult",
+			toolCallId,
+			toolName,
+			content: [{ type: "text", text: output }],
+			isError: false,
+			timestamp: BASE_TS + 2_000,
+		});
+	}
+	appendMessage(chat.path, `${chat.id}-a2`, {
+		role: "assistant",
+		content: [{ type: "text", text: "Done." }],
+		usage,
+		stopReason: "stop",
+		timestamp: BASE_TS + 3_000,
+	});
+	utimesSync(chat.path, new Date(BASE_TS), new Date(BASE_TS));
+
+	await expect(defaultWorkspaceRow(page)).toBeVisible();
+	await enterDefaultWorkspace(page);
+	await expect(page.locator('[data-testid="editor-tab"][data-kind="chat"]')).toHaveCount(1);
+
+	const activity = page.getByTestId("activity-group").first();
+	await activity.getByTestId("activity-group-toggle").click();
+	const thinking = activity.getByTestId("thinking-group").last();
+	await thinking.getByTestId("thinking-group-toggle").click();
+	const tool = thinking.locator('[data-testid="activity-step"][data-tool="bash"]');
+	await tool.getByTestId("activity-step-toggle").click();
+
+	const trail = page.getByTestId("activity-breadcrumb-trail");
+	await expect
+		.poll(async () => {
+			await tool.evaluate((element) => {
+				const scroller = element.closest<HTMLElement>('[data-virtuoso-scroller="true"]');
+				if (!scroller) throw new Error("missing Virtuoso scroller");
+				scroller.scrollTop +=
+					element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 80;
+			});
+			return trail.isVisible();
+		})
+		.toBe(true);
+	await expect(trail.getByTestId("activity-breadcrumb-segment")).toHaveCount(3);
+
+	const geometry = await trail.evaluate((root) => {
+		const segments = [
+			...root.querySelectorAll<HTMLElement>('[data-testid="activity-breadcrumb-segment"]'),
+		];
+		return segments.map((segment) => {
+			const segRect = segment.getBoundingClientRect();
+			const label = segment.querySelector<HTMLElement>('[data-testid="activity-breadcrumb-label"]');
+			const labelRect = label?.getBoundingClientRect();
+			return {
+				kind: segment.dataset.kind,
+				segLeft: segRect.left,
+				segRight: segRect.right,
+				segHeight: segRect.height,
+				labelRight: labelRect?.right ?? 0,
+				labelScrollWidth: label?.scrollWidth ?? 0,
+				labelClientWidth: label?.clientWidth ?? 0,
+			};
+		});
+	});
+
+	for (let index = 0; index < geometry.length; index += 1) {
+		const current = geometry[index];
+		expect(current).toBeDefined();
+		if (!current) continue;
+		expect(current.segHeight).toBeLessThanOrEqual(36);
+		expect(current.labelRight).toBeGreaterThan(current.segLeft);
+		expect(current.labelClientWidth).toBeGreaterThanOrEqual(current.labelScrollWidth - 1);
+		expect(current.labelRight).toBeLessThanOrEqual(current.segRight + 0.5);
+		const next = geometry[index + 1];
+		if (next) {
+			expect(current.segRight).toBeLessThanOrEqual(next.segLeft + 0.5);
+			expect(current.labelRight).toBeLessThanOrEqual(next.segLeft + 0.5);
+		}
+	}
+});
