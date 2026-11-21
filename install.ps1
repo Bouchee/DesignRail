@@ -344,7 +344,8 @@ function Install-RailDesign {
     try {
         [System.IO.File]::WriteAllText($metaTemp, ($meta | ConvertTo-Json))
         if (Test-Path -LiteralPath $metaFile) {
-            [System.IO.File]::Replace($metaTemp, $metaFile, $null)
+            # PowerShell binds $null to an empty string for this backup path.
+            [System.IO.File]::Replace($metaTemp, $metaFile, [NullString]::Value)
         } else {
             [System.IO.File]::Move($metaTemp, $metaFile)
         }

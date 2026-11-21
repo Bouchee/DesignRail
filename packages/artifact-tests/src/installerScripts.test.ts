@@ -185,6 +185,7 @@ function runPowerShellInstaller(
 	version: string,
 	tag = "v1.2.3",
 	prefix = "C:/isolated/raildesign",
+	downloadFixture = false,
 ): ScriptResult {
 	if (!powershell) throw new Error("PowerShell is unavailable");
 	const wrapper = join(fixture.root, "invoke-installer.ps1");
@@ -198,7 +199,14 @@ function runPowerShellInstaller(
 function global:Invoke-WebRequest {
     param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
     Add-Content -LiteralPath $env:FAKE_NETWORK_LOG -Value ("artifact:" + $Uri)
-    throw "controlled artifact stop"
+    if (-not $env:FAKE_BINARY_HASH) { throw "controlled artifact stop" }
+    if ($Uri -like "*/SHA256SUMS") {
+        Set-Content -LiteralPath $OutFile -Encoding ASCII -Value "$env:FAKE_BINARY_HASH  raildesign-windows-x64.exe"
+    } elseif ($Uri -like "*/raildesign-windows-x64.exe") {
+        [System.IO.File]::WriteAllText($OutFile, $env:FAKE_BINARY_BODY)
+    } else {
+        throw "unexpected artifact URL"
+    }
 }
 & $env:THINKRAIL_INSTALLER -Channel $env:TEST_CHANNEL -Version $env:TEST_VERSION -Prefix $env:TEST_PREFIX -NoModifyPath
 `,
@@ -211,12 +219,15 @@ function global:Invoke-WebRequest {
 			env: {
 				...process.env,
 				OS: "Windows_NT",
+				USERPROFILE: fixture.home,
 				THINKRAIL_INSTALLER: powershellInstaller,
 				TEST_CHANNEL: channel,
 				TEST_VERSION: version,
 				TEST_PREFIX: prefix,
 				FAKE_TAG: tag,
 				FAKE_NETWORK_LOG: networkLog,
+				FAKE_BINARY_HASH: downloadFixture ? binaryHash : "",
+				FAKE_BINARY_BODY: binaryBody,
 			},
 		},
 	);
@@ -407,6 +418,41 @@ describe.skipIf(process.platform !== "win32" || !powershell)("install.ps1 valida
 			expect(requests[0]).toContain(`/releases/download/${tag}/raildesign-windows-x64.exe`);
 		},
 		POWERSHELL_TEST_TIMEOUT_MS,
+	);
+	test(
+		"replaces RailDesign metadata on reinstall and keeps unrelated profile files",
+		() => {
+			const fixture = makeFixture();
+			const config = join(fixture.home, ".config", "raildesign");
+			mkdirSync(config, { recursive: true });
+			const sentinel = join(config, "unrelated.txt");
+			const meta = join(config, "install.json");
+			writeFileSync(sentinel, "keep this file");
+
+			for (const version of ["1.0.0", "2.0.0"]) {
+				const result = runPowerShellInstaller(
+					fixture,
+					"stable",
+					version,
+					`v${version}`,
+					fixture.prefix,
+					true,
+				);
+				expect(result.stderr).toBe("");
+				expect(result.exitCode).toBe(0);
+				expect(readFileSync(join(fixture.prefix, "bin", "raildesign.exe"), "utf8")).toBe(
+					binaryBody,
+				);
+				expect(JSON.parse(readFileSync(meta, "utf8"))).toMatchObject({
+					channel: "stable",
+					tag: `v${version}`,
+					version,
+				});
+			}
+			expect(readFileSync(sentinel, "utf8")).toBe("keep this file");
+			expect(readdirSync(config).sort()).toEqual(["install.json", "unrelated.txt"]);
+		},
+		2 * POWERSHELL_TEST_TIMEOUT_MS,
 	);
 });
 
