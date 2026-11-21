@@ -14,7 +14,13 @@ import {
 import type { ExtUiRequest } from "@thinkrail/contracts";
 import { isDelegationRunDetails } from "@thinkrail/contracts";
 import { TodoStore } from "@thinkrail/todos/core";
-import { loadConfig, loadWorkspaces, saveConfig, saveWorkspaces } from "../persistence";
+import {
+	loadConfig,
+	loadWorkspaces,
+	saveConfig,
+	saveProjects,
+	saveWorkspaces,
+} from "../persistence";
 import { archivedCommandOutput, recordResource } from "../resourceHistory";
 import * as modelConfiguration from "./modelConfiguration";
 import { configureAgentModelFactory } from "./modelConfiguration";
@@ -95,17 +101,28 @@ afterEach(async () => {
 const done = (text = "done") => modelResponse([assistantMessage(text)]);
 const call = (name: string, args: unknown, id: string) =>
 	modelResponse([functionCall(name, JSON.stringify(args), { callId: id })]);
-const agentCall = (background = false) =>
+const agentCall = (background = false, role = "worker") =>
 	call(
 		"Agent",
 		{
-			subagent_type: "worker",
+			subagent_type: role,
 			task: "Read fixture.txt and report.",
 			model: null,
 			run_in_background: background,
 		},
 		"child-call",
 	);
+function grantProjectWorker() {
+	const project = { id: "project", name: "P", path: cwd, slug: "p", lastOpened: 1 };
+	saveProjects([{ ...project, resourceTrust: "granted" }]);
+	const roles = join(cwd, ".raildesign", "agents");
+	mkdirSync(roles, { recursive: true });
+	writeFileSync(
+		join(roles, "project-worker.md"),
+		"---\nname: project-worker\ndescription: Project role\n---\nReport on project files.",
+	);
+	return () => saveProjects([{ ...project, resourceTrust: "untrusted" }]);
+}
 function approve(request: ExtUiRequest) {
 	if (
 		request.kind !== "confirm" ||
@@ -268,6 +285,62 @@ test("foreground child approval restores the same interaction after host restart
 	expect(readFileSync(join(cwd, "foreground-once.txt"), "utf8")).toBe("x");
 	parent.assertComplete();
 	child.assertComplete();
+});
+
+test("disabling a running foreground child's role preserves its restored approval", async () => {
+	const parent = new ScriptedModel([agentCall(), done("parent complete")]);
+	const child = new ScriptedModel([
+		call("bash", { command: "printf x >> foreground-once.txt", timeoutMs: 1000 }, "child-bash"),
+		done("child complete"),
+	]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	setExtUiPublisher(() => {});
+	const running = promptSession(created.sessionId, "Delegate the task");
+	await until(() => getSessionState(created.sessionId).needsInput?.kind === "dialog");
+	const [before] = (await sessionResources("workspace", created.sessionId)).subagents;
+	expect(before?.status).toBe("running");
+	saveConfig({ ...loadConfig(), disabledSubagents: ["worker"] });
+	await removeSession(created.sessionId);
+	await running;
+	expect(existsSync(join(cwd, "foreground-once.txt"))).toBe(false);
+	await getSessionMessages(created.sessionId, "workspace", cwd);
+	const restored = getSessionState(created.sessionId).needsInput;
+	if (restored?.kind !== "dialog") throw new Error("Missing restored approval");
+	approve(restored.request);
+	await until(() => getSessionState(created.sessionId).completion?.outcome === "succeeded");
+	expect(readFileSync(join(cwd, "foreground-once.txt"), "utf8")).toBe("x");
+	expect((await sessionResources("workspace", created.sessionId)).subagents).toMatchObject([
+		{ childSessionId: before?.childSessionId, status: "completed" },
+	]);
+	parent.assertComplete();
+	child.assertComplete();
+});
+
+test("revoking project trust blocks a restored foreground child effect and releases its slot", async () => {
+	const revokeTrust = grantProjectWorker();
+	const parent = new ScriptedModel([agentCall(false, "project-worker"), done("parent complete")]);
+	const child = new ScriptedModel([
+		call("bash", { command: "printf x >> revoked-child.txt", timeoutMs: 1000 }, "child-bash"),
+	]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	setExtUiPublisher(() => {});
+	const running = promptSession(created.sessionId, "Delegate to the project role");
+	await until(() => getSessionState(created.sessionId).needsInput?.kind === "dialog");
+	await removeSession(created.sessionId);
+	await running;
+	revokeTrust();
+	await getSessionMessages(created.sessionId, "workspace", cwd);
+	const restored = getSessionState(created.sessionId).needsInput;
+	if (restored?.kind !== "dialog") throw new Error("Missing restored approval");
+	approve(restored.request);
+	await until(() => getSessionState(created.sessionId).completion?.outcome === "succeeded");
+	expect(existsSync(join(cwd, "revoked-child.txt"))).toBe(false);
+	expect((await sessionResources("workspace", created.sessionId)).subagents).toMatchObject([
+		{ roleName: "project-worker", status: "error" },
+	]);
+	expect(child.calls).toHaveLength(1);
 });
 
 test("invalid child-agent input returns an error result without starting a child", async () => {
@@ -914,6 +987,55 @@ test("disabling a subagent role stops its queued run without stopping its runnin
 			.sort();
 		return statuses.join(",") === "aborted,completed";
 	});
+	expect(child.calls).toHaveLength(1);
+});
+
+test("revoking project trust blocks its queued role before any child model request", async () => {
+	const revokeTrust = grantProjectWorker();
+	const parent = new ScriptedModel([
+		modelResponse(
+			["a", "b"].map((callId) =>
+				functionCall(
+					"Agent",
+					JSON.stringify({
+						subagent_type: "project-worker",
+						task: callId,
+						run_in_background: true,
+					}),
+					{ callId },
+				),
+			),
+		),
+		done("waiting"),
+		done("noted"),
+	]);
+	const gate = Promise.withResolvers<void>();
+	const child = new ScriptedModel([
+		modelResponder(async () => {
+			await gate.promise;
+			return [assistantMessage("running child completed")];
+		}),
+	]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	let queuedId: string | undefined;
+	let runningId: string | undefined;
+	try {
+		await promptSession(created.sessionId, "Delegate twice to the project role");
+		const { subagents } = await sessionResources("workspace", created.sessionId);
+		queuedId = subagents.find((entry) => entry.status === "queued")?.childSessionId;
+		runningId = subagents.find((entry) => entry.status === "running")?.childSessionId;
+		expect(queuedId).toBeDefined();
+		expect(runningId).toBeDefined();
+		revokeTrust();
+	} finally {
+		gate.resolve();
+	}
+	if (!queuedId || !runningId) throw new Error("Missing child identities");
+	const denied = queuedId;
+	const admitted = runningId;
+	await until(() => readSessionRecord(denied)?.childRun?.status === "aborted");
+	expect(readSessionRecord(admitted)?.childRun?.status).toBe("completed");
 	expect(child.calls).toHaveLength(1);
 });
 

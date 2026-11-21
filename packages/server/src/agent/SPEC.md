@@ -356,9 +356,12 @@ IDs, usage and receipt together after checking the unchanged revision.
 
 The catalog and the ordinary SDK Agent tool resolve the same built-in, personal, and trusted
 project definitions in the same order. The catalog projects display fields and omits the system
-prompt and file path. A globally disabled role is omitted from the advertised roster and rejected
-at call admission and queue admission. A role toggle leaves running children and the independent
-Plan review path alone.
+prompt and file path. The advertised roster omits globally disabled roles. A new child call and a
+queued child entering execution both require the role to be enabled and, for a project role, current
+project resource trust. Foreground approval resumes the already-started child by its persisted
+tool-call identity and model and still checks current project resource trust. Changing role
+availability does not interrupt that continuation. The independent Plan review path has its own
+policy.
 
 ## Preserved Skills and delegation policies
 

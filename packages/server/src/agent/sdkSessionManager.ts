@@ -1141,13 +1141,17 @@ function subagentsAllowed(entry: Entry): boolean {
 		(workspace?.subagentsOverride !== "off" && loadConfig().subagentsEnabled)
 	);
 }
+function hasTrustedProjectResources(projectId: string | null | undefined): boolean {
+	return (
+		projectId != null &&
+		loadProjects().find((project) => project.id === projectId)?.resourceTrust === "granted"
+	);
+}
 function discoverWorkspaceAgents(cwd: string, projectId: string | undefined): AgentDefinition[] {
 	return discoverAgentDefinitions({
 		cwd,
 		agentDir: dataDir(),
-		includeProject:
-			projectId !== undefined &&
-			loadProjects().find((project) => project.id === projectId)?.resourceTrust === "granted",
+		includeProject: hasTrustedProjectResources(projectId),
 	});
 }
 
@@ -1163,10 +1167,15 @@ export function listSubagentCatalog(cwd = dataDir(), projectId?: string): Subage
 	);
 }
 
-function assertSubagentEnabled(name: string): void {
-	if (loadConfig().disabledSubagents.includes(name)) {
-		throw new Error(`Child agent "${name}" is disabled`);
-	}
+function assertProjectRoleTrust(definition: AgentDefinition, workspaceId: string): void {
+	if (definition.source === "project" && !projectResourcesTrusted(workspaceId))
+		throw new Error("Project resources are not trusted");
+}
+
+function assertSubagentAdmission(definition: AgentDefinition, workspaceId: string): void {
+	if (loadConfig().disabledSubagents.includes(definition.name))
+		throw new Error(`Child agent "${definition.name}" is disabled`);
+	assertProjectRoleTrust(definition, workspaceId);
 }
 
 function childSummary(record: SessionRecord): SubagentResourceSummary {
@@ -1276,7 +1285,7 @@ async function acquireChildSlot(child: Entry, signal: AbortSignal): Promise<void
 			signal.throwIfAborted();
 			if (metadata.purpose !== "review") {
 				if (!subagentsAllowed(parent)) throw new Error("Child agents are disabled");
-				assertSubagentEnabled(metadata.definition.name);
+				assertSubagentAdmission(metadata.definition, parent.store.record.workspaceId);
 			}
 			const workspace = loadWorkspaces().find(
 				(item) => item.id === parent.store.record.workspaceId,
@@ -1519,31 +1528,6 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 				assertActive(entry, run);
 				if (!subagentsAllowed(entry)) throw new Error("Child agents are disabled");
 				if (!details?.toolCall) throw new Error("Child call identity is required");
-				const definition = definitions.find((item) => item.name === args.subagent_type);
-				if (!definition) throw new Error("Unknown child agent definition");
-				assertSubagentEnabled(definition.name);
-				if (
-					definition.source === "project" &&
-					loadProjects().find((item) => item.id === projectOf(entry.store.record.workspaceId))
-						?.resourceTrust !== "granted"
-				)
-					throw new Error("Project resources are not trusted");
-				const available = await listAvailableModels();
-				assertActive(entry, run);
-				assertSubagentEnabled(definition.name);
-				const mapped = toSpawnMapping(definition, {
-					cwd: entry.store.record.cwd,
-					availableModels: available,
-					...(args.model ? { model: args.model } : {}),
-				});
-				const model = mapped.session.model
-					? available.find(
-							(item) =>
-								item.id === mapped.session.model?.id &&
-								item.provider === mapped.session.model.provider,
-						)
-					: entry.store.record.model;
-				if (!model) throw new Error("Child model is unavailable");
 				const toolCallId = details.toolCall.callId;
 				let record = childRecords(entry).find((item) => item.childRun?.toolCallId === toolCallId);
 				let child: Entry;
@@ -1551,14 +1535,34 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 					child = sessions.get(record.sessionId) ?? { store: new PersistentSession(record) };
 					sessions.set(record.sessionId, child);
 				} else {
+					const definition = definitions.find((item) => item.name === args.subagent_type);
+					if (!definition) throw new Error("Unknown child agent definition");
+					const { workspaceId, cwd } = entry.store.record;
+					assertSubagentAdmission(definition, workspaceId);
+					const available = await listAvailableModels();
+					assertActive(entry, run);
+					assertSubagentAdmission(definition, workspaceId);
+					const mapped = toSpawnMapping(definition, {
+						cwd,
+						availableModels: available,
+						...(args.model ? { model: args.model } : {}),
+					});
+					const model = mapped.session.model
+						? available.find(
+								(item) =>
+									item.id === mapped.session.model?.id &&
+									item.provider === mapped.session.model.provider,
+							)
+						: entry.store.record.model;
+					if (!model) throw new Error("Child model is unavailable");
 					const created = await createSession({
-						cwd: entry.store.record.cwd,
-						workspaceId: entry.store.record.workspaceId,
+						cwd,
+						workspaceId,
 						model,
 						thinkingLevel: mapped.session.thinkingLevel ?? entry.store.record.thinkingLevel,
 						childRun: {
 							parentSessionId: entry.store.record.sessionId,
-							toolCallId: details.toolCall.callId,
+							toolCallId,
 							task: args.task,
 							definition: { ...definition, systemPrompt: mapped.session.systemPrompt },
 							enabledExtensions: snapshotSdkExtensions(
@@ -1646,6 +1650,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 				try {
 					if (metadata.status === "queued")
 						await acquireChildSlot(child, childRun.controller.signal);
+					else assertProjectRoleTrust(metadata.definition, record.workspaceId);
 					if (!child.store.record.messages.some((message) => message.role === "user"))
 						child.store.update((current) => {
 							current.messages.push({
@@ -1656,6 +1661,8 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 							});
 							current.state = { ...idleState(), execution: "running", runId: childRun.id };
 						});
+					const model = child.store.record.model;
+					if (!model) throw new Error("Child model is unavailable");
 					const agent = await buildSessionAgent(child, childRun, model);
 					childDiagnostics = attachAgentDiagnostics(
 						agent,
@@ -2952,10 +2959,7 @@ function attachToolGuardrails(
 }
 
 function projectResourcesTrusted(workspaceId: string): boolean {
-	return (
-		loadProjects().find((project) => project.id === projectOf(workspaceId))?.resourceTrust ===
-		"granted"
-	);
+	return hasTrustedProjectResources(projectOf(workspaceId));
 }
 
 function assertHandoffGraphCurrent(entry: Entry): void {
