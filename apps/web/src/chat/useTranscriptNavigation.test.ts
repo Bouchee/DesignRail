@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { localKeys } from "@thinkrail/ui/local-keys";
+import { LOCAL_KEY_DEFAULTS } from "@/keybindings";
 import type { ChatRow } from "./rows";
 import {
 	createTranscriptNavigation,
@@ -120,7 +122,10 @@ function frame() {
 	for (const callback of callbacks) callback(0);
 }
 function configure(scope = "w:s") {
-	nav.configure({ ...options, scope });
+	nav.configure(
+		{ ...options, scope },
+		localKeys(null, "transcript", LOCAL_KEY_DEFAULTS.transcript),
+	);
 }
 function pendingRow() {
 	const a = mount("a");
@@ -200,6 +205,7 @@ beforeEach(() => {
 			latest++;
 		},
 		focusComposer: () => {},
+		waitingQuestion: () => null,
 		fileTarget: (path) => path,
 		openFile: () => {},
 		onCopied: () => {},

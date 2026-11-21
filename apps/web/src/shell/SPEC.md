@@ -18,7 +18,7 @@ The responsive composition root: top-level app chrome, active-project/workspace 
 creation and handoff status; only the initiating client follows a completed continuation. Automatic
 plan-summary generation remains unmounted.
 
-- **Owns:** `Shell` as the one composition root; topbar and persistent location context; active-project/workspace routing; single Settings, analytics-consent, survey-invitation, survey-window, attention-notification permission-preface, and Toaster mounts plus the keyboard-opened Create workspace dialog, the `Mod+K` / double-Shift search palette host and the `Mod+Shift+F` Find in Files host (and the once-mounted attention-notification observer from [[submodule-web-notifications]]); theme application and global shortcuts; focus recovery (*Focus recovery*); the command catalog the palette runs ([[submodule-web-commands]], [[submodule-web-search]]); the injected Layout, Keyboard and optional application Update settings sections; and integration of the workbench engine with store, persistence, panels, transport-backed domain state, and error boundaries.
+- **Owns:** `Shell` as the one composition root; topbar and persistent location context; active-project/workspace routing; Settings, the attention-notification permission preface, Toaster and the keyboard-opened Create workspace dialog, the `Mod+K` / double-Shift search palette host and the `Mod+Shift+F` Find in Files host (and the once-mounted attention-notification observer from [[submodule-web-notifications]]); theme application and global shortcuts; focus recovery (*Focus recovery*) and Escape navigation (*Escape focus ladder*); the command catalog the palette runs ([[submodule-web-commands]], [[submodule-web-search]]); the injected Layout, Keyboard and optional application Update settings sections; and integration of the workbench engine with store, persistence, panels, transport-backed domain state, and error boundaries.
 - **Public surface:** `Shell`.
 - **Allowed deps:** child layout modules; `updates`; `search` + `commands` (the palette and the command contract it composes for it); `keybindings` (the chord table and resolver `useGlobalHotkeys` matches through and the palette's shortcuts read, and the shortcut catalog the cheatsheet renders); `findInFiles` (the window `FindInFilesHost` composes); `extensions` (the enabled extensions whose overlays and shortcut rows it mounts, and every extension's commands it resolves); `panels`; `chat` app-integration hydration/rendering; `store`, `transport`, contracts (types, wire constants, and the shared `createQuitConfirmation` rule), `@thinkrail/ui/*`, `@thinkrail/locales` (UI strings), `i18n` (`useLocaleSync`, mounted once), `components/ErrorBoundary`, `components/QuietScrollArea`, `constants`, `lib`, `themes`, and `clientPreferences` (`markdownOutlinePreference` persists the store's Markdown outline visibility and side per client, through the same adapter `layoutState` uses).
 - **Forbidden:** server/shared/pi imports; being imported by panels/store/transport; putting arrangement knowledge into a feature panel; or sending current frame/view state through transport.
@@ -215,6 +215,7 @@ markers and the guard remains until ChatView consumes this request. Cancellation
 same pending request, never a newer owner's.
 
 `useGlobalHotkeys` remains the one capture-phase owner of app-wide chords. The chords are declared once in the [[submodule-web-keybindings]] table and resolved with the user's overrides and the web extensions' commands; `keybindingState.ts` is the one place that resolves — once per change of the store's `keybindingOverrides` (ignored below `supportsKeybindings`, so an older host runs the defaults) or `disabledExtensions` — and hands the result to the binder (`currentKeybindings()` at event time) and to every reader (`useResolvedKeybindings`, `useKeybindingKeys`, `useKeybindingLabel`). `useGlobalHotkeys` matches through it (`matchKeybinding`, then an id → handler map whose missing handler means unavailable) and the palette shows each chord with `keybindingShortcut` over the same result, so a rebind applies and shows at once. It routes commands through the workbench command surface rather than imperative feature-panel refs:
+`useGlobalHotkeys` remains the one capture-phase owner of app-wide chords. The chords are declared once in the [[submodule-web-keybindings]] table and resolved with the user's overrides and the web extensions' commands; `keybindingState.ts` is the one place that resolves — once per change of the store's `keybindingOverrides` (ignored below `supportsKeybindings`, so an older host runs the defaults) or `disabledExtensions` — and hands the result to the binder (`currentKeybindings()` at event time) and to every reader (`useResolvedKeybindings`, `useKeybindingKeys`, `useKeybindingLabel`). It resolves the local key sets too — `LOCAL_SETS`: the app's `APP_LOCAL_SET` and the resource renderers' `REVIEW_SURFACE_COMMANDS` as a ThinkRail set in scope `review.surface`, with the extensions' scoped commands in the same input — and `selectLocalKeymap`, memoized on the resolved table, is the value `Shell` provides through `@thinkrail/ui/local-keys`' `LocalKeymapProvider` around its whole tree (portals included), so every element's `useLocalKeys` sees a rebind at once. **The binder yields to a focused element's local keys:** `routeHotkey` asks `matchLocal(resolved, localScopesOf(target), event, { textEntry })` first and, on a hit, dispatches no app chord, extension command or history — the element's own handler acts. `shortcutSurface.ts`' `localScopesOf` walks from the focused element outward collecting the app's scope selectors (rail entry, transcript, composer, history overlay, Changes review, review surfaces, palette, Find in Files) and any `[data-key-scope]`, innermost first. The workbench tab strip and the app's tree declare theirs (`data-key-scope="tabs"` on `layout`'s tablist, `"trees"` on `panels`' `Tree`) instead of being matched by ARIA role: the question card's tab chips are ARIA tabs that handle no `tabs.*` command, so a role match made a `tabs.close` rebound onto Mod+L swallow Focus composer there (#1416's review); the cheatsheet's surface map reads the same markers. A scope whose handlers read a shifted press of an unshifted arrow twin as the extending arrow declares `extendsWithShift` ([[submodule-web-keybindings]]), and `matchLocal` yields that variant too, so a global chord on the Shift variant (Shift+Mod+J toggling the bottom panel once `arrows.down` is Mod+J) cannot take a review cursor's or the swipe divider's extension. `useGlobalHotkeys` matches through it (`matchKeybinding`, then an id → handler map whose missing handler means unavailable) and the palette shows each chord with `keybindingShortcut` over the same result, so a rebind applies and shows at once. It routes commands through the workbench command surface rather than imperative feature-panel refs:
 
 - `Ctrl+R` opens chat history for the locally selected chat, or the workspace's most-recent chat fallback; the literal `Ctrl+R` prevents reload during IME composition but does not queue history, while a rebound chord waits composition out like other chords;
 - `Mod+B` toggles the left side, restoring local group/tab attention or an eligible singleton tool;
@@ -230,7 +231,8 @@ same pending request, never a newer owner's.
   only while the store's `shortcutsOpen` is true (`openShortcuts` / `closeShortcuts`); the chord, the
   keyboard icon at the foot of the left tool rail and the palette's *Keyboard shortcuts* row open it. It
   lists the catalog's `shortcutRows` for this client (`desktop` is the native-shortcut bridge read the
-  palette makes) over the resolved table, plus every enabled web extension's commands and `shortcuts` as
+  palette makes) over the resolved table — local keys at their effective chords, a direction row's arrow
+  beside its twin's current letter — plus every enabled web extension's commands and `shortcuts` as
   General rows, as surface
   sections under a filter matching a row's title or key label, with a count beside it ("117 shortcuts",
   "17 of 117" while filtering). A chord that loses to another command is shown struck through after the
@@ -252,10 +254,16 @@ same pending request, never a newer owner's.
 - **Settings → Keyboard is the shortcut editor** (`KeybindingEditor`), injected into `search`'s
   `SearchSettings` under the double-Shift switch. One column of `keybindingList` rows
   ([[submodule-web-keybindings]], *Editor rows and edits*): the catalog by surface, then a section per web
-  extension tagged Extension (and Off, its rows muted but editable, while switched off). Table and
-  extension commands are editable; element keys, desktop rows and display-only chords show a lock.
+  extension tagged Extension (and Off, its rows muted but editable, while switched off). Table, local
+  and extension commands are editable; locked element keys, desktop rows and display-only chords show a
+  lock. Consecutive rows of one local scope sit under a caption, "local · when focus is in a sidebar
+  tree" (an extension scope: "when focus is in {extension}"); a direction row shows its arrow locked,
+  "always works", then its twin's letter as the editable alias (recording there edits the shared twin,
+  so it applies in every element; the four General `arrows.*` rows edit the same commands).
   - **Recording.** Enter or a click on a row's chord button records (`chordFromEvent`, the command's
-    `plain` as `allowPlain`); the row reads "Press a new shortcut… Esc cancels" and keeps focus. A
+    `plain` — true for every local command — as `allowPlain`); the row reads "Press a new shortcut… Esc
+    cancels" ("Press a key or a chord…" on a local row, "Press a new key for the alias…" on a direction
+    row) and keeps focus. A
     modifier alone keeps waiting, AltGraph is ignored, Esc cancels (the button carries
     `data-settings-draft-input`, so Settings stays open), and Tab is not captured: leaving cancels.
     While recording — and while the filter has focus in Search by keys — the editor holds the keyboard
@@ -265,15 +273,26 @@ same pending request, never a newer owner's.
     desktop-native chord, or a press either desktop platform's `shortcutCommands` matcher owns on this
     layout (`isDesktopShortcut`: AZERTY's `KeyZ` Ctrl+W, Russian `Shift+Slash` Ctrl+,) → refused with
     the same desktop message; a chord active on another command (none for a switched-off extension's
-    command, `chordHolder`) → "{chord} is already used by {command}" with Replace / Cancel (Replace writes `assignChord`'s explicit unbind; a browser-reserved
+    command, `chordHolders`) → "{chord} is already used by {command}" with Replace / Cancel (Replace writes `assignChord`'s explicit unbind; a browser-reserved
     chord adds the browser sentence); a plain key an element owns, on a plain command → "{key} also acts in
-    {places}…" with Assign anyway; a browser-reserved chord in a browser → Assign anyway; else it assigns.
-    A chord equal to the defaults drops the override.
+    {places}…" with Assign anyway — also for any global chord a local key holds (`localUses`: "Ctrl+K
+    also acts in sidebar trees…"); a browser-reserved chord in a browser → Assign anyway; else it assigns.
+    A chord equal to the defaults drops the override (kept while a customised twin would win it,
+    `assignChord`). **On a local row** the outcomes are: a navigation
+    primitive → "↓ is a navigation key — locked in every element" (dismiss; the command's own primitive
+    default records); desktop-native as above; a key another command holds inside an element this
+    command acts in (`chordHolders`) → "J is already used by Move down (alias) inside sidebar trees",
+    naming every holder ("X is already used by Search the visible rows inside sidebar trees and Copy the
+    message… inside the chat transcript"), with Replace (clears each) / Cancel; a chord a global command holds (`globalHolder`) → "F runs “{global}” everywhere
+    else; inside sidebar trees it will run “{local}” instead" (no "else" for a modified chord) with Assign
+    anyway; browser-reserved → Assign anyway; else it assigns, and a key other elements also use adds an
+    info note "C also acts in the chat transcript — a different element, so no conflict".
   - **Rows.** A Custom tag and Reset on overridden rows, Reset all, a lost chord struck through with
-    "{chord} is taken by {winner} — inactive" and Assign another (`commandTitle` also names a reserved
+    "{chord} is taken by {winner} — inactive" and Assign another, a mark per element that takes the row's
+    chord over ("Inside sidebar trees, F runs “Search the visible rows”") (`commandTitle` also names a reserved
     chord's catalog-row winner, such as a desktop row a browser does not list). The filter matches title or
-    key label; Search by keys turns it into a recorder whose next chord filters to rows showing it (Esc
-    leaves).
+    key label; Search by keys turns it into a recorder whose next chord — a plain letter or a locked
+    arrow included — filters to rows showing it, local and fixed keys included (Esc leaves).
     ↑/↓ move between rows' chord buttons, one of which is the Tab stop (roving; a row's Reset and Assign
     another are tabbable only on that row); rows carry `data-focus-row` in a `data-focus-list`, and after
     an assignment, Replace, Cancel or Reset focus returns to the row's chord button.
@@ -288,8 +307,9 @@ same pending request, never a newer owner's.
 - **Chords in tooltips.** Every icon button whose action a chord also runs shows the chord's caps after
   its tooltip label (`IconTooltip`'s `shortcut`, [[module-ui]]), computed here from the resolved table
   (`keybindingKeys` / `useKeybindingKeys`, never captured once) and injected into the props-driven layout
-  as `chromeShortcuts`, and into `ProjectTree` (`newWorkspaceShortcut`) and Keyboard settings
-  (`openShortcut`) as props: a pane's Hide shows its side's toggle
+  as `chromeShortcuts`, and into `ProjectTree` (`newWorkspaceShortcut`), Keyboard settings
+  (`openShortcut`), and `ChatView` / `PlanPane` (`landingChord`, the `region.next` label a waiting question
+  names in "… to answer") as props: a pane's Hide shows its side's toggle
   (`Mod+B` / `Mod+J` / `Mod+Shift+J`) only while it is the region's sole expanded pane — with two, Hide
   folds one and the chord hides both — the Projects and Files rail entries show `Mod+0` / `Mod+Shift+E`
   and terminal entries `` Ctrl+` ``; on Project Home the Projects entry and its Hide show `Mod+B`, the
@@ -301,7 +321,8 @@ same pending request, never a newer owner's.
   `data-region-active` attribute imperatively, with no React state; focus outside every region (a modal,
   the palette, a menu portal, `<body>`, a rail button) changes nothing, and a `ResizeObserver` on the
   active root drops the mark when that root unmounts, hides or collapses. It also remembers the last
-  element focused inside each root (a `WeakMap`; the root itself is never remembered). The regions and
+  element focused inside each root (a `WeakMap`; the root itself is never remembered) and the last center
+  group focus entered (the Esc ladder's main area, *Esc climbs to the main area*). The regions and
   the landing rule are [[submodule-web-shell-layout]]'s (*Arrangement and accessibility*); the accent
   line and the frame are [COLOR.md](../styles/COLOR.md)'s (*Active region*). **The frame marks keyboard
   arrivals only**: when the active region changes and the last input was a key, the tracker sets
@@ -318,7 +339,10 @@ same pending request, never a newer owner's.
   shows moves and flashes the destination, so a run of presses walks the ring. Focus on `<body>` or
   outside every region moves at once; with none active, `F6` starts at the top bar and `Shift+F6` at the
   last. The palette's Focus next / previous region rows always move. `Mod+1…9` land in center
-  group N of that order (no group N: nothing, the chord still swallowed). `Mod+L` focuses the attended
+  group N of that order (no group N: nothing, the chord still swallowed). Every landing prefers a focusable
+  `[data-focus-claim]` (`resolveLanding`), so F6 into a chat with a waiting question lands on its current
+  option. Automatic recovery after a control unmounts uses the region's ordinary focus targets and lets
+  the question's own focus claim follow its input rules. `Mod+L` focuses the attended
   chat's composer — `selectHistoryTarget`'s chat (the selected tab of the last-focused center group, else
   the workspace's most recent chat tab), opened through `openChatInTab` first when it is not attended —
   by `requestComposerFocus` once it is. The chat's own history overlay does not count as covering it: the
@@ -384,10 +408,9 @@ same pending request, never a newer owner's.
     itself with `activeLayer()` (hint mode labels the open dialog or menu). A match is
     `preventDefault` + `stopImmediatePropagation`, so neither Radix (document), Monaco nor another window
     listener sees it, and reaches the extension's `onCommand` listeners once per physical press. Only an
-    enabled extension's commands match, and only a mounted overlay listens. An unmodified press whose
-    typed key the focused element's surface already binds (`shortcutSurfaceOf` + `elementKeyUses`: `s` in
-    a tree, `k` in the transcript, on any layout) is left to that element, which is what Settings →
-    Keyboard's element-key warning promises.
+    enabled extension's commands match, and only a mounted overlay listens. A press a focused element's
+    local key holds (by physical key, the binder's local yield above: `S` in a tree, `K` in the
+    transcript) is left to that element, which is what Settings → Keyboard's warnings promise.
   - **The claim.** `claimKeyboard(true)` says the overlay owns every key (hint mode while labels show; the
     Settings → Keyboard recorder claims it the same way);
     until it releases (or the overlay unmounts, which releases for it), `useGlobalHotkeys` dispatches no
@@ -443,6 +466,72 @@ Quit confirmation runs the shared contracts `createQuitConfirmation` rule in bot
 Windows key name) are display-only — the desktop preload owns those chords ([[module-desktop]], *Native page zoom*), so they are in no web table, like
 the native menu's `Mod+,` on the Settings row. The web keeps no zoom state.
 
+## Esc leaves a text field
+
+Hint mode's `F` and every other plain key do nothing in text entry, so a bare Esc in a field moves focus
+out of it (user, 2026-11-16). `escapeLeavesField.ts`, installed once from `Shell` beside the region
+tracker, is one window `keydown` listener in the **bubble** phase. It acts only when all of these hold:
+
+- the key is a bare `Escape` (no Alt, Ctrl, Meta or Shift), no IME composes and no keyboard claim is
+  held (`keyboardClaimed`, so hint mode and the shortcut recorder keep it);
+- the event is not `defaultPrevented`;
+- the target (`composedPath()[0]`) is a text field: a `textarea`, a contenteditable or an `input` of a
+  text-like type (text, search, url, email, number, password, tel) — never a `select`, a checkbox-like
+  input, or anything inside `.monaco-editor` or `.xterm`, which keep their Esc (find widget, suggestions,
+  vim modes, shells and TUI apps);
+- the target is in no dialog, alertdialog or open menu (`shortcutLayers.isInLayer`), where Esc keeps
+  closing the layer.
+
+**Why bubble phase:** every element or layer that already owns Esc runs first and calls
+`preventDefault`, so one press never both closes something and leaves the field. Radix's
+`DismissableLayer` (dialogs, menus, popovers, the Resources inspector) prevents before it dismisses from its
+document-capture listener; the composer's mention / slash menus and slot session, tree search, the inline
+renames, the palette, Find in Files, the history overlay, the review composer and draft card, the ask
+card's note, Other and Discuss fields, the plan page's Add task field, and a running dictation (the first Esc
+stops it, from a `document` bubble listener that always precedes this `window` one; [[submodule-web-speech]])
+prevent in their own handlers. A
+new owner of Esc must call `preventDefault` too.
+
+**Landing** is markup, like focus recovery: inside the field's region (`[data-region]`), the first
+rendered, focusable `[data-focus-claim]` — a waiting question's current option, revealed in its scroller
+(`focusAndReveal`) — else the first focusable `[data-focus-park]` — the chat marks its message feed
+([[submodule-web-chat]]) — else the region root, these two focused with `preventScroll` (`fieldExitTarget`,
+the order `resolveEscapeLanding` pins). So Esc in the chat composer goes to a waiting question, draft or
+not, and to the feed without one, with no composer code. The listener then prevents the default, so a
+search input keeps its text. The workbench group roots are `tabIndex=-1` and draw no ring (`outline-none`): focus
+stays in the same region, whose accent line is the indicator, and nothing inside is selected. The top bar
+and the Project Home pane have neither a park nor a focusable root, so there focus stays in the field
+(their fields all own Esc today: renames and tree search). A root is never remembered by the region tracker, so a later F6,
+`Mod+1…9` or recovery safety net into that region lands by the usual rule (the element last focused
+there, else the default); focus recovery records a parked root like any focus.
+
+## Esc climbs to the main area
+
+The first Esc in a field lands on its region; the next one, on a panel, climbs to the **main area**
+(user, 2026-11-17: the focus home is the chat — its waiting question, else its feed). The same
+`escapeLeavesField.ts` listener takes the second step (`climbsToMain`), under the same guards (bare Esc,
+no IME, no keyboard claim, not `defaultPrevented`, nothing inside `.monaco-editor`, `.xterm` or a dialog or
+open menu), when the target is a **non-text element** — not a text field or a `select` — in a region
+that is not the main area: a side or bottom group (its root, a tree or tree row, a tab strip, a rail, a
+button, the Files or Changes list), the top bar or the Project Home projects pane — or inside an
+auxiliary rail, which sits outside every region and carries `data-esc-ladder` instead (the left, right and
+bottom tool rails; their F6 ring is unchanged). The center's own tab
+strip and actions climb too, into the tab's content (unconfirmed with the user, the recommended answer);
+the center root and anything inside its tabpanel never do, so the parked feed's and an editor's Esc stay
+theirs. The terminal and Monaco keep their Esc; from there F6 or Mod+L.
+
+**The main area** is the last center group focus entered (the region tracker records it), else the
+first shown center group in ring order, else Project Home's main pane (`[data-main-area]`, which is no
+region). Focus lands in it without switching a tab (`mainAreaTarget`): the first focusable
+`[data-focus-claim]` (a waiting question in the visible chat, revealed), else `[data-focus-park]` (the
+chat's feed — not the composer that F6 would land on), else the group's tabpanel by the region rule
+(remembered there, else its `[data-focus-default]` — an editor's input —, else its first tabbable), else
+the region's own landing. With nothing focusable the Esc is left alone. Every element that already uses
+Esc keeps calling `preventDefault` and so wins (dialogs, menus and popovers through Radix, tree search,
+renames, the palette, Find in Files, the history overlay, the review cursor, composer and card, the
+keybinding recorder's claim); an open tooltip closes in window capture without preventing, so its
+button's Esc still climbs. A new owner of Esc in a panel must prevent too.
+
 ## Focus recovery
 
 An action that removes, replaces or disables the focused control must not drop focus to `<body>`.
@@ -475,7 +564,7 @@ after the host's push), else the opener's rows. Resolution, first match wins:
    row, the previous, the list's `data-focus-fallback`, the list's first focusable; then the outermost
    list's enclosing `data-focus-default`.
 4. **Safety net** — the active region's F6 landing target (`regionLandingTarget`, the record's region when
-   the active one is gone); inside a live dialog, its first focusable. A control that sat in no region and
+   the active one is gone; a waiting question's `[data-focus-claim]` wins it, as for F6); inside a live dialog, its first focusable. A control that sat in no region and
    no dialog (a field a page or extension injected into `<body>`) gets no safety net: focus stays where the
    browser put it.
 

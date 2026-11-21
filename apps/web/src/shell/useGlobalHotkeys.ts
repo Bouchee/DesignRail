@@ -4,9 +4,9 @@ import {
 	type KeybindingId,
 	type KeyChord,
 	matchKeybinding,
+	matchLocal,
 	pressesChord,
 	type ResolvedKeybindings,
-	type ShortcutSurface,
 } from "../keybindings";
 import { isTextEntryTarget } from "../lib";
 import { createDoubleShiftDetector } from "../search";
@@ -17,7 +17,7 @@ import { currentKeybindings } from "./keybindingState";
 import { cancelPendingRegionFocus } from "./regions";
 import { matchShortcut, type ShortcutPlatform } from "./shortcutCommands";
 import { hasLayer, isInEditorFind, isInTerminal, MODAL_LAYER_SELECTOR } from "./shortcutLayers";
-import { shortcutSurfaceOf } from "./shortcutSurface";
+import { localScopesOf } from "./shortcutSurface";
 import { nativeShortcutPlatform } from "./useAppShortcuts";
 
 type ChordHandler = (binding: KeybindingId) => void;
@@ -134,7 +134,7 @@ interface HotkeyContext {
 	readonly desktop: ShortcutPlatform;
 	readonly modalOpen: boolean;
 	readonly textEntry: boolean;
-	readonly surface: ShortcutSurface | null;
+	readonly localScopes: readonly string[];
 	readonly inTerminal: boolean;
 	readonly inEditorFind: boolean;
 }
@@ -151,7 +151,9 @@ export function routeHotkey(
 ): HotkeyRoute | null {
 	const { keybindings, inTerminal, inEditorFind } = context;
 	if (matchShortcut(event, context.desktop, () => inTerminal) !== null) return null;
-	const extension = extensionHotkey(event, keybindings, context.textEntry, context.surface);
+	const { textEntry } = context;
+	if (matchLocal(keybindings, context.localScopes, event, { textEntry }) !== null) return null;
+	const extension = extensionHotkey(event, keybindings, textEntry);
 	if (extension) return { kind: "extension", ...extension };
 	const id = globalHotkeyCommand(
 		event,
@@ -203,7 +205,7 @@ export function installGlobalHotkeys(readActions: () => GlobalHotkeyActions): ()
 			desktop,
 			modalOpen: hasOpenModal(),
 			textEntry: isTextEntryTarget(target),
-			surface: shortcutSurfaceOf(target instanceof Element ? target : null),
+			localScopes: localScopesOf(target instanceof Element ? target : null),
 			inTerminal: isInTerminal(event.target),
 			inEditorFind: isInEditorFind(event.target),
 		});

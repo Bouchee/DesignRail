@@ -7,6 +7,7 @@ import {
 import type { MessageKey } from "@thinkrail/locales";
 import { useT } from "@thinkrail/locales/react";
 import { IconButton } from "@thinkrail/ui/button";
+import { LocalKeymapProvider } from "@thinkrail/ui/local-keys";
 import { useEffect, useState } from "react";
 import { useContinuations } from "../chat/continuations";
 import { openFindInFiles } from "../findInFiles";
@@ -63,10 +64,11 @@ import {
 	toggleRightSide,
 } from "./chordActions";
 import { ExtensionOverlays } from "./ExtensionOverlays";
+import { installEscapeLeavesField } from "./escapeLeavesField";
 import { FindInFilesHost } from "./FindInFilesHost";
 import { installFocusRecovery } from "./focusRecovery";
 import { KeybindingEditor } from "./KeybindingEditor";
-import { useKeybindingLabel } from "./keybindingState";
+import { useKeybindingLabel, useLocalKeymap } from "./keybindingState";
 import { LayoutSettings } from "./LayoutSettings";
 import { useLocalLayoutState } from "./layoutState";
 import { LocationBar } from "./locationBar";
@@ -95,6 +97,14 @@ const STATUS_DOT: Record<ConnectionStatus, string> = {
 };
 
 export function Shell() {
+	return (
+		<LocalKeymapProvider value={useLocalKeymap()}>
+			<ShellLayout />
+		</LocalKeymapProvider>
+	);
+}
+
+function ShellLayout() {
 	const t = useT();
 	useLocalLayoutState();
 	useAttentionNotifications();
@@ -203,6 +213,7 @@ export function Shell() {
 	]);
 	useEffect(installRegionTracker, []);
 	useEffect(installFocusRecovery, []);
+	useEffect(installEscapeLeavesField, []);
 	useGlobalHotkeys({
 		onProjects: () => toggleLeftSide(homeProjects.toggle),
 		...(hasActiveWorkspace

@@ -465,6 +465,16 @@ the history overlay's Delete (caret at the end only) and entry menu beside its T
 inspector's inert transcript and the @ popup taking Escape first, Stop returning focus to the composer
 (a replayed `agent_start` on the intercepted wire keeps the chat streaming without an agent), and h/l on
 a tab strip and j/k on a side rail.
+`keyboard-escape.spec.ts` pins the Esc that leaves a text field: from the composer with a draft it parks on
+the feed with no ring (draft, caret and the region's accent line kept), where `F` shows hint labels, a
+second Esc does nothing, ↓ walks to a message and that message's Esc returns to the composer; the @ menu
+takes the first Esc; the TODO rail's input lands on its panel root, from which `F` and `Mod+1` still work;
+a Settings field's Esc still closes Settings; and the terminal's Esc reaches the shell with focus kept. It
+also pins the Esc ladder: the TODO input → its panel → the chat feed (no ring, the center's accent line),
+and a Files row, the chat's own tab and a top-bar button straight to the feed; with a file in the center,
+a Files row, the file's tab and a terminal tab land in its Monaco editor with the tab unchanged, and
+Monaco keeps its Esc; a dialog's button closes the dialog and climbs no further; on Project Home the
+Projects tree lands in the main pane.
 `keyboard-review.spec.ts` pins commenting from the keyboard: Tab onto a Pierre diff lands on its cursor
 proxy (`review-cursor`: a listbox whose single selected option, its `aria-activedescendant`, names the
 line and its place among the stops, while the diff container has no role or tabindex and takes the ring's
@@ -711,9 +721,9 @@ asks for a before/after UI proposal without naming the tool and expects mockup f
 the single shared image strip, the collapsed JSON tree, Full output through the real `mcp.readOutput`
 (a recorded file and an expired one), Sign in deep links into Settings › MCP servers or Providers according
 to the host's reported authentication kind (provider identity remains visible), and the raw-text fallback for a truncated listing; its element shots under `e2e/screenshots/mcp-tool-cards/` are review evidence
-only. Questionnaire coverage uses canonical persisted tool-call/ack fixtures (submitting one exercises the
-restart-repaired response path) to pin six-question rounds beyond four, the docked sheet (stub in the
-transcript, pinned controls around a scrolling body under the 60% cap, restored page, collapse kept across
+only. Questionnaire coverage uses canonical persisted tool-call/ack fixtures to pin six-question rounds
+beyond four, the docked sheet (stub in the
+transcript, pinned controls around a scrolling body under the 70% cap, restored page, collapse kept across
 a chat switch, stub expand-and-focus, the sheet above the composer under an open Resources inspector, the
 receipt left in the transcript after answering, the cap following *Question panel height*), coarse-pointer
 focus, tabs/question/footer at one y across paging and choosing, notes and Other growing in
@@ -725,8 +735,13 @@ stealing the press aimed at a row or Add note below it (`ask-user-question.spec.
 into the fixture repository (removed in `finally`) and pins the question preview and the option pane (HTML,
 before/after, mermaid, none) at one card height, full-screen keys that never page or skip, a file removed
 under its preview, and the picked file's path in the persisted answer. It also checks full-screen comparison,
-synchronized HTML scrolling, focus during view changes, choosing a preview, and read-only comparison
-from the receipt. `plan-ask.spec.ts` adds the same file preview on the plan page. These three specs also run in a **`webkit` Playwright project**: the macOS desktop
+synchronized HTML scrolling, focus during view changes, returning focus to the chosen option after
+selecting a preview, and read-only comparison from the receipt. `ask-keyboard.spec.ts` exercises
+question arrival, rebinding, editor focus, keyboard submission and Skip. Its receipt checks and the
+comparison receipt test verify the browser's current session, run, call, interaction and revision request
+before replaying the corresponding SDK result event. The Host handler tests separately exercise live
+scripted SDK admission and one-time application. `plan-ask.spec.ts` adds the same file preview on the
+plan page. These four specs also run in a **`webkit` Playwright project**: the macOS desktop
 is the system WKWebView, whose Tab skips buttons without an explicit `tabindex` (the regression this lane
 exists for). CI installs WebKit with the system libraries it links, not its media plugins (`.github/SPEC.md`);
 Linux WebKit may not reproduce the macOS Tab rule,

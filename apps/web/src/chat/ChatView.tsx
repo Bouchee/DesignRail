@@ -6,6 +6,7 @@ import {
 	type ThinkingLevel,
 } from "@thinkrail/contracts";
 import { t as translate, useT } from "@thinkrail/locales/react";
+import { focusAndReveal } from "@thinkrail/ui/focus";
 import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useNow } from "@/components/useNow";
@@ -18,6 +19,7 @@ import {
 	selectCatalogModel,
 	selectComposerFocusRequested,
 	selectPickerModels,
+	selectQuestionMayClaimFocus,
 	selectSkillsStale,
 	selectWorkspaceById,
 	toast,
@@ -74,14 +76,18 @@ import { useHistorySearch } from "./useHistorySearch";
 
 const TRY_AGAIN_PROMPT = "Try again.";
 const NOTHING_EXPANDED: Partial<Record<ResourceKind, boolean>> = {};
+const FOCUS_CLAIM = "[data-focus-claim]";
+
 export default function ChatView({
 	sessionId,
 	workspaceId,
 	onOpenFile,
+	landingChord,
 }: {
 	sessionId: string;
 	workspaceId: string;
 	onOpenFile?: ((path: string) => void) | undefined;
+	landingChord: string;
 }) {
 	const t = useT();
 	const sessionExists = useAppStore((s) => s.sessions[sessionId] !== undefined);
@@ -727,6 +733,11 @@ export default function ChatView({
 		else composerRef.current?.openHistory();
 	}, [historyOpenRequest, sessionId, historyOverlayOpen, cycleScope]);
 
+	const mayClaimFocus = useCallback(
+		(toolCallId: string) =>
+			selectQuestionMayClaimFocus(useAppStore.getState(), sessionId, toolCallId),
+		[sessionId],
+	);
 	const composerFocusRequested = useAppStore((s) =>
 		selectComposerFocusRequested(s, workspaceId, sessionId),
 	);
@@ -736,7 +747,8 @@ export default function ChatView({
 		if (!selectComposerFocusRequested(store, workspaceId, sessionId)) return;
 		const request = store.composerFocusRequest;
 		const dismissHistory = request?.dismissHistory === true;
-		store.clearComposerFocusRequest();
+		const waiting = awaitingToolCallIdOf(store.sessions[sessionId]?.hostState ?? null) ?? null;
+		store.serveComposerFocusRequest(sessionId, waiting);
 		if (dismissHistory) {
 			if (store.historyOpenRequest?.sessionId === sessionId) store.clearHistoryOpen();
 			if (historyOverlayOpen) closeHistory();
@@ -747,6 +759,16 @@ export default function ChatView({
 
 	const widgetEntries = Object.entries(extUiWidget);
 	const focusComposer = useCallback(() => composerRef.current?.refocus(), []);
+	const waitingQuestion = useCallback(
+		() => dockTarget?.querySelector<HTMLElement>(FOCUS_CLAIM) ?? null,
+		[dockTarget],
+	);
+	const focusWaitingQuestion = () => {
+		const claim = waitingQuestion();
+		if (!claim) return false;
+		focusAndReveal(claim);
+		return document.activeElement === claim;
+	};
 	// Keep a stable `onTryAgain` identity (it is passed to every transcript row) while always calling the
 	// latest `performSend` closure.
 	const performSendRef = useRef(performSend);
@@ -801,6 +823,9 @@ export default function ChatView({
 					onOpenFile={onOpenFile}
 					workspaceRoot={workspaceRoot}
 					focusComposer={focusComposer}
+					waitingQuestion={waitingQuestion}
+					mayClaimFocus={mayClaimFocus}
+					landingChord={landingChord}
 					onTryAgain={onTryAgain}
 					historyOpen={historyState.open}
 					inspectorOpen={inspectorOpen}
@@ -975,6 +1000,7 @@ export default function ChatView({
 					onSubmit={onSubmit}
 					onAbort={onAbort}
 					onEnterTranscript={() => transcriptRef.current?.focusNewest()}
+					onShiftTabOut={focusWaitingQuestion}
 					onScrollTranscript={(direction) => transcriptRef.current?.scrollPage(direction)}
 					onHistoryOpen={onHistoryOpen}
 					onPickTemplate={onPickTemplate}

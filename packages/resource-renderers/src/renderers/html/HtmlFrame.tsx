@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { FrameFocus } from "../../registry";
 import { useElementSize } from "../../support/useElementSize";
 import { HTML_INTERACTIVE_FRAME_CSP } from "./htmlDocument";
 import {
@@ -50,6 +51,7 @@ function InteractiveIframe({
 	document,
 	token,
 	className,
+	tabIndex,
 	scrollLink,
 	onLeft,
 }: {
@@ -57,6 +59,7 @@ function InteractiveIframe({
 	document: string;
 	token: string;
 	className: string;
+	tabIndex?: number | undefined;
 	scrollLink: ScrollLink | undefined;
 	onLeft: () => void;
 }) {
@@ -95,6 +98,7 @@ function InteractiveIframe({
 			ref={frameRef}
 			title={title}
 			{...INTERACTIVE_FRAME}
+			tabIndex={tabIndex}
 			srcDoc={document}
 			onLoad={onLoad}
 			data-interactive=""
@@ -107,11 +111,13 @@ function StaticIframe({
 	title,
 	document,
 	className,
+	tabIndex,
 	scrollLink,
 }: {
 	title: string;
 	document: string;
 	className: string;
+	tabIndex?: number | undefined;
 	scrollLink: ScrollLink | undefined;
 }) {
 	const attach = useLinkAttachment(scrollLink, false);
@@ -119,6 +125,7 @@ function StaticIframe({
 		<iframe
 			title={title}
 			sandbox={scrollLink ? "allow-same-origin" : ""}
+			tabIndex={tabIndex}
 			srcDoc={document}
 			onLoad={scrollLink ? (event) => attach(event.currentTarget) : undefined}
 			className={className}
@@ -154,6 +161,7 @@ export function HtmlFrame({
 	viewport = "responsive",
 	scrollLink,
 	compact = false,
+	frameFocus = "auto",
 	interactiveToken,
 }: {
 	title: string;
@@ -161,6 +169,7 @@ export function HtmlFrame({
 	viewport?: HtmlViewport;
 	scrollLink?: ScrollLink | undefined;
 	compact?: boolean;
+	frameFocus?: FrameFocus | undefined;
 	interactiveToken?: string | undefined;
 }) {
 	const { ref: boxRef, size } = useElementSize<HTMLDivElement>();
@@ -174,6 +183,7 @@ export function HtmlFrame({
 		"--html-frame-height": `${geometry.height}px`,
 		"--html-frame-scale": String(geometry.scale),
 	} as CSSProperties;
+	const tabIndex = frameFocus === "manual" ? -1 : undefined;
 	const frameClass = fitted
 		? "absolute top-0 left-0 h-[var(--html-frame-height)] w-[var(--html-frame-width)] max-w-none origin-top-left scale-[var(--html-frame-scale)] border-0 bg-container-workspace-bg"
 		: "absolute inset-0 h-full w-full border-0 bg-container-workspace-bg";
@@ -194,6 +204,7 @@ export function HtmlFrame({
 				<StaticIframe
 					title={title}
 					document={document}
+					tabIndex={tabIndex}
 					className={frameClass}
 					scrollLink={scrollLink}
 				/>
@@ -207,6 +218,7 @@ export function HtmlFrame({
 					title={title}
 					document={document}
 					token={interactiveToken}
+					tabIndex={tabIndex}
 					className={frameClass}
 					scrollLink={scrollLink}
 					onLeft={() => setRun((current) => ({ ...current, left: true }))}

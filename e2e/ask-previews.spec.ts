@@ -10,6 +10,7 @@ import {
 	openFixtureProject,
 	openPersistedChat,
 } from "./fixtures/app";
+import { routeQuestionReplies } from "./fixtures/ask";
 import { waitForScrollStability } from "./fixtures/chatScroll";
 import { E2E_FIXTURE_REPO } from "./fixtures/paths";
 import { seedWorkspaceSession } from "./fixtures/sessions";
@@ -330,25 +331,37 @@ async function scrolledTogether(page: Page): Promise<boolean> {
 	return left !== undefined && left > 0 && left === right;
 }
 
-test("the compare overlay flips through the options, scrolls a pair together and chooses without closing", async ({
+test("the compare overlay flips through the options, scrolls a pair together, and Choose picks and closes it", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 1400, height: 1100 });
+	const rounds: { sessionId: string; toolCallId: string; runId: string }[] = [];
+	const replies = await routeQuestionReplies(page, rounds);
 	await openFixtureProject(page);
 	const cleanup = writeMockups(COMPARE_FILES);
 	const session = seedQuestionnaire("compare options", "ask-compare-options", COMPARE_ROUND);
+	rounds.push({
+		sessionId: session.id,
+		toolCallId: "ask-compare-options",
+		runId: "ask-compare-options-run",
+	});
 
 	try {
 		const card = await openRound(page, "compare options");
 		const pane = card.getByTestId("ask-preview");
+		const options = card.getByTestId("ask-option");
 		await expect(pane.getByTestId("html-frame-box")).toBeVisible();
-		await pane.getByTestId("ask-preview-fullscreen").click();
+		await expect(options.first()).toBeFocused();
+		await page.keyboard.press("c");
 		const overlay = page.getByTestId("ask-compare");
 		await expect(overlay).toBeVisible();
 		await expect(overlay.getByTestId("ask-compare-body")).toBeFocused();
 		await expect(overlay.getByTestId("ask-compare-item")).toHaveCount(5);
 		const shown = overlay.getByTestId("ask-compare-pane");
 		await expect(shown).toHaveAttribute("data-item", "option:Sidebar nav (Recommended)");
+		await expect(overlay.getByTestId("ask-compare-legend")).toContainText(
+			"Enter choose and go back",
+		);
 		await page.screenshot({ path: test.info().outputPath("compare-single.png") });
 
 		await page.keyboard.press("ArrowRight");
@@ -358,12 +371,18 @@ test("the compare overlay flips through the options, scrolls a pair together and
 		await page.keyboard.press("ArrowRight");
 		await expect(shown).toHaveAttribute("data-item", "current");
 		await expect(shown.getByTestId("ask-compare-choose")).toHaveCount(0);
+		await page.keyboard.press("Enter");
+		await expect(overlay).toBeVisible();
 
 		await page.keyboard.press("2");
 		await page.keyboard.press("Enter");
-		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
-		await expect(overlay).toBeVisible();
+		await expect(overlay).toBeHidden();
+		await expect(options.first()).toHaveAttribute("data-selected", "true");
+		await expect(options.first()).toBeFocused();
+		await expect(options.first()).toBeInViewport({ ratio: 1 });
 
+		await page.keyboard.press("c");
+		await expect(overlay).toBeVisible();
 		await overlay.getByTestId("ask-compare-view-pair").click();
 		await expect(overlay.getByTestId("ask-compare-left")).toHaveText(/Current/);
 		await expect(overlay.getByTestId("ask-compare-right")).toContainText("Sidebar nav");
@@ -388,20 +407,30 @@ test("the compare overlay flips through the options, scrolls a pair together and
 		await expect.poll(() => clippedHtmlPanes(page)).toEqual([]);
 		await page.screenshot({ path: test.info().outputPath("compare-grid.png") });
 		await overlay.getByTestId("ask-compare-pane-title").nth(2).click();
+		await expect(overlay).toBeVisible();
 		await expect(shown).toHaveAttribute("data-item", "option:Top tabs");
+		await expect(options.first()).toHaveAttribute("data-selected", "true");
 		await page.keyboard.press("ArrowRight");
 		await expect(shown).toHaveAttribute("data-item", "option:Flow first");
 		await page.keyboard.press("ArrowLeft");
-		await shown.getByTestId("ask-compare-choose").click();
-		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
-		await page.keyboard.press("2");
-		await expect(shown).toHaveAttribute("data-item", "option:Sidebar nav (Recommended)");
-		await page.keyboard.press("Enter");
-		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
+		await expect(shown).toHaveAttribute("data-item", "option:Top tabs");
 
-		await page.keyboard.press("Escape");
+		await overlay.getByTestId("ask-compare-view-pair").click();
+		await expect(overlay.getByTestId("ask-compare-right")).toContainText("Top tabs");
+		await overlay.getByTestId("ask-compare-pair-bar").getByTestId("ask-compare-choose").click();
 		await expect(overlay).toBeHidden();
-		const options = card.getByTestId("ask-option");
+		await expect(options.nth(1)).toHaveAttribute("data-selected", "true");
+		await expect(options.first()).toHaveAttribute("data-selected", "false");
+		await expect(options.nth(1)).toBeFocused();
+
+		await page.keyboard.press("c");
+		await expect(overlay).toBeVisible();
+		await overlay.getByTestId("ask-compare-view-grid").click();
+		await expect(overlay.getByTestId("ask-compare-pane")).toHaveCount(5);
+		await overlay.getByTestId("ask-compare-body").focus();
+		await page.keyboard.press("ArrowLeft");
+		await page.keyboard.press("Enter");
+		await expect(overlay).toBeHidden();
 		await expect(options.first()).toHaveAttribute("data-selected", "true");
 		await expect(options.first()).toBeFocused();
 
@@ -451,6 +480,7 @@ test("an answered questionnaire opens the chosen preview in a read-only comparis
 		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
 		await expect(overlay.getByTestId("ask-compare-choose")).toHaveCount(0);
 		await expect(overlay.getByTestId("ask-compare-legend")).toContainText("Esc close");
+		expect(replies).toHaveLength(1);
 	} finally {
 		rmSync(session.path, { force: true });
 		cleanup();

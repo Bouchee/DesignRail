@@ -166,7 +166,8 @@ function TranscriptFeed({
 			aria-label={t("chat.transcript.label")}
 			tabIndex={-1}
 			data-transcript-feed
-			className="focus-visible:focus-ring-inset"
+			data-focus-park
+			className="outline-none"
 		>
 			{children}
 		</div>
@@ -226,6 +227,9 @@ const ChatTranscript = forwardRef<
 		onOpenFile?: ((path: string) => void) | undefined;
 		workspaceRoot: string | undefined;
 		focusComposer: () => void;
+		waitingQuestion: () => HTMLElement | null;
+		mayClaimFocus: ChatActions["mayClaimFocus"];
+		landingChord: string;
 		openSubagentTranscript?: ((childSessionId: string | null) => void) | undefined;
 		resultOpener?: ChatActions["resultOpener"];
 		onTryAgain: () => void;
@@ -247,6 +251,9 @@ const ChatTranscript = forwardRef<
 		onOpenFile,
 		workspaceRoot,
 		focusComposer,
+		waitingQuestion,
+		mayClaimFocus,
+		landingChord,
 		openSubagentTranscript,
 		resultOpener,
 		onTryAgain,
@@ -492,6 +499,7 @@ const ChatTranscript = forwardRef<
 		leaveFollow,
 		scrollToLatest,
 		focusComposer,
+		waitingQuestion,
 		fileTarget: (path) => (onOpenFile ? workspaceFileTarget(path, workspaceRoot) : null),
 		openFile: (target) => onOpenFile?.(target),
 		onCopied: () => toast.success(t("common.copied")),
@@ -770,6 +778,9 @@ const ChatTranscript = forwardRef<
 		() => ({
 			cancelAutomaticReveal,
 			focusComposer,
+			focusToolCall: navigation.parkOnToolCall,
+			mayClaimFocus,
+			landingChord,
 			openSubagentTranscript,
 			respondToTool: (toolCallId: string, response: unknown) =>
 				respondToTool(sessionId, toolCallId, response),
@@ -805,6 +816,9 @@ const ChatTranscript = forwardRef<
 			continuationOf,
 			findModel,
 			focusComposer,
+			landingChord,
+			mayClaimFocus,
+			navigation,
 			openMcpSettings,
 			openProviderSettings,
 			openSubagentTranscript,

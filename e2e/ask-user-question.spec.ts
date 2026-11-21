@@ -220,7 +220,11 @@ test("the keyboard alone reaches every control in a two-page questionnaire", asy
 			await expect(card.getByTestId(target)).toBeFocused();
 		}
 		await page.keyboard.press("ArrowUp");
+		await expect(card.getByTestId("ask-skip")).toBeFocused();
+		await page.keyboard.press("ArrowUp");
 		await expect(card.getByTestId("ask-custom")).toBeFocused();
+		await page.keyboard.press("ArrowDown");
+		await expect(card.getByTestId("ask-skip")).toBeFocused();
 		await page.keyboard.press("ArrowDown");
 		await expect(card.getByTestId("ask-continue")).toBeFocused();
 		await page.keyboard.press("Enter");
@@ -319,7 +323,7 @@ test("a tall questionnaire docks above the composer with pinned controls and a s
 			"ask-dock-body",
 		]);
 		const chatHeight = (await box(page.getByTestId("chat-view"))).height;
-		expect((await box(dock)).height).toBeLessThanOrEqual(chatHeight * 0.6 + 1);
+		expect((await box(dock)).height).toBeLessThanOrEqual(chatHeight * 0.7 + 1);
 		expect((await box(dock)).y + (await box(dock)).height).toBeLessThanOrEqual(
 			(await box(page.getByTestId("chat-input"))).y,
 		);
@@ -737,7 +741,7 @@ test("Other, notes and Discuss park on their own keyboard row", async ({ page })
 		await page.keyboard.press("End");
 		await expect(custom).toBeFocused();
 		await page.keyboard.press("ArrowDown");
-		await expect(options.first()).toBeFocused();
+		await expect(card.getByTestId("ask-skip")).toBeFocused();
 		await page.keyboard.press("ArrowUp");
 		await expect(custom).toBeFocused();
 
@@ -751,7 +755,11 @@ test("Other, notes and Discuss park on their own keyboard row", async ({ page })
 		await page.keyboard.press("Escape");
 		await expect(customRow).toBeFocused();
 		await page.keyboard.press("ArrowDown");
+		await expect(card.getByTestId("ask-skip")).toBeFocused();
+		await page.keyboard.press("ArrowDown");
 		await expect(card.getByTestId("ask-submit")).toBeFocused();
+		await page.keyboard.press("ArrowUp");
+		await expect(card.getByTestId("ask-skip")).toBeFocused();
 		await page.keyboard.press("ArrowUp");
 		await expect(custom).toBeFocused();
 
@@ -1135,7 +1143,7 @@ test("the question panel height follows the chat setting", async ({ page }) => {
 		await enterDefaultWorkspace(page);
 		await hideAuxiliaryWorkbench(page);
 		const input = await openChatSettings(page);
-		await expect(input).toHaveValue("60");
+		await expect(input).toHaveValue("70");
 		await input.fill("30");
 		await expect(page.getByTestId("question-panel-height-error")).toHaveText(
 			"Enter a whole number from 40 to 100.",
@@ -1155,7 +1163,7 @@ test("the question panel height follows the chat setting", async ({ page }) => {
 	} finally {
 		if (!page.isClosed()) {
 			const input = await openChatSettings(page);
-			if ((await input.inputValue()) !== "60") await saveQuestionPanelHeight(input, 60);
+			if ((await input.inputValue()) !== "70") await saveQuestionPanelHeight(input, 70);
 			await closeSettingsDialog(page);
 		}
 		rmSync(session.path, { force: true });

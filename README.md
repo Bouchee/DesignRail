@@ -19,12 +19,12 @@ F6 first highlights the current region, then cycles regions while the frame is v
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
 palette offers these actions and desktop zoom controls. Controls that disappear or become disabled
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
-Mod+? opens a filterable keyboard reference with columns that adapt to the window. It is also available from the left rail. Settings → Keyboard edits app and extension shortcuts and imports or exports them as JSON.
+Mod+? opens a filterable keyboard reference with columns that adapt to the window. It is also available from the left rail. Settings → Keyboard edits app, extension and element shortcuts and imports or exports them as JSON.
 Tooltips show each button’s shortcut. The reference starts with the surface you were using.
 In a review, Tab to the diff, use arrows to pick a line or region, and press Enter to comment.
 Press F outside text entry to label clickable controls in Hint mode, or S in a sidebar tree to filter its rows.
 From the chat input, Mod+Up enters transcript navigation; arrows or H/J/K/L walk messages and tools,
-C copies, O opens a tool’s file, and Escape returns to the input. History entries offer keyboard menus.
+C copies and O opens a tool’s file. Escape leaves a text field and moves from a side panel back to the main area. History entries offer keyboard menus.
 Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command
 palette and keyboard shortcuts share the same split, move, close and arrangement actions.
 
@@ -56,7 +56,8 @@ dock can fold while work continues; inspect an MCP server for its status and thi
 Open workspace HTML in your browser from its preview, tab, or Files menu. Browser workbench
 mockup previews can run inline behavior in an isolated frame without network access. Desktop previews
 show the static version.
-Compare question option previews full screen, side by side or in a grid, and choose an option from the preview.
+Use F6 to reach a waiting question. Answer it with the keyboard, or compare its option previews
+individually, side by side or in a grid. Choosing an option closes the preview and returns to the question.
 Plan review uses an independent SDK child with a validated verdict saved in its read-only transcript.
 Plan and Review show the recorded outcome and findings. Finish or stop pending reviews before updating;
 older pending review checkpoints stop explicitly.

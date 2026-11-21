@@ -667,10 +667,20 @@ test("an older or malformed config loads the default question panel height", () 
 		JSON.stringify({ ...DEFAULT_CONFIG, questionPanelHeight: 150 }),
 	);
 	resetConfigCache();
-	expect(getConfig().questionPanelHeight).toBe(60);
+	expect(getConfig().questionPanelHeight).toBe(70);
 
 	const { questionPanelHeight: _omitted, ...older } = DEFAULT_CONFIG;
 	writeFileSync(join(dataDir, "config.json"), JSON.stringify(older));
+	resetConfigCache();
+	expect(getConfig().questionPanelHeight).toBe(70);
+	expect(getConfig()).toEqual(DEFAULT_CONFIG);
+});
+
+test("an explicitly saved question panel height of 60 survives the change of default", () => {
+	writeFileSync(join(dataDir, "config.json"), JSON.stringify({ questionPanelHeight: 60 }));
+	resetConfigCache();
+	expect(getConfig().questionPanelHeight).toBe(60);
+	updateConfig({ theme: "acme.dark" });
 	resetConfigCache();
 	expect(getConfig().questionPanelHeight).toBe(60);
 });

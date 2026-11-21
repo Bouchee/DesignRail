@@ -38,6 +38,10 @@ const FLASH_MS = 1500;
 const STILL_FLASH_MS = 1000;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const FOCUS_DEFAULT_SELECTOR = "[data-focus-default]";
+export const FOCUS_CLAIM_SELECTOR = "[data-focus-claim]";
+const FOCUS_PARK_SELECTOR = "[data-focus-park]";
+const MAIN_AREA_SELECTOR = "[data-main-area]";
+const GROUP_PANEL_SELECTOR = ':scope > [role="tabpanel"]';
 const SELECTED_TAB_SELECTOR = '[role="tab"][aria-selected="true"]';
 const ROVING_ITEM_SELECTOR = '[role="treeitem"], [role="tab"]';
 const STALE_TRANSCRIPT_ITEM_SELECTOR = "[data-transcript-item]:not([data-transcript-current])";
@@ -48,6 +52,7 @@ const BUSY_SELECTOR = '[aria-busy="true"]';
 
 let activeRegion: HTMLElement | null = null;
 let previousRegion: HTMLElement | null = null;
+let lastCenterRegion: HTMLElement | null = null;
 let regionObserver: ResizeObserver | null = null;
 const lastFocused = new WeakMap<HTMLElement, HTMLElement>();
 let cancelReady: (() => void) | null = null;
@@ -106,14 +111,46 @@ function defaultTarget(container: HTMLElement): HTMLElement | null {
 	return null;
 }
 
-function landingTarget(region: HTMLElement): HTMLElement | null {
-	const remembered = rememberedIn(region);
-	if (remembered) return remembered;
-	const preferred = defaultTarget(region);
-	if (preferred) return preferred;
-	const tab = region.querySelector<HTMLElement>(SELECTED_TAB_SELECTOR);
-	if (tab && canFocus(tab)) return tab;
-	return focusTarget(region);
+export interface LandingLookup<T> {
+	claim(): T | null;
+	remembered(): T | null;
+	preferred(): T | null;
+	selectedTab(): T | null;
+	first(): T | null;
+}
+
+export function resolveLanding<T>(lookup: LandingLookup<T>): T | null {
+	return (
+		lookup.claim() ??
+		lookup.remembered() ??
+		lookup.preferred() ??
+		lookup.selectedTab() ??
+		lookup.first()
+	);
+}
+
+function firstFocusableIn(container: HTMLElement, selector: string): HTMLElement | null {
+	for (const candidate of container.querySelectorAll<HTMLElement>(selector)) {
+		if (canFocus(candidate)) return candidate;
+	}
+	return null;
+}
+
+function claimIn(region: HTMLElement): HTMLElement | null {
+	return firstFocusableIn(region, FOCUS_CLAIM_SELECTOR);
+}
+
+function landingTarget(region: HTMLElement, includeClaim = true): HTMLElement | null {
+	return resolveLanding({
+		claim: () => (includeClaim ? claimIn(region) : null),
+		remembered: () => rememberedIn(region),
+		preferred: () => defaultTarget(region),
+		selectedTab: () => {
+			const tab = region.querySelector<HTMLElement>(SELECTED_TAB_SELECTOR);
+			return tab && canFocus(tab) ? tab : null;
+		},
+		first: () => focusTarget(region),
+	});
 }
 
 const WORKBENCH_REGION_KINDS: ReadonlySet<string> = new Set<RegionKind>([
@@ -136,11 +173,49 @@ export function regionLandingTarget(lastRegion: HTMLElement | null): HTMLElement
 			: lastRegion && isShown(lastRegion)
 				? lastRegion
 				: null;
-	return region ? landingTarget(region) : null;
+	return region ? landingTarget(region, false) : null;
 }
 
 function focusInsideTarget(container: HTMLElement): HTMLElement | null {
 	return rememberedIn(container) ?? defaultTarget(container) ?? focusTarget(container);
+}
+
+export interface EscapeLandingLookup<T> {
+	claim(): T | null;
+	park(): T | null;
+	rest(): T | null;
+}
+
+export function resolveEscapeLanding<T>(lookup: EscapeLandingLookup<T>): T | null {
+	return lookup.claim() ?? lookup.park() ?? lookup.rest();
+}
+
+export function fieldExitTarget(region: HTMLElement): HTMLElement | null {
+	return resolveEscapeLanding({
+		claim: () => claimIn(region),
+		park: () => firstFocusableIn(region, FOCUS_PARK_SELECTOR),
+		rest: () => (canFocus(region) ? region : null),
+	});
+}
+
+function mainArea(): HTMLElement | null {
+	if (lastCenterRegion && isShown(lastCenterRegion)) return lastCenterRegion;
+	const center = shownRegions().find((region) => region.dataset.regionKind === "center");
+	if (center) return center;
+	const pane = document.querySelector<HTMLElement>(MAIN_AREA_SELECTOR);
+	return pane && isShown(pane) ? pane : null;
+}
+
+export function mainAreaTarget(): HTMLElement | null {
+	const area = mainArea();
+	if (!area) return null;
+	const content = area.querySelector<HTMLElement>(GROUP_PANEL_SELECTOR) ?? area;
+	return resolveEscapeLanding({
+		claim: () => claimIn(content),
+		park: () => firstFocusableIn(content, FOCUS_PARK_SELECTOR),
+		rest: () =>
+			focusInsideTarget(content) ?? (area.matches(REGION_SELECTOR) ? landingTarget(area) : null),
+	});
 }
 
 export function regionKeyAction(state: {
@@ -192,6 +267,7 @@ export function installRegionTracker(): () => void {
 		const region = target.closest<HTMLElement>(REGION_SELECTOR);
 		if (!region) return;
 		if (target !== region) lastFocused.set(region, target);
+		if (region.dataset.regionKind === "center") lastCenterRegion = region;
 		const from = activeRegion;
 		setActiveRegion(region);
 		if (flashesOnArrival(from, region, keyboardIntent)) flashRegion(region);
@@ -213,6 +289,7 @@ export function installRegionTracker(): () => void {
 		setActiveRegion(null);
 		keyboardIntent = false;
 		previousRegion = null;
+		lastCenterRegion = null;
 		regionObserver?.disconnect();
 		regionObserver = null;
 	};

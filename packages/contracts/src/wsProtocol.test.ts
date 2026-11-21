@@ -368,7 +368,7 @@ test("workspace path resolution is pinned to v122", () => {
 test("the question panel height setting is pinned to v114", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(QUESTION_PANEL_PROTOCOL_VERSION);
 	expect(QUESTION_PANEL_PROTOCOL_VERSION).toBe(114);
-	expect(DEFAULT_CONFIG.questionPanelHeight).toBe(60);
+	expect(DEFAULT_CONFIG.questionPanelHeight).toBe(70);
 });
 
 test("continue in workspace is pinned to v110", () => {
