@@ -9,6 +9,7 @@ export function SettingsDisclosure({
 	summary,
 	expanded,
 	testId,
+	settingId,
 	onToggle,
 	children,
 }: {
@@ -16,6 +17,7 @@ export function SettingsDisclosure({
 	summary: string;
 	expanded: boolean;
 	testId: string;
+	settingId?: string;
 	onToggle: () => void;
 	children: ReactNode;
 }) {
@@ -27,6 +29,9 @@ export function SettingsDisclosure({
 				onClick={onToggle}
 				aria-expanded={expanded}
 				data-testid={testId}
+				data-setting-id={settingId}
+				data-setting-row={settingId ?? testId}
+				data-setting-stop=""
 				className="flex w-full items-center gap-8 py-12 text-left transition-colors focus-visible:focus-ring-inset"
 			>
 				<span className="flex-1 tr-text-ui text-text-default">{label}</span>

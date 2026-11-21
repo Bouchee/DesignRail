@@ -15,7 +15,7 @@ async function restoreChatWidthBounded(page: Page): Promise<void> {
 		await bounded.click();
 		await expect(bounded).toHaveAttribute("data-active", "true");
 	}
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 }
 
 const BASE_TS = 1_700_910_000_000;
@@ -129,7 +129,7 @@ test("an unbounded transcript keeps the user message within the visible pane", a
 		await expect(bounded).toHaveAttribute("data-active", "true");
 		await bounded.click();
 		await expect(bounded).toHaveAttribute("data-active", "false");
-		await page.keyboard.press("Escape");
+		await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 
 		const scroll = page.getByTestId("chat-transcript-scroll");
 		// The row is wider than the pane (unbounded still scrolls horizontally for wide content).

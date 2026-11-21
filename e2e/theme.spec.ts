@@ -46,7 +46,7 @@ async function readThemeOptions(page: Page): Promise<ThemeOption[]> {
 				active: node.getAttribute("data-active") === "true",
 			})),
 		);
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 	return options;
 }
@@ -55,7 +55,7 @@ async function pickTheme(page: Page, theme: string): Promise<void> {
 	const dialog = await openThemeList(page);
 	await dialog.locator(`[data-theme-id="${theme}"]`).click();
 	await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 }
 
@@ -72,7 +72,7 @@ async function restoreSystemPairLight(
 	await trigger.click();
 	await page.getByTestId(`system-theme-light-option-${light}`).click();
 	await dialog.getByTestId(`theme-mode-${fixedAppearance}`).click();
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 }
 

@@ -22,7 +22,11 @@ export function SearchSettings({
 						: t("settings.keyboard.introUnbound")}
 				</p>
 			</div>
-			<div className="flex items-start justify-between gap-16">
+			<div
+				data-setting-row="double-shift"
+				data-setting-id="double-shift"
+				className="flex items-start justify-between gap-16"
+			>
 				<div className="flex flex-col gap-4">
 					<span className="tr-text-ui text-text-default">{t("settings.keyboard.doubleShift")}</span>
 					<span className="tr-text-metadata text-text-muted">

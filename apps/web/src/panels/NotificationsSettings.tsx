@@ -87,6 +87,7 @@ export function NotificationsSettings() {
 	return (
 		<div data-testid="settings-notifications" className={SETTINGS_ROWS_CONTAINER}>
 			<SettingsRow
+				settingId="notifications-enabled"
 				label={t("settings.notifications.enable")}
 				description={
 					channelKind === "os"

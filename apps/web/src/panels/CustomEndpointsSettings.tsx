@@ -417,6 +417,7 @@ export function CustomEndpointsSettings({
 		<SettingsGroup
 			title={t("settings.customEndpoints.title")}
 			description={t("settings.customEndpoints.description")}
+			settingId="custom-servers"
 			testId="settings-custom-endpoints"
 		>
 			{failed ? (

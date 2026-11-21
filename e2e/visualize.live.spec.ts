@@ -14,7 +14,7 @@ async function setVisualizeEnabled(page: Page, enabled: boolean): Promise<void> 
 	const toggle = page.getByTestId("extension-toggle-visualize");
 	if ((await toggle.getAttribute("data-active")) !== String(enabled)) await toggle.click();
 	await expect(toggle).toHaveAttribute("data-active", String(enabled));
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 }
 

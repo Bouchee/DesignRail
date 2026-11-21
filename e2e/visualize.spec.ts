@@ -104,7 +104,7 @@ async function pickTheme(page: Page, id: string): Promise<void> {
 	const dialog = await openAppearance(page);
 	await dialog.locator(`[data-theme-id="${id}"]`).click();
 	await expect(page.locator("html")).toHaveAttribute("data-theme", id);
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 }
 
@@ -268,7 +268,7 @@ test("tool diagrams and assistant mermaid fences rerender with the host appearan
 		(option) => option.appearance === (current.appearance === "dark" ? "light" : "dark"),
 	);
 	if (!opposite) throw new Error("No opposite appearance theme");
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 
 	try {

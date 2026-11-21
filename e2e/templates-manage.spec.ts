@@ -41,7 +41,7 @@ test.describe("templates management", () => {
 			}
 			await expect(offer).toHaveCount(0);
 
-			await page.keyboard.press("Escape");
+			await settingsDialog.getByRole("button", { name: "Close" }).click();
 			await expect(settingsDialog).toBeHidden();
 
 			await input.fill("/rev");
@@ -92,7 +92,7 @@ test.describe("templates management", () => {
 		await expect(row).toContainText("standup");
 		await expect(row).toContainText("Daily standup notes");
 
-		await page.keyboard.press("Escape");
+		await settingsDialog.getByRole("button", { name: "Close" }).click();
 		await expect(settingsDialog).toBeHidden();
 
 		await input.fill("/stand");
@@ -115,7 +115,7 @@ test.describe("templates management", () => {
 		await page.getByTestId("template-confirm-delete").click();
 		await expect(row).toHaveCount(0);
 
-		await page.keyboard.press("Escape");
+		await settingsDialog.getByRole("button", { name: "Close" }).click();
 		await expect(settingsDialog).toBeHidden();
 		await input.fill("/stand");
 		await expect(menuHit).toHaveCount(0);
@@ -140,7 +140,7 @@ test.describe("templates management", () => {
 		await page.getByTestId("template-save").click();
 		await expect(editor).toBeHidden();
 
-		await page.keyboard.press("Escape");
+		await settingsDialog.getByRole("button", { name: "Close" }).click();
 		await expect(settingsDialog).toBeHidden();
 
 		await input.fill("/roundtrip");

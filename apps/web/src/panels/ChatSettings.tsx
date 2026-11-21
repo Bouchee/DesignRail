@@ -1,5 +1,6 @@
 import {
 	type ComposerGrowthLimit,
+	DEFAULT_CONFIG,
 	isQuestionPanelHeight,
 	QUESTION_PANEL_HEIGHT_PERCENT,
 	QUESTION_PANEL_PROTOCOL_VERSION,
@@ -8,7 +9,7 @@ import {
 import type { MessageKey } from "@thinkrail/locales";
 import { useT } from "@thinkrail/locales/react";
 import { cn } from "@thinkrail/ui/utils";
-import type { ChatMessageOrder } from "@/chat/chatPreferences";
+import { type ChatMessageOrder, DEFAULT_CHAT_MESSAGE_ORDER } from "@/chat/chatPreferences";
 import { selectActiveWorkspace, toast, useAppStore } from "@/store";
 import { errorText, getTransport } from "@/transport";
 import { LineWidthControl } from "./LineWidthSettings";
@@ -72,6 +73,16 @@ export function QuestionPanelHeightControl({
 
 	return (
 		<SettingsRow
+			settingId="question-panel-height"
+			reset={{
+				changed: value !== QUESTION_PANEL_HEIGHT_PERCENT.default,
+				onReset: () => {
+					void saveSettings(
+						{ questionPanelHeight: QUESTION_PANEL_HEIGHT_PERCENT.default },
+						t("settings.chat.questionPanelHeightFailed"),
+					);
+				},
+			}}
 			label={t("settings.chat.questionPanelHeight")}
 			description={
 				<>
@@ -155,6 +166,11 @@ export function ChatSettings() {
 		<SettingsPageContainer testId="settings-chat">
 			<SettingsGroup title={t("settings.chat.group")}>
 				<SettingsRow
+					settingId="message-order"
+					reset={{
+						changed: messageOrder !== DEFAULT_CHAT_MESSAGE_ORDER,
+						onReset: () => selectMessageOrder(DEFAULT_CHAT_MESSAGE_ORDER),
+					}}
 					label={t("settings.chat.messageOrder")}
 					description={t("settings.chat.messageOrderDescription")}
 					control={
@@ -172,6 +188,11 @@ export function ChatSettings() {
 					}
 				/>
 				<SettingsRow
+					settingId="composer-size"
+					reset={{
+						changed: growthLimit !== DEFAULT_CONFIG.composerGrowthLimit,
+						onReset: () => selectGrowthLimit(DEFAULT_CONFIG.composerGrowthLimit),
+					}}
 					label={t("settings.chat.composerSize")}
 					description={t("settings.chat.composerSizeDescription")}
 					control={
@@ -188,6 +209,7 @@ export function ChatSettings() {
 				<QuestionPanelHeightControl protocolVersion={protocolVersion} value={panelHeight} />
 				<LineWidthControl kind="chat" />
 				<SettingsRow
+					settingId="sdk-tracing"
 					label={t("settings.chat.sdkTracing")}
 					description={t("settings.chat.sdkTracingDescription")}
 					control={

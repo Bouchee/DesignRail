@@ -164,7 +164,7 @@ binding does.
 - **A local command** is `{ id, scope, chords }` acting only while focus is inside its element. The app
   declares them in `localKeys.ts` (`APP_LOCAL_COMMANDS`, ids `<scope>.<action>`, one direction per
   command) under `LOCAL_SCOPES` — `tabs`, `rails`, `trees`, `review`, `review.surface`, `transcript`,
-  `composer`, `history`, `palette`, `findInFiles`, each titled for the editor (`where`, `inside`). An
+  `composer`, `history`, `palette`, `findInFiles`, `settings.nav` and `settings`, each titled for the editor (`where`, `inside`). An
   extension command with a `scope` is local too ([[module-extension-api]]); its id and scope must start
   with `<extension name>.`, and the resolver drops any extension command, global or local, that does not
   (so none can shadow `trees.search` or `search.open`). Resource renderers add their own set:
@@ -173,7 +173,7 @@ binding does.
   `local` rows (the comment row behind a locked ↵).
 - **Shared scope `arrows`.** The letter twins of the arrows (`arrows.left/down/up/right`, H/J/K/L by
   `code`) are `@thinkrail/ui/keyboard`'s `ARROW_TWIN_COMMANDS`, declared once in scope `arrows`; `tabs`,
-  `rails`, `trees`, `review.surface` and `transcript` include it, so one rebind applies in every element.
+  `rails`, `trees`, `review.surface`, `transcript`, `settings.nav` and `settings` include it, so one rebind applies in every element.
   A scope another includes is not an element of its own: it never appears in the `local` map.
 - **Physical keys everywhere:** local letters match `code` (caps show US positions; Dvorak and Colemak
   users rebind). A typing local chord (no Mod/Ctrl/Alt, not Escape, not an F-key — `isTypingChord`)

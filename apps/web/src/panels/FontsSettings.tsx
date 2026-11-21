@@ -209,6 +209,8 @@ function WeightRow({
 	return (
 		<div
 			data-testid="font-weight"
+			data-setting-id="font-weight"
+			data-setting-row="font-weight"
 			className="flex flex-col gap-8 border-border-muted border-b py-12"
 		>
 			<div className="flex items-start justify-between gap-12">
@@ -284,6 +286,7 @@ function CodeSizeRow({
 	const errorId = "font-code-size-error";
 	return (
 		<SettingsRow
+			settingId="code-size"
 			label={t("settings.appearance.fonts.size")}
 			testId="font-code-size"
 			description={
@@ -445,6 +448,7 @@ export function FontsGroup() {
 		return (
 			<>
 				<SettingsRow
+					settingId="interface-font"
 					label={t("settings.appearance.fonts.font")}
 					testId={`font-${role}-row`}
 					control={
@@ -554,6 +558,7 @@ export function FontsGroup() {
 				onCommit={(next) => saveSettings({ codeFontSize: next }, failure)}
 			/>
 			<SettingsRow
+				settingId="ligatures"
 				label={t("settings.appearance.fonts.ligatures")}
 				description={t("settings.appearance.fonts.ligaturesDescription")}
 				testId="font-ligatures-row"

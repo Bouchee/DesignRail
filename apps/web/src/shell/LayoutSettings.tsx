@@ -395,6 +395,9 @@ export function LayoutSettings() {
 						<button
 							type="button"
 							data-testid="layout-add-new"
+							data-setting-id="layout-add"
+							data-setting-row="layout-add"
+							data-setting-stop=""
 							disabled={!frame || customLayoutPresets.length >= MAX_CUSTOM_PRESETS || saving}
 							title={
 								customLayoutPresets.length >= MAX_CUSTOM_PRESETS
@@ -469,6 +472,7 @@ export function LayoutSettings() {
 			</div>
 
 			<SettingsRow
+				settingId="layout-reset"
 				className="mt-24"
 				label={t("workbench.layoutSettings.resetToDefault")}
 				description={t("workbench.layoutSettings.resetDescription", {

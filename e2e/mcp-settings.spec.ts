@@ -25,7 +25,7 @@ async function openMcpSettings(page: Page): Promise<void> {
 }
 
 async function closeSettings(page: Page): Promise<void> {
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 }
 

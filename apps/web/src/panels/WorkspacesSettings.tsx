@@ -67,7 +67,12 @@ export function WorkspacesSettings() {
 	};
 
 	return (
-		<section data-testid="settings-workspaces" className="flex flex-col gap-16">
+		<section
+			data-setting-row="settle-idle"
+			data-setting-id="settle-idle"
+			data-testid="settings-workspaces"
+			className="flex flex-col gap-16"
+		>
 			<div className="flex flex-col gap-8">
 				<div className="flex flex-col gap-4">
 					<h3 className="tr-title-section text-text-default">{t("settings.workspaces.title")}</h3>

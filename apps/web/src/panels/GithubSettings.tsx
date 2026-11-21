@@ -93,6 +93,7 @@ export function GithubStatusView({
 	return (
 		<div data-testid="settings-github" className="flex flex-col">
 			<SettingsGroup
+				settingId="github-cli"
 				title={t("settings.github.title")}
 				description={t("settings.github.description")}
 			>

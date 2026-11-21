@@ -71,6 +71,7 @@ export function LineWidthControl({ kind }: { kind: LineWidthKind }) {
 			className={cn(SETTINGS_ROWS_CONTAINER, "border-border-muted border-b")}
 		>
 			<SettingsRow
+				settingId={`${kind}-line-width`}
 				label={t("settings.lineWidth.label")}
 				description={
 					<>
@@ -105,6 +106,7 @@ export function LineWidthControl({ kind }: { kind: LineWidthKind }) {
 				}
 			/>
 			<SettingsRow
+				settingId={`${kind}-fit-to-pane`}
 				label={t("settings.lineWidth.fitToPane")}
 				description={t("settings.lineWidth.fitToPaneDescription")}
 				control={

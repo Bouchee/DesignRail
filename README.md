@@ -23,6 +23,8 @@ Mod+? opens a filterable keyboard reference with columns that adapt to the windo
 Tooltips show each button’s shortcut. The reference starts with the surface you were using.
 In a review, Tab to the diff, use arrows to pick a line or region, and press Enter to comment.
 Press F outside text entry to label clickable controls in Hint mode, or S in a sidebar tree to filter its rows.
+Search for a setting in Settings or the command palette to jump to its control.
+In Settings, use the arrow keys to move between sections and controls.
 From the chat input, Mod+Up enters transcript navigation; arrows or H/J/K/L walk messages and tools,
 C copies and O opens a tool’s file. Escape leaves a text field and moves from a side panel back to the main area. History entries offer keyboard menus.
 Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command

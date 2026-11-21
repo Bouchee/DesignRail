@@ -108,8 +108,11 @@ export function useSettingsDraft({
 					if (enterBlurs) event.currentTarget.blur();
 					else commitDraft();
 				} else if (event.key === "Escape") {
+					const authoritative = pendingRef.current.at(-1)?.value ?? saved;
+					if (authoritative === draft) return;
+					event.preventDefault();
 					editingRef.current = false;
-					setDraftState(pendingRef.current.at(-1)?.value ?? saved);
+					setDraftState(authoritative);
 					onEdit?.();
 				}
 			},

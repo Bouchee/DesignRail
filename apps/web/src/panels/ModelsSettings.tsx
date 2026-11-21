@@ -102,6 +102,8 @@ export function ModelsSettings() {
 					</div>
 				) : resolvedDefault || !reading ? (
 					<div
+						data-setting-row="chat-model"
+						data-setting-id="chat-model"
 						data-testid="default-model-row"
 						className="flex flex-wrap items-center justify-between gap-12 border-border-muted border-b py-12"
 					>
@@ -138,6 +140,7 @@ export function ModelsSettings() {
 				<SettingsGroup
 					title={t("settings.models.summary.title")}
 					description={t("settings.models.summary.description")}
+					settingId="auto-summary"
 					testId="settings-auto-summary"
 				>
 					<SettingsRadioCards

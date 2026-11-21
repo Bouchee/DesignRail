@@ -72,7 +72,7 @@ export function WindowsShellSettings({
 		return null;
 	}
 	return (
-		<div className="pt-24">
+		<div data-setting-row="windows-shell" data-setting-id="windows-shell" className="pt-24">
 			<div className="flex flex-col">
 				<div className="flex flex-col gap-2 pb-8">
 					<h3 className="tr-title-section text-text-default">
@@ -125,7 +125,11 @@ export function TerminalSettings() {
 
 	return (
 		<div data-testid="settings-terminal" className={SETTINGS_ROWS_CONTAINER}>
-			<div className="flex flex-col gap-12 py-12">
+			<div
+				data-setting-row="scrollback"
+				data-setting-id="scrollback"
+				className="flex flex-col gap-12 py-12"
+			>
 				<div className="flex flex-col gap-2">
 					<span className="tr-text-ui text-text-default">
 						{t("settings.terminal.scrollback.title")}

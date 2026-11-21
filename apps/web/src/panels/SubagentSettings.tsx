@@ -154,6 +154,7 @@ export function SubagentSettings({
 			description={t("settings.subagents.description")}
 		>
 			<SettingsRow
+				settingId="subagents-allow"
 				label={t("settings.subagents.allow")}
 				description={
 					globalEnabled
@@ -171,6 +172,7 @@ export function SubagentSettings({
 			/>
 			{limitSupported ? (
 				<SettingsRow
+					settingId="subagents-per-chat"
 					label={t("settings.subagents.perChat")}
 					description={t("settings.subagents.perChatDescription")}
 					control={

@@ -1,3 +1,4 @@
+import { isImeComposing } from "@thinkrail/ui/keyboard";
 import { cn } from "@thinkrail/ui/utils";
 
 export interface SegmentedControlOption<T extends string> {
@@ -26,11 +27,34 @@ export function SegmentedControl<T extends string>({
 	disabled = false,
 	testId,
 }: SegmentedControlProps<T>) {
+	const selected = options.find((option) => option.id === value && !option.disabled);
+	const tabStop = selected?.id ?? options.find((option) => !option.disabled)?.id;
 	return (
 		<div
 			role="radiogroup"
 			aria-label={label}
 			data-testid={testId}
+			onKeyDown={(event) => {
+				if (
+					isImeComposing(event.nativeEvent) ||
+					event.altKey ||
+					event.ctrlKey ||
+					event.metaKey ||
+					event.shiftKey
+				)
+					return;
+				if (!(event.target instanceof HTMLInputElement)) return;
+				const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+				if (!delta) return;
+				const items = Array.from(
+					event.currentTarget.querySelectorAll<HTMLInputElement>("input:not(:disabled)"),
+				);
+				const target = items[items.indexOf(event.target) + delta];
+				if (!target) return;
+				event.preventDefault();
+				target.focus();
+				target.click();
+			}}
 			className="inline-flex h-32 overflow-hidden rounded-sm bg-control-bg"
 		>
 			{options.map((option) => {
@@ -52,6 +76,7 @@ export function SegmentedControl<T extends string>({
 							value={option.id}
 							checked={selected}
 							disabled={optionDisabled}
+							tabIndex={tabStop === option.id ? 0 : -1}
 							onChange={() => onSelect(option.id)}
 							className="peer sr-only inset-0"
 						/>

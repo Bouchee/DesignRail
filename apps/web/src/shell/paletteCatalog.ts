@@ -54,6 +54,7 @@ import {
 	keybindingShortcut,
 	type ResolvedKeybindings,
 } from "../keybindings";
+import { availableSettings, type SettingsCatalogContext } from "../panels/settingsCatalog";
 import type { SettingsNavGroup } from "../panels/settingsNav";
 import type { PaletteItem } from "../search";
 import type { SettingsSection } from "../store";
@@ -96,6 +97,7 @@ export interface PaletteCatalogDeps {
 	readonly settled: boolean;
 	readonly settleBlocked: boolean;
 	readonly settingsGroups: readonly SettingsNavGroup[];
+	readonly settingsContext: SettingsCatalogContext;
 	readonly tabActions: readonly TabAction[];
 	readonly actions: PaletteCatalogActions;
 }
@@ -128,7 +130,7 @@ export interface PaletteCatalogActions {
 	readonly reveal: (workspace: Workspace) => void;
 	readonly copyPath: (workspace: Workspace) => void;
 	readonly openIn: (workspace: Workspace, editor: EditorInfo) => void;
-	readonly openSettings: (section?: SettingsSection) => void;
+	readonly openSettings: (section?: SettingsSection, settingId?: string) => void;
 	readonly openShortcuts: () => void;
 	readonly runTabAction: (actionId: string) => void;
 }
@@ -604,20 +606,33 @@ function settingsSectionItems(group: SettingsNavGroup, deps: PaletteCatalogDeps)
 }
 
 export function buildSettingsItems(deps: PaletteCatalogDeps): PaletteItem[] {
-	const { t } = deps;
+	const { settingsGroups, settingsContext, t } = deps;
+	const sections = new Map(
+		settingsGroups.flatMap(({ sections }) =>
+			sections.map((section) => [section.id, section] as const),
+		),
+	);
 	return [
-		...deps.settingsGroups.flatMap((group) => settingsSectionItems(group, deps)),
-		{
-			id: "setting:double-shift",
-			kind: "setting",
-			title: t("settings.keyboard.doubleShift"),
-			subtitle: t("search.item.settingsPath", { group: t("settings.nav.keyboard") }),
-			group: "settings",
-			scope: "commands",
-			icon: RiKeyboardLine,
-			keywords: ["shortcut", "hotkey", "shift"],
-			run: () => deps.actions.openSettings("keyboard"),
-		},
+		...settingsGroups.flatMap((group) => settingsSectionItems(group, deps)),
+		...availableSettings(settingsGroups, settingsContext).map((entry): PaletteItem => {
+			const section = sections.get(entry.section);
+			return {
+				id: `setting:${entry.id}`,
+				kind: "setting",
+				title: t(entry.label),
+				subtitle: section ? t("search.item.settingsPath", { group: t(section.label) }) : "",
+				group: "settings",
+				scope: "commands",
+				icon: section?.icon ?? RiSettings3Line,
+				keywords: [
+					"settings",
+					"preferences",
+					...(entry.keywords ?? []),
+					...(entry.description ? [t(entry.description)] : []),
+				],
+				run: () => deps.actions.openSettings(entry.section, entry.id),
+			};
+		}),
 	];
 }
 

@@ -230,7 +230,12 @@ export function ExtensionsSettings() {
 					</p>
 				</div>
 			</div>
-			<section data-testid="settings-bundled-extensions" className="flex flex-col">
+			<section
+				data-setting-row="bundled-extensions"
+				data-setting-id="bundled-extensions"
+				data-testid="settings-bundled-extensions"
+				className="flex flex-col"
+			>
 				<h4 className="pb-8 tr-text-label-pill text-text-subtle">
 					{t("settings.extensions.group.bundled")}
 				</h4>
@@ -244,7 +249,12 @@ export function ExtensionsSettings() {
 			</section>
 			<WebAccessSettings />
 			{protocolVersion !== null && protocolVersion >= OTHER_AGENT_SKILLS_PROTOCOL_VERSION ? (
-				<section data-testid="settings-other-agent-skills" className="flex flex-col">
+				<section
+					data-setting-row="other-agent-skills"
+					data-setting-id="other-agent-skills"
+					data-testid="settings-other-agent-skills"
+					className="flex flex-col"
+				>
 					<h4 className="pb-8 tr-text-label-pill text-text-subtle">
 						{t("settings.extensions.group.skills")}
 					</h4>

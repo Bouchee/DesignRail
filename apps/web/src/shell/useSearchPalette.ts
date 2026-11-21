@@ -134,6 +134,9 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 	const t = useT();
 	const status = useAppStore((s) => s.status);
 	const protocolVersion = useAppStore((s) => s.protocolVersion);
+	const hostPlatform = useAppStore((s) => s.hostPlatform);
+	const voiceAvailable = useAppStore((s) => s.speech?.supported === true);
+	const voiceEnabled = useAppStore((s) => s.voiceInputEnabled);
 	const projects = useAppStore((s) => s.projects);
 	const workspaces = useAppStore((s) => s.workspaces);
 	const sessionStateByWorkspace = useAppStore((s) => s.sessionStateByWorkspace);
@@ -266,6 +269,7 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 			settled,
 			settleBlocked,
 			settingsGroups,
+			settingsContext: { protocolVersion, hostPlatform, voiceAvailable, voiceEnabled },
 			tabActions,
 			actions: {
 				newWorkspace: options.openNewWorkspace,
@@ -296,7 +300,8 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 				reveal: revealWorkspace,
 				copyPath: (workspace) => void copyText(workspace.worktreePath),
 				openIn: openWorkspaceIn,
-				openSettings: (section?: SettingsSection) => store().openSettings(section),
+				openSettings: (section?: SettingsSection, settingId?: string) =>
+					store().openSettings(section, settingId),
 				openShortcuts: () => store().openShortcuts(),
 				runTabAction: runActiveTabAction,
 			},
@@ -338,6 +343,9 @@ export function useSearchPalette(options: SearchPaletteOptions): SearchPalettePr
 		t,
 		online,
 		settingsGroups,
+		hostPlatform,
+		voiceAvailable,
+		voiceEnabled,
 		activeWorkspace,
 		historySessionId,
 		readAction,

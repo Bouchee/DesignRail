@@ -495,7 +495,7 @@ test("the double-Shift row opens the Keyboard settings, and Ctrl+R stays inert u
 	await expect(palette(page)).toBeHidden();
 	await expect(page.getByTestId("settings-dialog")).toBeVisible();
 	await expect(page.getByTestId("settings-nav-keyboard")).toHaveAttribute("data-active", "true");
-	await expect(page.getByTestId("settings-double-shift")).toBeVisible();
+	await expect(page.getByTestId("settings-double-shift")).toBeFocused();
 });
 
 test("an active IME owns Escape, arrows, Tab and Enter in the palette input", async ({ page }) => {

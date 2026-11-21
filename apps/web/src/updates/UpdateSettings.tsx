@@ -183,7 +183,12 @@ export function UpdateSettings({ updates }: UpdateSettingsProps) {
 		(hostStatus === undefined || hostStatus === "failed" || hostRequestFailed);
 
 	return (
-		<section data-testid="settings-updates" className="flex flex-col gap-16">
+		<section
+			data-setting-row="software-updates"
+			data-setting-id="software-updates"
+			data-testid="settings-updates"
+			className="flex flex-col gap-16"
+		>
 			<div className="flex flex-col gap-4">
 				<h3 className="tr-title-section text-text-default">{t("updates.settings.title")}</h3>
 				<p className="text-text-muted tr-text-metadata">

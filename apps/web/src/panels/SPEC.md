@@ -692,19 +692,22 @@ a project picker, the prompt hero, and the reused
   workspace exists — the toast is the only place left
   to report the dropped kick-off). (`gh` status lives in `SettingsDialog`, not the
   create dialog.) **`SettingsDialog`** is the app-settings surface the shell's topbar gear opens — a
-  **store-driven two-pane shell**: one nav list, rendered once, beside a scrollable content pane. At `md`+
-  the list is a rail grouped **Agent** (Models, Providers, MCP servers, Prompt templates, Environment) ·
-  **Interface** (Chat, Appearance, Language, Layout, Terminal, Artifacts — the per-client Smart view switch, from
-  host v124) · **System** (Workspaces, Integrations, Extensions,
-  Notifications, Privacy, Updates). Integrations keeps section id `github`: today it is the GitHub CLI page
-  and it is the home for further integrations. Below `md` the same list is a horizontal scrolling strip without group labels. The
-  Feedback card (`settings-nav-feedback`, “Share feedback”) belongs to that list at
-  every width, pinned to the rail's bottom at `md`+. The pure nav data — groups, protocol and
-  injected-content gating, and resolving a requested section to an available one (a gated or retired id,
-  e.g. an old `review` / `line-width` deep link, falls back to Appearance) — lives in `panels/settingsNav.ts`,
-  so the dialog only renders it. `settingsOpen`/`settingsSection` live in the store so the gear AND the
-  Welcome banner can open it deep-linked to a section. Escape closes the dialog except while focus is in an
-  input carrying `data-settings-draft-input`, where Escape reverts that draft instead.
+  **store-driven two-pane shell** with one responsive tablist and a scrollable content pane.
+  `settingsNav.ts` owns sections, their order, and availability by Host protocol and injected content.
+  Interface includes Artifacts when supported by the Host. Integrations has section id `github`. Search and the command palette share the localized row catalog
+  in `settingsCatalog.ts`. Give each indexed row a stable `data-setting-id` and apply the same
+  availability conditions in both the catalog and the page. The catalog includes only active RailDesign
+  controls. Search matches labels, descriptions, keywords and section names. Selecting a result opens
+  its section, focuses the row's control when available and briefly highlights the target.
+  `settingsOpen`, `settingsSection` and the optional `settingsTarget` live in the store so the gear,
+  Welcome banner and palette can open the same dialog. Arrow keys move along the tablist and through rows.
+  The settings navigation and settings content have local keybinding scopes that share the editable
+  arrow alternatives. The navigation search and row reset shortcuts are editable in Keyboard.
+  Right or Enter enters a section. The navigation rail remembers the last focused row in each section
+  while the dialog is open. Escape cancels a pending choice or dirty draft first, then steps back to search
+  results or the tablist as applicable. Escape on the tablist closes the dialog. Search and navigation
+  handlers yield to an active IME. Use `confirmChoice` on an expensive radio group such as interface
+  language to require Enter for a keyboard preview.
   **Shared Settings primitives** keep every page one shape (shell's injected Layout section reuses them):
   `SettingsPageContainer` stacks a page's groups with spacing and a divider drawn only between children
   that actually render (each child keeps its element key, so a conditional group never remounts its

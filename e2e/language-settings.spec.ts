@@ -183,7 +183,7 @@ test("switching language re-renders cached labels, markup strings and a mounted 
 	const section = await openLanguageSettings(page);
 	await section.getByTestId("language-de").click();
 	await expect(section.getByTestId("language-add")).toContainText("Lade en.json herunter");
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(filesTool).toHaveAccessibleName(/Dateien/);
 	await expect(commentButton).toHaveAttribute("title", "Auswahl kommentieren");
 	await expect(commentButton).toHaveAttribute("aria-label", "Auswahl kommentieren");

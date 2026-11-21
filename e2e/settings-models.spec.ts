@@ -47,7 +47,7 @@ test("summary timing converges on broadcast across windows and survives reopen a
 		await expect(peer.getByTestId("auto-summary-50")).toHaveAttribute("data-active", "true");
 		release();
 		await expect(page.getByTestId("auto-summary-50")).toHaveAttribute("data-active", "true");
-		await page.keyboard.press("Escape");
+		await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 		await openModels(page);
 		await expect(page.getByTestId("auto-summary-50")).toHaveAttribute("data-active", "true");
 		await page.reload();

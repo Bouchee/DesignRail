@@ -407,7 +407,7 @@ test("Settings turns voice input off and back on, and Delete frees its files and
 	await expect(toggle).toHaveAttribute("data-active", "false");
 	await expect(voice.getByTestId("settings-voice-status")).toHaveCount(0);
 	await expect(voice.getByTestId("settings-voice-files")).toBeVisible();
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await page.getByTestId("chat-input").focus();
 	await expect(mic(page)).toHaveCount(0);
 
@@ -420,7 +420,7 @@ test("Settings turns voice input off and back on, and Delete frees its files and
 	await expect(voice.getByTestId("settings-voice-status")).toContainText("Not set up");
 	await expect(voice.getByTestId("settings-voice-files")).toHaveCount(0);
 	expect(existsSync(SPEECH_DIR)).toBe(false);
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await page.getByTestId("chat-input").focus();
 	await expect(mic(page)).toHaveAttribute("data-mic-state", "offer");
 });

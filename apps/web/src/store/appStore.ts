@@ -1235,6 +1235,7 @@ interface AppState {
 	unheldLoginFrame: LoginPush | null;
 	settingsOpen: boolean;
 	settingsSection: SettingsSection;
+	settingsTarget: string | null;
 	notificationPromptOpen: boolean;
 	searchOpen: boolean;
 	searchSession: number;
@@ -1614,7 +1615,7 @@ interface AppState {
 	clearLoginInput: () => void;
 	clearLogin: (loginId?: string) => void;
 	clearSettledLogin: (providerId: string) => void;
-	openSettings: (section?: SettingsSection) => void;
+	openSettings: (section?: SettingsSection, settingId?: string) => void;
 	closeSettings: () => void;
 	setSettingsSection: (section: SettingsSection) => void;
 	openNotificationPrompt: () => void;
@@ -2647,6 +2648,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 	unheldLoginFrame: null,
 	settingsOpen: false,
 	settingsSection: SettingsSection.Providers,
+	settingsTarget: null,
 	notificationPromptOpen: false,
 	searchOpen: false,
 	searchSession: 0,
@@ -4926,10 +4928,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 			if (!login || login.target || login.providerId !== providerId) return {};
 			return login.status === "active" ? {} : { activeLogin: null };
 		}),
-	openSettings: (section = SettingsSection.Providers) =>
-		set({ settingsOpen: true, settingsSection: section }),
-	closeSettings: () => set({ settingsOpen: false }),
-	setSettingsSection: (section) => set({ settingsSection: section }),
+	openSettings: (section = SettingsSection.Providers, settingId) =>
+		set({ settingsOpen: true, settingsSection: section, settingsTarget: settingId ?? null }),
+	closeSettings: () => set({ settingsOpen: false, settingsTarget: null }),
+	setSettingsSection: (section) => set({ settingsSection: section, settingsTarget: null }),
 	openNotificationPrompt: () =>
 		set((state) => (state.notificationPromptOpen ? state : { notificationPromptOpen: true })),
 	closeNotificationPrompt: () => set({ notificationPromptOpen: false }),

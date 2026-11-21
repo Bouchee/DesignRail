@@ -92,6 +92,12 @@ function deps(overrides: Partial<PaletteCatalogDeps> = {}): PaletteCatalogDeps {
 		settled: false,
 		settleBlocked: false,
 		settingsGroups: [],
+		settingsContext: {
+			protocolVersion: null,
+			hostPlatform: null,
+			voiceAvailable: false,
+			voiceEnabled: false,
+		},
 		tabActions: [],
 		actions: {
 			newWorkspace: noop,

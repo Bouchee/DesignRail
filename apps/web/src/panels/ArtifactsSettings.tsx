@@ -9,6 +9,7 @@ export function ArtifactsSettings() {
 	return (
 		<div data-testid="settings-artifacts" className={SETTINGS_ROWS_CONTAINER}>
 			<SettingsRow
+				settingId="smart-artifacts"
 				label={t("settings.artifacts.smart")}
 				description={t("settings.artifacts.smartHint")}
 				control={

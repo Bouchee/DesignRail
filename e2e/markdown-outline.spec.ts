@@ -105,7 +105,7 @@ test("the Markdown outline position setting moves the outline to the left of the
 		.getByTestId("markdown-outline-side-control")
 		.getByText("Left", { exact: true })
 		.click();
-	await page.keyboard.press("Escape");
+	await dialog.getByRole("button", { name: "Close" }).click();
 	await expect(dialog).toBeHidden();
 
 	await expect(outline).toHaveAttribute("data-side", "left");

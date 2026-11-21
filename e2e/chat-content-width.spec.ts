@@ -233,7 +233,7 @@ async function setFitToPane(page: Page, bounded: boolean): Promise<void> {
 		await control.click();
 		await expect(control).toHaveAttribute("data-active", String(bounded));
 	}
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 }
 

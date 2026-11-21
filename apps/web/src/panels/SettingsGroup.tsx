@@ -6,11 +6,23 @@ export interface SettingsGroupProps {
 	description?: string | undefined;
 	children: ReactNode;
 	testId?: string;
+	settingId?: string;
 }
 
-export function SettingsGroup({ title, description, children, testId }: SettingsGroupProps) {
+export function SettingsGroup({
+	title,
+	description,
+	children,
+	testId,
+	settingId,
+}: SettingsGroupProps) {
 	return (
-		<section data-testid={testId} className="flex flex-col">
+		<section
+			data-testid={testId}
+			data-setting-row={settingId}
+			data-setting-id={settingId}
+			className="flex flex-col"
+		>
 			<div className="flex flex-col gap-2 pb-12">
 				<h3 className="tr-text-label-pill text-text-subtle">{title}</h3>
 				{description ? <p className="tr-text-metadata text-text-muted">{description}</p> : null}

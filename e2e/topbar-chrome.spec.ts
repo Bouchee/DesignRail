@@ -130,7 +130,7 @@ test("ordinary browsers have a fixed themed header with zero native insets", asy
 	await expect(header).toHaveCSS("height", "40px");
 	await page.getByTestId(`theme-option-${originalTheme}`).click();
 	await expect(header).toHaveCSS("background-color", initialColors.actual);
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 
 	await page.setViewportSize(PHONE_VIEWPORT);
@@ -244,7 +244,7 @@ test("native updates progress from explicit download through install and restart
 		).__THINKRAIL_TEST_UPDATE__({ status: "ready" });
 	});
 	await expect(page.getByTestId("update-restart")).toHaveText("Install & Restart");
-	await page.keyboard.press("Escape");
+	await page.getByTestId("settings-dialog").getByRole("button", { name: "Close" }).click();
 	await expect(page.getByTestId("settings-dialog")).toBeHidden();
 	await expect(page.getByTestId("update-ready")).toBeVisible();
 	await page.getByTestId("update-ready").click();

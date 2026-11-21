@@ -83,6 +83,7 @@ export function VoiceSettings() {
 	return (
 		<div data-testid="settings-voice" className={SETTINGS_ROWS_CONTAINER}>
 			<SettingsRow
+				settingId="voice-input"
 				label={t("settings.voice.enable")}
 				description={
 					enabled ? t("settings.voice.enableDescription") : t("settings.voice.disabledDescription")
@@ -131,6 +132,7 @@ export function VoiceSettings() {
 			{enabled ? (
 				<>
 					<SettingsRow
+						settingId="voice-language"
 						label={t("settings.voice.language")}
 						description={t("settings.voice.languageDescription")}
 						testId="settings-voice-language"
@@ -159,6 +161,7 @@ export function VoiceSettings() {
 						}
 					/>
 					<SettingsRow
+						settingId="voice-shortcut"
 						label={t("settings.voice.shortcut")}
 						description={t("settings.voice.shortcutDescription")}
 						control={

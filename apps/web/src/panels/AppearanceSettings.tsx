@@ -343,6 +343,7 @@ export function AppearanceSettings() {
 		<SettingsPageContainer testId="settings-appearance">
 			<SettingsGroup title={t("settings.appearance.themeGroup")}>
 				<SettingsRow
+					settingId="theme-mode"
 					label={t("settings.appearance.themeMode")}
 					control={
 						<SegmentedControl
@@ -402,6 +403,7 @@ export function AppearanceSettings() {
 						summary={`${themeLabel(t, lightResolution.theme)} / ${themeLabel(t, darkResolution.theme)}`}
 						expanded={expanded}
 						testId="theme-pair-toggle"
+						settingId="theme-colors"
 						onToggle={() => setExpanded((value) => !value)}
 					>
 						<div className={cn(SETTINGS_ROWS_CONTAINER, "pb-12")}>
@@ -437,6 +439,7 @@ export function AppearanceSettings() {
 						summary={themeLabel(t, activeTheme)}
 						expanded={expanded}
 						testId="theme-toggle"
+						settingId="theme-colors"
 						onToggle={() => setExpanded((value) => !value)}
 					>
 						<div className="pb-12">
@@ -450,6 +453,7 @@ export function AppearanceSettings() {
 					</SettingsDisclosure>
 				)}
 				<SettingsRow
+					settingId="contrast"
 					label={t("settings.appearance.contrastLevel")}
 					control={
 						<SegmentedControl
@@ -491,6 +495,7 @@ function MarkdownOutlineSideRow() {
 	return (
 		<div className={SETTINGS_ROWS_CONTAINER}>
 			<SettingsRow
+				settingId="markdown-outline"
 				label={t("settings.appearance.markdownOutlineSide")}
 				description={t("settings.appearance.markdownOutlineSide.description")}
 				control={

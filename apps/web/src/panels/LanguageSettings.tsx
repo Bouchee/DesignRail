@@ -92,7 +92,6 @@ export function LanguageSettings() {
 	const systemLanguages = useSystemLanguages();
 
 	const select = (next: string) => {
-		if (next === preference) return;
 		getTransport()
 			.request("settings.update", { config: { locale: next } })
 			.catch((error) => toast.error(errorText(error, t("settings.language.changeFailed"))));
@@ -186,15 +185,21 @@ export function LanguagePage({
 				title={t("settings.language.title")}
 				description={t("settings.language.description")}
 			>
-				<div className="py-12">
-					<SettingsRadioCards
-						name="ui-language"
-						label={t("settings.language.title")}
-						choices={choices}
-						value={value}
-						onSelect={onSelect}
-					/>
-				</div>
+				<SettingsRow
+					settingId="interface-language"
+					label={t("settings.language.title")}
+					reset={{ changed: preference !== SYSTEM_LOCALE, onReset: () => onSelect(SYSTEM_LOCALE) }}
+					control={
+						<SettingsRadioCards
+							name="ui-language"
+							label={t("settings.language.title")}
+							choices={choices}
+							value={value}
+							onSelect={onSelect}
+							confirmChoice
+						/>
+					}
+				/>
 			</SettingsGroup>
 			<SettingsGroup title={t("settings.language.add.title")} testId="language-add">
 				<p className="py-12 tr-text-metadata text-text-muted">
@@ -213,6 +218,7 @@ export function LanguagePage({
 					/>
 				) : null}
 				<SettingsRow
+					settingId="language-contribute"
 					label={t("settings.language.contribute.label")}
 					description={t("settings.language.contribute.description")}
 					noBorder

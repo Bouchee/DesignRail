@@ -90,6 +90,8 @@ export function EnvironmentForm({
 			>
 				<fieldset
 					disabled={saving}
+					data-setting-row="environment-variables"
+					data-setting-id="environment-variables"
 					data-testid="settings-environment-form"
 					className="flex min-w-0 flex-col gap-16 px-12 py-12"
 				>
