@@ -23,6 +23,7 @@ import type {
 	ExtUiRequest,
 	ExtUiResponse,
 	Project,
+	SubagentCatalogEntry,
 	Template,
 	TemplateInfo,
 	WireModel,
@@ -53,7 +54,7 @@ import { reconcileArtifacts } from "../artifacts";
 import { sessionDirFor, writeFixtureSession } from "../history/testFixtures";
 import { saveProjects, saveWorkspaces } from "../persistence";
 import { addComment, getReviewSnapshot } from "../reviews";
-import { resetConfigCache } from "../settings";
+import { getConfig, resetConfigCache } from "../settings";
 import { listTerminals } from "../terminal";
 import { setTrashImplementationForTests } from "../trash";
 import { setWatchPublisher, stopAllWatches } from "../watch";
@@ -80,6 +81,59 @@ let dataDir: string;
 let repo: string;
 const savedDataDir = process.env.THINKRAIL_DATA_DIR;
 const savedTestAgentDir = process.env.PI_CODING_AGENT_DIR;
+
+test("the subagent catalog exposes only trusted project definitions and accepts a per-role intent", async () => {
+	const define = (directory: string, name: string) => {
+		mkdirSync(directory, { recursive: true });
+		writeFileSync(
+			join(directory, `${name}.md`),
+			`---\nname: ${name}\ndescription: Catalog fixture\n---\nPrivate role instructions.`,
+		);
+	};
+	define(join(dataDir, "agents"), "catalog-personal");
+	define(join(repo, ".raildesign", "agents"), "catalog-project");
+	define(join(repo, ".raildesign", "agents"), "worker");
+	saveWorkspaces([
+		{
+			id: "catalog",
+			projectId: "p1",
+			name: "Default",
+			branch: "main",
+			baseBranch: "main",
+			worktreePath: repo,
+		},
+	]);
+	const list = (params: { workspaceId?: string } = {}) =>
+		handleRequest("subagent.list", params, CTX) as Promise<SubagentCatalogEntry[]>;
+	const personal: SubagentCatalogEntry = {
+		name: "catalog-personal",
+		description: "Catalog fixture",
+		source: "personal",
+	};
+	expect(await list()).toContainEqual(personal);
+	expect(
+		(await list({ workspaceId: "catalog" })).filter((entry) => entry.source === "project"),
+	).toEqual([]);
+	saveProjects([
+		{ id: "p1", name: "repo", path: repo, slug: "repo", lastOpened: 1, resourceTrust: "granted" },
+	]);
+	const trusted = await list({ workspaceId: "catalog" });
+	expect(trusted.filter((entry) => entry.source === "project")).toEqual([
+		{ name: "catalog-project", description: "Catalog fixture", source: "project" },
+	]);
+	expect(trusted.find((entry) => entry.name === "worker")?.source).toBe("builtin");
+	expect(JSON.stringify(trusted)).not.toContain("Private role instructions.");
+	await expect(list({ workspaceId: "unknown" })).rejects.toThrow("Unknown workspace");
+
+	expect(
+		await handleRequest("subagent.setEnabled", { name: "catalog-project", enabled: false }, CTX),
+	).toEqual({ ok: true });
+	expect(await list({ workspaceId: "catalog" })).toEqual(trusted);
+	await expect(
+		handleRequest("subagent.setEnabled", { name: "worker", enabled: "false" }, CTX),
+	).rejects.toThrow();
+	expect(getConfig().disabledSubagents).toEqual(["catalog-project"]);
+});
 
 async function setupDefaultModel(): Promise<() => void> {
 	seedSdkTestModel(dataDir, "handler");

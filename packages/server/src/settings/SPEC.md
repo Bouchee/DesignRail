@@ -44,6 +44,13 @@ clamps `terminalReplayKb`, so a hand-edited config cannot exhaust memory. Settin
   `isTerminalWindowsShell`, `isKeybindingOverrides`); `shared` (`CodedError`).
 - **Forbidden:** host or another feature sibling; current-layout document/snapshot types; workspace ids/resources; current frame validation; owning WS channels; or importing web preset definitions.
 
+## Subagent availability
+
+`setSubagentEnabled` validates and applies a per-name intent to the current config in one
+synchronous update. It persists and publishes through `updateConfig`. Concurrent clients can
+change different names without replacing each other's choices. The name can remain disabled while
+its definition is absent.
+
 ## Get right
 
 - `autoSummaryThresholdPercent` is the host-wide automatic-summary choice: 50 (Earlier), 75 (Default),

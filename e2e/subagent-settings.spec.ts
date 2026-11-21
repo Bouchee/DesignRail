@@ -241,3 +241,30 @@ test("global and workspace subagent limits persist, inherit, and converge across
 		wire.close();
 	}
 });
+
+test("role availability converges across two workbench windows", async ({ page, context }) => {
+	await openFixtureProject(page);
+	await enterDefaultWorkspace(page);
+	const wire = await E2eWire.connect();
+	const peer = await context.newPage();
+	try {
+		await wire.request("subagent.setEnabled", { name: "worker", enabled: true });
+		await peer.goto(page.url());
+		await openChatSettings(page);
+		await openChatSettings(peer);
+		const local = page.getByTestId("agent-toggle-worker");
+		const remote = peer.getByTestId("agent-toggle-worker");
+		await expect(local).toHaveAttribute("aria-checked", "true");
+		await expect(remote).toHaveAttribute("aria-checked", "true");
+		await local.click();
+		await expect(local).toHaveAttribute("aria-checked", "false");
+		await expect(remote).toHaveAttribute("aria-checked", "false");
+		await peer.reload();
+		await openChatSettings(peer);
+		await expect(remote).toHaveAttribute("aria-checked", "false");
+	} finally {
+		await wire.request("subagent.setEnabled", { name: "worker", enabled: true });
+		wire.close();
+		await peer.close();
+	}
+});

@@ -1246,6 +1246,7 @@ interface AppState {
 	systemThemePair: SystemThemePair | undefined;
 	notificationsEnabled: boolean;
 	subagentsEnabled: boolean;
+	disabledSubagents: string[];
 	sdkTracingEnabled: boolean;
 	subagentMaxConcurrent: number;
 	settleIdleDays: number | null;
@@ -1685,6 +1686,7 @@ function configPatch(config: AppConfig) {
 				? config.notificationsEnabled
 				: DEFAULT_CONFIG.notificationsEnabled,
 		subagentsEnabled: config.subagentsEnabled ?? DEFAULT_CONFIG.subagentsEnabled,
+		disabledSubagents: config.disabledSubagents,
 		sdkTracingEnabled: config.sdkTracingEnabled ?? DEFAULT_CONFIG.sdkTracingEnabled,
 		subagentMaxConcurrent: isSubagentMaxConcurrent(config.subagentMaxConcurrent)
 			? config.subagentMaxConcurrent
@@ -2659,6 +2661,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 	systemThemePair: DEFAULT_CONFIG.systemThemePair,
 	notificationsEnabled: DEFAULT_CONFIG.notificationsEnabled,
 	subagentsEnabled: DEFAULT_CONFIG.subagentsEnabled,
+	disabledSubagents: DEFAULT_CONFIG.disabledSubagents,
 	sdkTracingEnabled: DEFAULT_CONFIG.sdkTracingEnabled,
 	subagentMaxConcurrent: DEFAULT_CONFIG.subagentMaxConcurrent,
 	settleIdleDays: DEFAULT_CONFIG.settleIdleDays,

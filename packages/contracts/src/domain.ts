@@ -599,6 +599,14 @@ export interface BackgroundCommandCompletionDetails
 	delivery?: CompletionDelivery;
 }
 
+export interface SubagentCatalogEntry {
+	name: string;
+	description: string;
+	source: "builtin" | "personal" | "project";
+	model?: string;
+	thinking?: ThinkingLevel;
+}
+
 export interface SubagentResourceSummary {
 	childSessionId: string;
 	parentSessionId: string;
@@ -1291,6 +1299,7 @@ export interface AppConfig extends ThemePreference {
 	/** When false, the worker's in-session `request_review` tool is withheld; the Review button still works. */
 	agentReviewEnabled: boolean;
 	subagentsEnabled: boolean;
+	disabledSubagents: string[];
 	sdkTracingEnabled: boolean;
 	/** How many subagents one chat may run at once; more spawns queue FIFO. */
 	subagentMaxConcurrent: number;
@@ -1586,6 +1595,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 	reviewAutoFix: false,
 	agentReviewEnabled: false,
 	subagentsEnabled: true,
+	disabledSubagents: [],
 	sdkTracingEnabled: false,
 	subagentMaxConcurrent: SUBAGENT_MAX_CONCURRENT.default,
 	settleIdleDays: SETTLE_IDLE_DAYS.default,

@@ -47,6 +47,7 @@ import type {
 	SessionStateRecord,
 	SessionStats,
 	SessionSummary,
+	SubagentCatalogEntry,
 	SubagentResourceSummary,
 	ThinkingLevel,
 	ToolGuardrailOutcome,
@@ -1140,6 +1141,34 @@ function subagentsAllowed(entry: Entry): boolean {
 		(workspace?.subagentsOverride !== "off" && loadConfig().subagentsEnabled)
 	);
 }
+function discoverWorkspaceAgents(cwd: string, projectId: string | undefined): AgentDefinition[] {
+	return discoverAgentDefinitions({
+		cwd,
+		agentDir: dataDir(),
+		includeProject:
+			projectId !== undefined &&
+			loadProjects().find((project) => project.id === projectId)?.resourceTrust === "granted",
+	});
+}
+
+export function listSubagentCatalog(cwd = dataDir(), projectId?: string): SubagentCatalogEntry[] {
+	return discoverWorkspaceAgents(cwd, projectId).map(
+		({ name, description, source, model, thinking }) => ({
+			name,
+			description,
+			source,
+			...(model === undefined ? {} : { model }),
+			...(thinking === undefined ? {} : { thinking }),
+		}),
+	);
+}
+
+function assertSubagentEnabled(name: string): void {
+	if (loadConfig().disabledSubagents.includes(name)) {
+		throw new Error(`Child agent "${name}" is disabled`);
+	}
+}
+
 function childSummary(record: SessionRecord): SubagentResourceSummary {
 	const child = record.childRun;
 	if (!child) throw new Error("Not a child session");
@@ -1245,8 +1274,10 @@ async function acquireChildSlot(child: Entry, signal: AbortSignal): Promise<void
 	try {
 		while (true) {
 			signal.throwIfAborted();
-			if (metadata.purpose !== "review" && !subagentsAllowed(parent))
-				throw new Error("Child agents are disabled");
+			if (metadata.purpose !== "review") {
+				if (!subagentsAllowed(parent)) throw new Error("Child agents are disabled");
+				assertSubagentEnabled(metadata.definition.name);
+			}
 			const workspace = loadWorkspaces().find(
 				(item) => item.id === parent.store.record.workspaceId,
 			);
@@ -1458,15 +1489,13 @@ function finishChild(child: Entry, status: ChildRunRecord["status"], reason?: st
 }
 async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionContext>[]> {
 	if (entry.store.record.childRun) return [];
-	const project = loadProjects().find(
-		(item) => item.id === projectOf(entry.store.record.workspaceId),
+	const definitions = discoverWorkspaceAgents(
+		entry.store.record.cwd,
+		projectOf(entry.store.record.workspaceId) ?? undefined,
 	);
-	const definitions = discoverAgentDefinitions({
-		cwd: entry.store.record.cwd,
-		agentDir: dataDir(),
-		includeProject: project?.resourceTrust === "granted",
-	});
+	const disabled = new Set(loadConfig().disabledSubagents);
 	const description = definitions
+		.filter(({ name }) => !disabled.has(name))
 		.map(
 			(definition) =>
 				`${definition.name}: ${definition.description}${definition.model ? ` [model ${definition.model}]` : ""}`,
@@ -1492,6 +1521,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 				if (!details?.toolCall) throw new Error("Child call identity is required");
 				const definition = definitions.find((item) => item.name === args.subagent_type);
 				if (!definition) throw new Error("Unknown child agent definition");
+				assertSubagentEnabled(definition.name);
 				if (
 					definition.source === "project" &&
 					loadProjects().find((item) => item.id === projectOf(entry.store.record.workspaceId))
@@ -1500,6 +1530,7 @@ async function childTools(entry: Entry, run: ActiveRun): Promise<Tool<SessionCon
 					throw new Error("Project resources are not trusted");
 				const available = await listAvailableModels();
 				assertActive(entry, run);
+				assertSubagentEnabled(definition.name);
 				const mapped = toSpawnMapping(definition, {
 					cwd: entry.store.record.cwd,
 					availableModels: available,

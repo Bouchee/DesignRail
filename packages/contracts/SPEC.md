@@ -1224,6 +1224,13 @@ contracts only.
     outside these closed shapes.
 - Transcripts never enter the main wire, persistence, or error reports.
 
+## Subagent catalog
+
+`subagent.list` returns public names, descriptions, sources and optional model and reasoning
+settings. A workspace ID can scope the response. `subagent.setEnabled` changes one global name
+at a time. The resulting `disabledSubagents` list appears in `AppConfig` and settings pushes.
+`SUBAGENT_CATALOG_PROTOCOL_VERSION` (130) gates this surface.
+
 ## Normalized session state
 
 `SessionState` carries orthogonal host facts: `execution` (`idle | running`) plus stable `runId`, nullable

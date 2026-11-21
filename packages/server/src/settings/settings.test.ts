@@ -15,6 +15,7 @@ import {
 	resetConfigCache,
 	type SettingsPublisher,
 	setSettingsPublisher,
+	setSubagentEnabled,
 	updateConfig,
 } from "./settings";
 
@@ -40,6 +41,19 @@ function preset(id = "custom"): LayoutPreset {
 		},
 	};
 }
+
+test("per-name subagent changes preserve other role settings and validate without saving", () => {
+	setSubagentEnabled("worker", false);
+	setSubagentEnabled("scout", false);
+	setSubagentEnabled("worker", true);
+	const before = getConfig();
+	expect(before.disabledSubagents).toEqual(["scout"]);
+	expect(() => setSubagentEnabled(" ", false)).toThrow();
+	expect(() => setSubagentEnabled("scout", "false")).toThrow();
+	expect(getConfig()).toBe(before);
+	resetConfigCache();
+	expect(getConfig().disabledSubagents).toEqual(["scout"]);
+});
 
 beforeEach(() => {
 	dataDir = mkdtempSync(join(tmpdir(), "trpi-settings-test-"));

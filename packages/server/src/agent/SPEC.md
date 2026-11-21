@@ -352,6 +352,14 @@ Wrong: acknowledge staging as admission, or clear memory before saving its summa
 Correct: commit the history item and queue removal together; commit summary memory, marker, retired
 IDs, usage and receipt together after checking the unchanged revision.
 
+## Agent catalog and role availability
+
+The catalog and the ordinary SDK Agent tool resolve the same built-in, personal, and trusted
+project definitions in the same order. The catalog projects display fields and omits the system
+prompt and file path. A globally disabled role is omitted from the advertised roster and rejected
+at call admission and queue admission. A role toggle leaves running children and the independent
+Plan review path alone.
+
 ## Preserved Skills and delegation policies
 
 The SDK replacement keeps the application Skill catalog, source discovery, two distinct project trust

@@ -62,6 +62,7 @@ const ACCEPTED_UPDATE_KEYS = {
 	reviewAutoFix: true,
 	agentReviewEnabled: true,
 	subagentsEnabled: true,
+	disabledSubagents: true,
 	sdkTracingEnabled: true,
 	subagentMaxConcurrent: true,
 
@@ -258,6 +259,7 @@ export function updateConfig(partial: AppConfigUpdate): AppConfig {
 		themeMode,
 		systemThemePair,
 
+		disabledSubagents,
 		disabledExtensions,
 		extensionSettings,
 		keybindings,
@@ -266,6 +268,10 @@ export function updateConfig(partial: AppConfigUpdate): AppConfig {
 	const nextKeybindings = keybindings === undefined ? undefined : validateKeybindings(keybindings);
 	const extensionSettingsUpdate =
 		extensionSettings === undefined ? undefined : validateExtensionSettings(extensionSettings);
+	const nextDisabledSubagents =
+		disabledSubagents === undefined
+			? undefined
+			: validateNameList(disabledSubagents, "disabledSubagents", "agent names");
 	const nextDisabledExtensions =
 		disabledExtensions === undefined
 			? undefined
@@ -352,6 +358,7 @@ export function updateConfig(partial: AppConfigUpdate): AppConfig {
 		...(favoriteModels === undefined
 			? {}
 			: { favoriteModels: validateFavoriteModels(favoriteModels) }),
+		...(nextDisabledSubagents === undefined ? {} : { disabledSubagents: nextDisabledSubagents }),
 		...(nextDisabledExtensions === undefined ? {} : { disabledExtensions: nextDisabledExtensions }),
 		...(extensionSettingsUpdate === undefined
 			? {}
@@ -383,6 +390,20 @@ export function updateConfig(partial: AppConfigUpdate): AppConfig {
 	cached = next;
 	publishSettings?.(next, runtimeUpdate);
 	return next;
+}
+
+export function setSubagentEnabled(name: unknown, enabled: unknown): void {
+	if (typeof name !== "string" || !name.trim()) {
+		throw new Error("subagent name must be a non-blank string");
+	}
+	if (typeof enabled !== "boolean") {
+		throw new Error("subagent enabled must be a boolean");
+	}
+	const disabled = getConfig().disabledSubagents;
+	if (disabled.includes(name) === !enabled) return;
+	updateConfig({
+		disabledSubagents: enabled ? disabled.filter((entry) => entry !== name) : [...disabled, name],
+	});
 }
 
 /** Records an explicit model choice at the head of `recentModels` (deduped, capped), then publishes. */

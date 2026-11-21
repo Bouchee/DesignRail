@@ -4,6 +4,7 @@ import {
 	type HostPlatform,
 	OTHER_AGENT_SKILLS_PROTOCOL_VERSION,
 	QUESTION_PANEL_PROTOCOL_VERSION,
+	SUBAGENT_CATALOG_PROTOCOL_VERSION,
 	SUBAGENT_CONCURRENCY_PROTOCOL_VERSION,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	WINDOWS_SHELL_SETTINGS_PROTOCOL_VERSION,
@@ -81,6 +82,14 @@ const SETTINGS: readonly SettingEntry[] = [
 		section: SettingsSection.Chat,
 		label: "settings.subagents.perChat",
 		requiresProtocolVersion: SUBAGENT_CONCURRENCY_PROTOCOL_VERSION,
+	},
+	{
+		id: "subagents-catalog",
+		section: SettingsSection.Chat,
+		label: "settings.subagents.available",
+		description: "settings.subagents.catalogDescription",
+		keywords: ["subagents", "agent catalog"],
+		requiresProtocolVersion: SUBAGENT_CATALOG_PROTOCOL_VERSION,
 	},
 	{
 		id: "theme-mode",

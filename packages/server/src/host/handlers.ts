@@ -43,6 +43,7 @@ import {
 	listSessions,
 	listSkillCatalog,
 	listSkillCommands,
+	listSubagentCatalog,
 	markWorkspaceRead,
 	markWorkspaceUnread,
 	notifyExtUi,
@@ -164,7 +165,7 @@ import {
 	sendableComments,
 	updateComment,
 } from "../reviews";
-import { getConfig, noteRecentModel, updateConfig } from "../settings";
+import { getConfig, noteRecentModel, setSubagentEnabled, updateConfig } from "../settings";
 import { evictSpecIndex, evictSpecRoot, projectHasSpecs, specGraph } from "../spec";
 import { cancelSpeechInstall, installSpeech, removeSpeech } from "../speech";
 import {
@@ -972,6 +973,15 @@ const handlers: WsHandlers = {
 			admissionContextFor(project, ws.skillOverrides ?? {}, getConfig().otherAgentSkills),
 			{ disabledExtensions: new Set(getConfig().disabledExtensions) },
 		);
+	},
+	"subagent.list": (params) => {
+		if (params?.workspaceId === undefined) return listSubagentCatalog();
+		const workspace = getWorkspace(params.workspaceId);
+		return listSubagentCatalog(workspace.worktreePath, workspace.projectId);
+	},
+	"subagent.setEnabled": (params) => {
+		setSubagentEnabled(params?.name, params?.enabled);
+		return { ok: true };
 	},
 	"extension.list": () => listExtensionCatalog(new Set(getConfig().disabledExtensions)),
 	"webAccess.status": () => webAccessStatus(),

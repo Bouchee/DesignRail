@@ -69,6 +69,7 @@ import {
 	SESSION_TITLE_MAX_LENGTH,
 	SPEC_SECTIONS_PROTOCOL_VERSION,
 	SPEECH_PROTOCOL_VERSION,
+	SUBAGENT_CATALOG_PROTOCOL_VERSION,
 	SUBAGENT_CONCURRENCY_PROTOCOL_VERSION,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	TEXT_SEARCH_PROTOCOL_VERSION,
@@ -708,4 +709,10 @@ test("summary timing uses the existing settings method at v124 and retires orpha
 		"cacheWarming.set",
 	])
 		expect(Object.values(WS_METHODS)).not.toContain(method);
+});
+
+test("the subagent catalog and availability intents have public RPC names", () => {
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(SUBAGENT_CATALOG_PROTOCOL_VERSION);
+	expect(WS_METHODS.subagentList).toBe("subagent.list");
+	expect(WS_METHODS.subagentSetEnabled).toBe("subagent.setEnabled");
 });

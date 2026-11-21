@@ -86,6 +86,10 @@ continue in a repository workspace with a summary and a link back to its source.
 notifies its agent through the session queue and respects pending questions and approvals. Configured
 MCP servers also expose resource lists, resource templates and resource reads through the SDK tools.
 
+Subagents settings lists the available built-in and personal roles, plus definitions in the active
+trusted workspace. Turn a role off by name to prevent new and queued invocations across projects.
+Already running children finish.
+
 Desktop releases and private-server deployment have separate acceptance stages. This source checkout
 does not establish a released installer or cross-platform acceptance.
 

@@ -61,6 +61,7 @@ import type {
 	SessionResources,
 	SessionStateRecord,
 	SpecGraphSnapshot,
+	SubagentCatalogEntry,
 	SubagentCompletionDetails,
 	SubagentOverride,
 	Template,
@@ -129,7 +130,8 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 128;
+export const PROTOCOL_VERSION = 130;
+export const SUBAGENT_CATALOG_PROTOCOL_VERSION = 130;
 export const ARTIFACT_ROLES_PROTOCOL_VERSION = 128;
 export const BROWSER_VIEW_PROTOCOL_VERSION = 127;
 export const KEYBINDINGS_PROTOCOL_VERSION = 126;
@@ -539,6 +541,8 @@ export const WS_METHODS = {
 	sessionNudge: "session.nudge",
 	sessionGetMessages: "session.getMessages",
 	subagentGetTranscript: "subagent.getTranscript",
+	subagentList: "subagent.list",
+	subagentSetEnabled: "subagent.setEnabled",
 	sessionResources: "session.resources",
 	sessionResourceHistory: "session.resourceHistory",
 	backgroundCommandOutput: "backgroundCommand.output",
@@ -1306,6 +1310,8 @@ export interface WsMethodMap {
 		params: { workspaceId: string; parentSessionId: string };
 		result: Ack & { targeted: number };
 	};
+	"subagent.list": { params: { workspaceId?: string }; result: SubagentCatalogEntry[] };
+	"subagent.setEnabled": { params: { name: string; enabled: boolean }; result: Ack };
 	"subagent.getTranscript": {
 		params: { workspaceId: string; parentSessionId: string; childSessionId: string };
 		result: { messages: TranscriptMessage[]; status?: DelegationRunStatus };

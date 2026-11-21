@@ -12,6 +12,7 @@ import { cn } from "@thinkrail/ui/utils";
 import { type ChatMessageOrder, DEFAULT_CHAT_MESSAGE_ORDER } from "@/chat/chatPreferences";
 import { selectActiveWorkspace, toast, useAppStore } from "@/store";
 import { errorText, getTransport } from "@/transport";
+import { AvailableAgents } from "./AvailableAgents";
 import { LineWidthControl } from "./LineWidthSettings";
 import { SegmentedControl, type SegmentedControlOption } from "./SegmentedControl";
 import { SettingsGroup, SettingsPageContainer } from "./SettingsGroup";
@@ -245,6 +246,7 @@ export function ChatSettings() {
 				}
 				onWorkspaceLimitChange={setWorkspaceSubagentLimit}
 			/>
+			<AvailableAgents />
 		</SettingsPageContainer>
 	);
 }

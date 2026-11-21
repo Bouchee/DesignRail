@@ -350,7 +350,7 @@ treatment.
   restore so the two cannot fight. Auto-reveal never switches the side tab or the mode. Clicks still open
   the editor. Right-clicking a file or folder row (a touch long-press, or the Context Menu key / Shift+F10 on
   a focused row) opens its menu: **Open in browser** first for an HTML file from a host at
-  `BROWSER_VIEW_PROTOCOL_VERSION` (v122; `OpenInBrowserMenuItem`, also in the Artifacts row menu after
+  `BROWSER_VIEW_PROTOCOL_VERSION` (v127; `OpenInBrowserMenuItem`, also in the Artifacts row menu after
   Reveal, and `OpenInBrowserButton` in the file tab's toolbar and, through `ResourceHost.OpenInBrowser`, in
   every framed preview), then **Copy path** (absolute, through `joinWorkspacePath`) and **Copy relative
   path** (worktree-relative). "Open in browser" opens the host's `/view/` URL with `window.open(…,

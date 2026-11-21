@@ -856,6 +856,67 @@ test("queued children respect the concurrency limit and parent Stop prevents que
 	expect(child.calls).toHaveLength(1);
 });
 
+test("a disabled subagent role cannot be admitted by a model", async () => {
+	saveConfig({ ...loadConfig(), disabledSubagents: ["worker"] });
+	const parent = new ScriptedModel([agentCall(), done("parent complete")]);
+	const child = new ScriptedModel([done("unexpected child")]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	await promptSession(created.sessionId, "Delegate to the worker");
+	expect(child.calls).toHaveLength(0);
+	expect((await sessionResources("workspace", created.sessionId)).subagents).toHaveLength(0);
+	expect(readSessionRecord(created.sessionId)?.messages).toContainEqual(
+		expect.objectContaining({
+			role: "toolResult",
+			toolCallId: "child-call",
+			isError: true,
+			content: [{ type: "text", text: 'Error: Child agent "worker" is disabled' }],
+		}),
+	);
+});
+
+test("disabling a subagent role stops its queued run without stopping its running child", async () => {
+	const parent = new ScriptedModel([
+		modelResponse(
+			["a", "b"].map((callId) =>
+				functionCall(
+					"Agent",
+					JSON.stringify({ subagent_type: "worker", task: callId, run_in_background: true }),
+					{ callId },
+				),
+			),
+		),
+		done("waiting"),
+		done("noted"),
+	]);
+	const gate = Promise.withResolvers<void>();
+	const child = new ScriptedModel([
+		modelResponder(async () => {
+			await gate.promise;
+			return [assistantMessage("running child completed")];
+		}),
+	]);
+	const created = await createSession({ cwd, workspaceId: "workspace" });
+	configureAgentModelFactory((_model, id) => (id === created.sessionId ? parent : child));
+	try {
+		await promptSession(created.sessionId, "Delegate twice");
+		const initial = (await sessionResources("workspace", created.sessionId)).subagents;
+		expect(initial.map((entry) => entry.status).sort()).toEqual(["queued", "running"]);
+		saveConfig({ ...loadConfig(), disabledSubagents: ["worker"] });
+	} finally {
+		gate.resolve();
+	}
+	await until(() => {
+		const statuses = listSessionRecords()
+			.flatMap(({ childRun }) =>
+				childRun?.parentSessionId === created.sessionId ? [childRun.status] : [],
+			)
+			.sort();
+		return statuses.join(",") === "aborted,completed";
+	});
+	expect(child.calls).toHaveLength(1);
+});
+
 test("model output collection claims command completion and retains the renderer metadata", async () => {
 	let sessionId = "";
 	const model = new ScriptedModel([
