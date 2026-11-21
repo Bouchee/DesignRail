@@ -777,7 +777,9 @@ test("failed persistence cannot retain a finished writer hint or a settled produ
 
 test("a child settling does not end its parent run and all child artifacts jump to the parent", async () => {
 	await observeArtifactSessionEvent("w1", "parent", { type: "agent_start" });
+	await observeArtifactSessionEvent("w1", "parent", { type: "round_start", at: 1_000 });
 	await observeArtifactSessionEvent("w1", "child", { type: "agent_start" }, "parent");
+	await observeArtifactSessionEvent("w1", "parent", { type: "round_start", at: 2_000 });
 	await observeArtifactSessionEvent(
 		"w1",
 		"child",
@@ -798,7 +800,15 @@ test("a child settling does not end its parent run and all child artifacts jump 
 	);
 	await observeArtifactSessionEvent("w1", "child", { type: "agent_settled" }, "parent");
 	write(`${CONTEXT}/parent.md`, "parent");
-	expect(listArtifacts("w1").artifacts.every((record) => record.sessionId === "parent")).toBe(true);
+	const rows = await byPath();
+	expect(rows.get(`${CONTEXT}/child.md`)).toMatchObject({
+		sessionId: "parent",
+		rounds: [{ sessionId: "parent", startedAt: 1_000 }],
+	});
+	expect(rows.get(`${CONTEXT}/parent.md`)).toMatchObject({
+		sessionId: "parent",
+		rounds: [{ sessionId: "parent", startedAt: 2_000 }],
+	});
 	await observeArtifactSessionEvent("w1", "parent", { type: "agent_settled" });
 });
 

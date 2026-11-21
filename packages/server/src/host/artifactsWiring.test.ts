@@ -261,7 +261,7 @@ test("real SDK apply_patch and visualize publish parent-owned artifacts and rest
 	scripted.assertComplete();
 }, 30000);
 
-test("a real SDK child writer attributes its artifact to the openable parent chat", async () => {
+test("a foreground SDK writer attributes its artifact to the exact parent chat round", async () => {
 	const { sessionId } = await request("session.create", { workspaceId: workspace.id, model });
 	const parent = new ScriptedModel([
 		call(
@@ -285,9 +285,16 @@ test("a real SDK child writer attributes its artifact to the openable parent cha
 		done(),
 	]);
 	configureAgentModelFactory((_model, id) => (id === sessionId ? parent : child));
-	await turn(sessionId);
+	const snapshot = await turn(sessionId);
+	const prompt = snapshot.messages.find((message) => message.role === "user");
+	if (!prompt) throw new Error("Missing parent prompt");
 	const row = (await request("artifacts.list", { workspaceId: workspace.id })).artifacts[0];
-	expect(row).toMatchObject({ path: `${CONTEXT}/child.md`, sessionId, state: "live" });
+	expect(row).toMatchObject({
+		path: `${CONTEXT}/child.md`,
+		sessionId,
+		state: "live",
+		rounds: [{ sessionId, startedAt: prompt.timestamp }],
+	});
 	expect(
 		(await request("session.list", { workspaceId: workspace.id })).map((item) => item.sessionId),
 	).toEqual([sessionId]);

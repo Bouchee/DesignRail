@@ -194,6 +194,7 @@ The index uses a sibling temporary file, fsync, preserved existing mode (0600 fo
 Canonical application events come from the current SDK publisher. Writer hints recognize apply_patch.path and spec_create.path only, and child results are attributed to their openable parent chat. SDK application records, RunState and checkpoint context are unchanged. Kept copies follow atomic replacement and represent the latest bytes, not version history. This commit offers explicit Restore; opening a deleted row does not automatically restore it.
 
 The same canonical SDK events identify current round markers and which indexed files the assistant linked,
-showed or the user picked. Attribution is bounded to sixteen rounds per file. Child producers capture
-their openable parent's admitted round when they start, and stale child results do not select a later
-parent round. Metadata changes commit through the same atomic artifact index.
+showed or the user picked. Attribution is bounded to sixteen rounds per file. A detached child captures
+its openable parent's admitted round when it starts. A foreground SDK child shares the parent's
+execution window and uses the parent round at the start of its explicit write. Writer hints keep this
+round until the effect ends. Metadata changes commit through the same atomic artifact index.

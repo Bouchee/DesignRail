@@ -133,7 +133,7 @@ const states = new Map<string, WorkspaceArtifacts>();
 const running = new Map<string, Map<string, string>>();
 const writers = new Map<
 	string,
-	Map<string, { sessionId: string; producerId: string; toolCallId: string }>
+	Map<string, { sessionId: string; producerId: string; toolCallId: string; round?: ArtifactRound }>
 >();
 const windows = new Map<string, RunWindow>();
 const roundStarts = new Map<string, Map<string, ArtifactRound>>();
@@ -519,12 +519,9 @@ function writerOf(
 	workspaceId: string,
 	path: string,
 ): { sessionId: string; round?: ArtifactRound } | undefined {
-	const rounds = roundStarts.get(workspaceId);
 	const explicit = writers.get(workspaceId)?.get(path);
-	if (explicit) {
-		const round = rounds?.get(explicit.producerId);
-		return { sessionId: explicit.sessionId, ...(round ? { round } : {}) };
-	}
+	if (explicit) return explicit;
+	const rounds = roundStarts.get(workspaceId);
 	const active = running.get(workspaceId);
 	const owners = new Set(active?.values());
 	if (!active || owners.size !== 1) return undefined;
@@ -1018,7 +1015,11 @@ function rememberWriter(
 		map = new Map();
 		writers.set(workspace.id, map);
 	}
-	map.set(rel, { sessionId, producerId, toolCallId });
+	// A foreground SDK child shares its parent's execution window. Detached children keep
+	// the round captured when their own window started, even as the parent moves on.
+	const roundProducer = running.get(workspace.id)?.has(producerId) ? producerId : sessionId;
+	const round = roundStarts.get(workspace.id)?.get(roundProducer);
+	map.set(rel, { sessionId, producerId, toolCallId, ...(round ? { round } : {}) });
 }
 
 function forgetToolWriter(workspaceId: string, producerId: string, toolCallId: string): void {
