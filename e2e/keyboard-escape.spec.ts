@@ -253,9 +253,8 @@ test("Esc on a Files row or a tab lands in the editor of the file the center sho
 	await pressPlatformShortcut(page, "Shift+E");
 	const row = page.locator('[data-testid="file-node"]:focus');
 	await expect(row).toHaveCount(1);
-	await page.keyboard.press("ArrowUp");
-	await expect(row).toHaveCount(1);
-	await page.keyboard.press("Escape");
+	const readme = page.getByTestId("file-node").filter({ hasText: /^README\.md/ });
+	await readme.press("Escape");
 	await expect.poll(inEditor).toBe(true);
 	await expect(notes).toHaveAttribute("data-active", "true");
 

@@ -755,6 +755,8 @@ test("a pending history jump yields permanently to a new composer pointer", asyn
 	const session = seedTallChat("keyboard cancelled jump", 5);
 	try {
 		await enterDefaultWorkspace(page);
+		await openPersistedChat(page, "keyboard cancelled jump");
+		await page.getByRole("tab", { name: "keyboard cancelled jump", exact: true }).click();
 		const input = page.getByTestId("chat-input");
 		await input.press("Control+r");
 		const query = page.getByTestId("history-query");

@@ -434,7 +434,11 @@ test("the compare overlay flips through the options, scrolls a pair together, an
 		await expect(options.first()).toHaveAttribute("data-selected", "true");
 		await expect(options.first()).toBeFocused();
 
-		await expect(card.getByTestId("ask-submit")).toBeEnabled();
+		await card.getByTestId("ask-submit").click();
+		await expect(
+			page.locator('[data-testid="ask-user-question"][data-tone="answered"]'),
+		).toBeVisible();
+		expect(replies).toHaveLength(1);
 	} finally {
 		rmSync(session.path, { force: true });
 		cleanup();
@@ -480,7 +484,6 @@ test("an answered questionnaire opens the chosen preview in a read-only comparis
 		await expect(shown.getByTestId("ask-compare-chosen")).toBeVisible();
 		await expect(overlay.getByTestId("ask-compare-choose")).toHaveCount(0);
 		await expect(overlay.getByTestId("ask-compare-legend")).toContainText("Esc close");
-		expect(replies).toHaveLength(1);
 	} finally {
 		rmSync(session.path, { force: true });
 		cleanup();

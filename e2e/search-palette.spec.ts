@@ -592,7 +592,8 @@ test.describe("rebound palette keys", () => {
 		await setKeybindings(page, { "palette.preview": ["Alt+KeyP"] });
 		await openPalette(page);
 		const preview = page.getByTestId("search-preview-toggle");
-		await expect(preview.locator("kbd")).toHaveText(["Alt", "P"]);
+		const apple = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform));
+		await expect(preview.locator("kbd")).toHaveText([apple ? "⌥" : "Alt", "P"]);
 		const initial = await preview.getAttribute("aria-pressed");
 		const flipped = initial === "true" ? "false" : "true";
 
