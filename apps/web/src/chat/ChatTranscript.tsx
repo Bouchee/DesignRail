@@ -167,7 +167,7 @@ function TranscriptFeed({
 			tabIndex={-1}
 			data-transcript-feed
 			data-focus-park
-			className="focus-visible:focus-ring-inset"
+			className="outline-none"
 		>
 			{children}
 		</div>
