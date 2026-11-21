@@ -62,7 +62,10 @@ export default function MonacoEditor({
 	const scope = useId().replace(/[^\w-]/g, "");
 	const path = resource.path;
 	const text = content.kind === "text" ? content.text : "";
-	const commentLabel = t("review.widget.commentOnSelection");
+	const commentLabels = {
+		selection: t("review.widget.commentOnSelection"),
+		line: t("viewer.code.commentOnLine"),
+	};
 	const font = useSyncExternalStore(onFontsChange, editorFont);
 	const options = fileEditorOptions(t, fileLineWidth, fileLineWidthBounded, resource.path, font);
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -79,7 +82,7 @@ export default function MonacoEditor({
 		path,
 		text,
 		options,
-		commentLabel,
+		commentLabels,
 		viewState,
 		review,
 		onViewState,
@@ -95,7 +98,7 @@ export default function MonacoEditor({
 			path,
 			text,
 			options,
-			commentLabel,
+			commentLabels,
 			viewState,
 			review,
 			onViewState,
@@ -119,7 +122,7 @@ export default function MonacoEditor({
 		if (isEditorViewState(mount.viewState)) codeEditor.restoreViewState(mount.viewState);
 		const threads = mount.review ? attachReviewThreads(codeEditor, setReviewZones) : null;
 		const commenting = threads
-			? attachReviewCommenting(codeEditor, threads, mount.commentLabel)
+			? attachReviewCommenting(codeEditor, threads, mount.commentLabels)
 			: null;
 		threadsRef.current = threads;
 		commentingRef.current = commenting;
@@ -151,8 +154,8 @@ export default function MonacoEditor({
 	}, [scope, path, text]);
 
 	useLayoutEffect(() => {
-		commentingRef.current?.setLabel(commentLabel);
-	}, [commentLabel]);
+		commentingRef.current?.setLabels(commentLabels);
+	}, [commentLabels]);
 
 	useLayoutEffect(() => {
 		const codeEditor = editorRef.current;
@@ -164,6 +167,12 @@ export default function MonacoEditor({
 	useEffect(() => remeasureEditorFonts(font), [font]);
 
 	const closeComposer = () => threadsRef.current?.closeComposer();
+	const returnFocus = (line?: number) => {
+		const codeEditor = editorRef.current;
+		if (!codeEditor) return;
+		if (line !== undefined) codeEditor.setPosition({ lineNumber: line, column: 1 });
+		codeEditor.focus();
+	};
 	const layoutReviewZones = () => threadsRef.current?.layout();
 
 	useLayoutEffect(() => {
@@ -214,6 +223,7 @@ export default function MonacoEditor({
 				zones={reviewZones}
 				review={review}
 				onCloseComposer={closeComposer}
+				onReturnFocus={returnFocus}
 				onRendered={layoutReviewZones}
 			/>
 		</>

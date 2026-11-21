@@ -1,3 +1,4 @@
+import type { KeybindingOverrides } from "./keybindingChord";
 import type { MatchTier } from "./match";
 import type { SessionState, ThinkingLevel, WireModel } from "./sessionProtocol";
 
@@ -1290,6 +1291,8 @@ export interface AppConfig extends ThemePreference {
 	codeLigatures: boolean;
 	/** Shifts every text weight but the brand face's together. */
 	fontWeightOffset: number;
+	/** The user's chords by command id, replacing its defaults; `[]` unbinds it, an absent id keeps them. */
+	keybindings: KeybindingOverrides;
 }
 
 export type ExtensionSettingValues = Record<string, Record<string, boolean>>;
@@ -1570,6 +1573,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 	codeFontSize: CODE_FONT_SIZE.default,
 	codeLigatures: false,
 	fontWeightOffset: FONT_WEIGHT_OFFSET.default,
+	keybindings: {},
 };
 
 export type FontSettings = Pick<

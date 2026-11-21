@@ -16,7 +16,6 @@ import {
 	installUserFonts,
 	writeFontsHint,
 } from "../fonts";
-import { keybindingLabel } from "../keybindings";
 import { NotificationPermissionPrompt, useAttentionNotifications } from "../notifications";
 import { canStartProjectlessChat } from "../panels/chatActions";
 import { NewWorkspaceDialog } from "../panels/NewWorkspaceDialog";
@@ -63,8 +62,11 @@ import {
 	toggleLeftSide,
 	toggleRightSide,
 } from "./chordActions";
+import { ExtensionOverlays } from "./ExtensionOverlays";
 import { FindInFilesHost } from "./FindInFilesHost";
 import { installFocusRecovery } from "./focusRecovery";
+import { KeybindingEditor } from "./KeybindingEditor";
+import { useKeybindingLabel } from "./keybindingState";
 import { LayoutSettings } from "./LayoutSettings";
 import { useLocalLayoutState } from "./layoutState";
 import { LocationBar } from "./locationBar";
@@ -72,7 +74,7 @@ import { NativeWindowControls } from "./NativeWindowControls";
 import { PROJECT_HOME_PROJECTS_REGION_ID, ProjectHome } from "./ProjectHome";
 import { installRegionTracker, pressRegionKey } from "./regions";
 import { SearchPaletteHost } from "./SearchPaletteHost";
-import { ShortcutsDialogHost, ShortcutsReference } from "./ShortcutsDialog";
+import { ShortcutsDialogHost } from "./ShortcutsDialog";
 import { hasNativeShortcuts, readSettingsShortcutLabel } from "./useAppShortcuts";
 import { useCollapsibleRegion } from "./useCollapsibleRegion";
 import { useGlobalHotkeys } from "./useGlobalHotkeys";
@@ -138,10 +140,9 @@ export function Shell() {
 	};
 
 	const homeProjects = useCollapsibleRegion<HTMLDivElement>(PROJECT_HOME_PROJECTS_REGION_ID);
-	const [searchShortcut] = useState(() => keybindingLabel("search.open"));
-	const [newWorkspaceShortcut] = useState(() =>
-		keybindingLabel("workspace.new", { browser: !hasNativeShortcuts() }),
-	);
+	const searchShortcut = useKeybindingLabel("search.open");
+	const [nativeShortcuts] = useState(hasNativeShortcuts);
+	const newWorkspaceShortcut = useKeybindingLabel("workspace.new", { browser: !nativeShortcuts });
 
 	const [themeHint] = useState(readThemeHint);
 	const [settingsShortcut] = useState(readSettingsShortcutLabel);
@@ -269,7 +270,11 @@ export function Shell() {
 						size="m"
 						icon={RiSearchLine}
 						label={t("shell.search.open")}
-						tooltip={t("shell.search.openWithShortcut", { shortcut: searchShortcut })}
+						tooltip={
+							searchShortcut
+								? t("shell.search.openWithShortcut", { shortcut: searchShortcut })
+								: t("shell.search.open")
+						}
 						data-testid="open-search"
 						onClick={() => useAppStore.getState().openSearch()}
 					/>
@@ -318,7 +323,7 @@ export function Shell() {
 				<SettingsDialog
 					layoutSettings={<LayoutSettings />}
 					keyboardSettings={
-						<SearchSettings shortcuts={<ShortcutsReference className="max-h-[32rem]" />} />
+						<SearchSettings openShortcut={searchShortcut} shortcuts={<KeybindingEditor />} />
 					}
 					updateSettings={updates ? <UpdateSettings updates={updates} /> : undefined}
 				/>
@@ -365,6 +370,7 @@ export function Shell() {
 			<Toaster />
 			<UpdateInstallSurfaces updates={updates} />
 			<AppShortcuts />
+			<ExtensionOverlays />
 		</div>
 	);
 }

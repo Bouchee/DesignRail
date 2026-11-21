@@ -195,6 +195,7 @@ beforeEach(() => {
 			};
 		},
 		revealElement: () => {},
+		leaveFollow: () => {},
 		scrollToLatest: () => {
 			latest++;
 		},

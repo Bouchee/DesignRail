@@ -19,8 +19,10 @@ F6 first highlights the current region, then cycles regions while the frame is v
 the chat input, Mod+0 Projects, Mod+1–9 a center group, and Ctrl+Backquote the terminal. The command
 palette offers these actions and desktop zoom controls. Controls that disappear or become disabled
 return focus to a nearby control; explicit Show and Jump actions focus their revealed target.
-Mod+? opens a filterable keyboard reference, also available from the left rail and Settings → Keyboard.
-Tooltips show each button’s shortcut; the reference starts with the surface you were using.
+Mod+? opens a filterable keyboard reference with columns that adapt to the window. It is also available from the left rail. Settings → Keyboard edits app and extension shortcuts and imports or exports them as JSON.
+Tooltips show each button’s shortcut. The reference starts with the surface you were using.
+In a review, Tab to the diff, use arrows to pick a line or region, and press Enter to comment.
+Press F outside text entry to label clickable controls in Hint mode, or S in a sidebar tree to filter its rows.
 From the chat input, Mod+Up enters transcript navigation; arrows or H/J/K/L walk messages and tools,
 C copies, O opens a tool’s file, and Escape returns to the input. History entries offer keyboard menus.
 Sidebar trees use arrows, Home/End and type-ahead with one Tab stop per tree. Tab menus, the command

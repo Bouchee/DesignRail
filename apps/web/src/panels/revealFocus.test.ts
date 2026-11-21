@@ -66,7 +66,7 @@ const gesture = (type: string) => browser.dispatchEvent(new Event(type));
 const mutate = () => {
 	for (const observer of [...observers]) observer.notify();
 };
-const element = (node: NodeFixture) => node as unknown as Element;
+const element = (node: NodeFixture) => node as unknown as HTMLElement;
 beforeEach(() => {
 	focused = null;
 	browser = new EventTarget();
@@ -76,6 +76,9 @@ beforeEach(() => {
 	replace("window", browser);
 	replace("document", {
 		body: {},
+		get activeElement() {
+			return focused;
+		},
 		querySelector: () => layers[0] ?? null,
 		querySelectorAll: () => layers,
 	});
@@ -113,7 +116,7 @@ const requestReview = () => {
 	return request;
 };
 
-test("a normal delayed header lands on its first enabled control", () => {
+test("a normal delayed header receives focus itself", () => {
 	const scope = new NodeFixture();
 	const container = new NodeFixture();
 	const input = new NodeFixture();
@@ -124,7 +127,7 @@ test("a normal delayed header lands on its first enabled control", () => {
 	expect(focused).toBeNull();
 	ready = true;
 	frame();
-	expect(focused).toBe(input);
+	expect(focused).toBe(container);
 });
 
 for (const type of ["keydown", "pointerdown", "blur"])
@@ -164,7 +167,7 @@ test("unmount and a newer header request supersede the previous one", () => {
 	current.control = new NodeFixture();
 	disposers.push(focusWhenRevealed(() => element(current), element(scope)));
 	frame();
-	expect(focused).toBe(current.control);
+	expect(focused).toBe(current);
 	focused = null;
 	const removed = new NodeFixture();
 	disposers.push(focusWhenRevealed(() => element(old), element(removed)));
@@ -199,7 +202,7 @@ test("a cold Show remains owned past the DOM budget and may land after its own n
 	card.control = new NodeFixture();
 	disposers.push(focusWhenRevealed(() => element(card), element(scope)));
 	frame();
-	expect(focused).toBe(card.control);
+	expect(focused).toBe(card);
 	useAppStore.getState().clearReviewFocus("comment");
 	expect(observers.size).toBe(0);
 });

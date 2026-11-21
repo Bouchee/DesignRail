@@ -20,7 +20,9 @@ terminal mirrors used by feature render caches.
   file. Saving a first draft in the already selected resource does not reveal Review or move focus. Reveal is
   deferred while `doubleClickPendingMs()` says a browse row's double-click could still arrive, so the row can keep its preview
   before Review replaces it. When Review already shows (the workbench-supplied reader), nothing can replace the
-  row, so the reveal runs at once: a late reveal's focus request would close whatever the user opened meanwhile.
+  row, so the reveal runs at once. The reveal is ambient: its intent carries `focus: false`, so it selects the
+  Review tab without moving keyboard focus (a file's first draft made its tab reviewed, and the focused
+  Review rail pulled a keyboard comment away from its line).
   For the same reason a deferred reveal yields when the showing auxiliary tools (the reader's `showingKey`)
   changed since it was scheduled: a tool the user picked inside the window, such as Specs, stays. A deferred
   reveal cancelled before it fires is forgotten, so a rerun with the same selection schedules it again.

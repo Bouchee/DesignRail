@@ -103,8 +103,9 @@ treatment.
   project `+`** — both are `IconButton` ghost `s`, so they render identically and their glyphs
   line up on one vertical axis (both sit at the row's `pr-xs` right edge). The Create workspace `+`'s tooltip
   shows the one `workspace.new` chord that reaches this client as keycaps — `Mod+N` on the desktop, the
-  `Mod+Alt+N` alias in a browser — from `ProjectTree`'s `nativeShortcuts` prop, which the shell sets (see
-  `submodule-web-shell` global chords); the context-menu item stays plain.
+  `Mod+Alt+N` alias in a browser — from `ProjectTree`'s `newWorkspaceShortcut` caps, which the shell
+  injects from the resolved table (see `submodule-web-shell` global chords, *Chords in tooltips*); the
+  context-menu item stays plain.
   Long names truncate before the count/action; there is deliberately **no visible Close or overflow icon**.
   Hover highlights the full row and the highlight remains while its **project context menu** is open.
   Right-click opens that PR-#167-styled menu at the pointer without selecting/navigating; a scroll-cancelled
@@ -1064,6 +1065,8 @@ a project picker, the prompt hero, and the reused
   when their extension is off. The page also keeps the separate DeepSeek key controls and the existing
   other-agent Skills opt-in. It exposes no Pi package installation, built-in Pi switches or package RPCs.
   Historical tool renderers remain available when an extension is disabled.
+  Web-only contributions join the catalog with localized copy and no tool chips. Their switches use
+  the same persisted disabled-name list and apply immediately.
   **`EnvironmentSettings`** (the **Environment** section, nav `settings-nav-environment`, listed only at
   `protocolVersion >= HOST_ENVIRONMENT_PROTOCOL_VERSION`) edits the stored host environment
   ([[submodule-server-environment]]): the pi config folder, the folder in use (`effectiveAgentDir`), and
@@ -1607,7 +1610,9 @@ own section. The kebab menu (`plan-menu`, a
   fold the section the user was reading); **Drafts rows are numbered** (1., 2., …) instead of wearing
   the pending glyph — and the workbench tool router **reveals the Review tool** when such a tab is
   ACTIVATED (keyed on the local selected-resource change, so a draft saved in an already selected resource
-  never yanks attention; `selectActiveReviewedPath` is the shared derivation). Each
+  never yanks attention; `selectActiveReviewedPath` is the shared derivation). The reveal never takes
+  keyboard focus (`focus: false`): a file's first draft also makes its tab "reviewed", and a reveal that
+  focused the Review rail pulled a just-saved keyboard comment away from its line. Each
   comment row is a **navigation gesture**, one rule for every author: a row with a linked chat
   (`comment.sessionId`) opens **the discussion** (its chat tab); one without — every draft, since a
   draft is never sent — opens the file **focused on the comment**. The file stays one hover-action
@@ -1688,7 +1693,8 @@ own section. The kebab menu (`plan-menu`, a
   into the hovered line's number cell whenever the hovered line changes and removes it on
   `pointerleave`. Only a custom `renderGutterUtility`, which we use, puts a `<slot>` in that node; the
   default gutter button does not crash, and the crash does not depend on diff size. Invariant: a Pierre
-  surface never inserts, removes, or moves a `<slot>` synchronously from a pointer or mouse handler.
+  surface never inserts, removes, or moves a `<slot>` synchronously from a pointer or mouse handler; the
+  keyboard line cursor, whose `selectedLines` move the gutter utility too, applies them a frame later.
   `patches/@pierre%2Fdiffs@1.6.4.patch` (root `patchedDependencies`) makes placement a no-op while a
   mouse button is held outside Pierre's own selection session — armed by `pointermove` and by
   `pointerleave`, so a drag whose first move already exits the diff cannot remove the slot — and the
@@ -1717,7 +1723,9 @@ own section. The kebab menu (`plan-menu`, a
   zone nodes keyed by comment id; `MonacoReviewZones` portals the shared React `ReviewThreadCard` and
   `ReviewComposer` into them, while `ResizeObserver` feeds their measured heights back to Monaco. An
   unrelated push therefore keeps the same keyed draft textarea, including the shared card's Escape-cancel
-  and shortcut-save behavior. Threads without a `lineRange` stay in the same unplaced
+  and shortcut-save behavior. `Mod+Shift+M` comments on the selection, or on the caret's line when nothing
+  is selected; the context-menu entry still needs a selection. A closed composer or a card's save,
+  discard, Send or Delete returns focus to the editor (at the card's line). Threads without a `lineRange` stay in the same unplaced
   strip. `monacoMenuIcons.ts` decorates Monaco's standalone file-editor menu; no diff editor or diff-side
   branch remains. **Rendered preview**:
   `MarkdownPreview` splits the stripped document at each insert's
@@ -2131,8 +2139,11 @@ menu has closed, because a closing menu returns focus to its row; disabled
   finding resolved from under it yields to its successor instead of skipping one. The rail never renders
   on phone-class viewports — 280px of a 390px
   screen would leave no diff to guide through. A keyboard step (`Alt+↑` / `Alt+↓`, `V` advancing, `J`, `N`,
-  `P`) and a click on a reading step or finding move focus to what it revealed — the section header's first
-  control, or the finding card's first control once `useReviewReveal` scrolls it into view; the
+  `P`) and a click on a reading step or finding move focus to what it revealed — the section's collapse
+  toggle (stacked layout) or its header itself (single-file layout, `tabIndex=-1` and the section's
+  `data-focus-row-primary`, so a diff cursor's Esc and focus recovery land there too; never the header's
+  first control, which there is Revert file, so a following Enter or Space cannot revert), or the finding card
+  once `useReviewReveal` scrolls it into view (a draft's text, a sent card itself); the
   `Prev / Next`, guide and bottom-bar buttons keep focus, so they can be pressed again (the reveal reaches
   the renderer as a review focus with `moveFocus: false`: it scrolls to a finding without focusing it), and
   one that disables at the end hands focus to its nearest enabled sibling through the shell's recovery
@@ -2140,7 +2151,13 @@ menu has closed, because a closing menu returns focus to its row; disabled
   Plain-letter shortcuts (`V`, `J`, `N`, `P`) belong to the
   review tab the center is looking at (`ownsReviewShortcut`: the attention group's selected tab, no
   modal or menu layer open, no text-entry target, and no earlier handler consumed the event), so two review scopes split side by side cannot both answer
-  one keystroke. These keys, and the trees' `F2` / `Delete` / `Mod+Enter` / project reorder, are compared
+  one keystroke. Inside a diff's **line cursor** ([[module-resource-renderers]], *Keyboard review
+  surfaces*) `j`/`k` move lines and are consumed there, so `J` means next unreviewed only outside it;
+  `V`, `N`, `P` and `Alt+↑/↓` pass through the cursor. A comment authored from the cursor returns focus to
+  its line on save, send or cancel, and so do a draft card's `Mod+Enter`, Esc, Send and Delete — never to
+  `<body>`, another card or another file; Esc on a cursor without a range lands on the section header.
+  **Show in file** and the guide's keyboard steps land in a draft's text (caret at the end), not on its
+  Send button, and on a sent card itself. These keys, and the trees' `F2` / `Delete` / `Mod+Enter` / project reorder, are compared
   against the [[submodule-web-keybindings]] catalog's constants (`REVIEW_KEYS`, `TREE_KEYS`), which the
   keyboard cheatsheet lists; the Prev / Next file buttons show `Alt+↓` / `Alt+↑` (`⌥↓` / `⌥↑` on a Mac)
   as tooltip caps rather than in their label. **Scale rules**:
@@ -2276,10 +2293,26 @@ menu has closed, because a closing menu returns focus to its row; disabled
     landing took the first row). Of Chats and Projects only the tree holding the active workspace marks
     its default (Projects when none is active); of the Artifacts tool's, Artifacts when it has rows, else
     Other agent files.
-  - **Keys** are feature-local (`event.key` in the tree, not the global keybinding table): ↑/↓, Home/End;
-    → expands, else enters the first child; ← collapses, else goes to the parent; type-ahead matches the
-    row label's prefix (a ~500 ms buffer; Space joins only a live buffer, otherwise it activates). Letters
-    belong to a focused tree, so the Changes review's `V`/`J`/`N` do not fire from a focused Changes row.
+  - **Keys** are feature-local (`event.key` in the tree, not the global keybinding table): ↑/↓ and `j`/`k`,
+    Home/End; → / `l` expands, else enters the first child; ← / `h` collapses, else goes to the parent (the
+    letters map onto the arrows before `resolveTreeMove`, unmodified only, never during IME composition).
+    Letters belong to a focused tree, so the Changes review's `V`/`J`/`N` do not fire from a focused Changes
+    row: every other printable key is swallowed, except Space (the button's activation) and `F` (by
+    `code`, unmodified), which belongs to hint mode ([[module-ext-hint-mode]]). Letter type-ahead was
+    removed when F became hint mode's (2026-11-15); search moved to `S`.
+  - **`S` searches the visible rows** (isearch). `Tree` renders a labelled field ("Search Files") as a
+    sticky sibling *before* its `role="tree"` element — outside it, so the tree's `MutationObserver` and
+    roving model never see it — and focuses it. Typing matches the query as a case-insensitive substring of
+    each rendered row's `data-tree-label` (collapsed children are not rendered, so not searched); the
+    cursor (tab stop, `data-focus-default`) moves to the first match at or after the current match, else
+    the row the search started from, wrapping, and is scrolled into view (re-centred if the sticky field
+    covers it). Matches carry `data-tree-match="match"`, the current one `"current"` (`primary-subtle` /
+    `primary-soft` fills through the tree's arbitrary variants); the field shows "n of m" or "No match".
+    ↓ / ↑ step to the next / previous match, wrapping; Enter keeps the current match (or the start row)
+    and Esc returns to the start row — both focus that row **before** the field unmounts, so focus never
+    drops to `<body>`; blur (Tab lands on the current match, the tree's tab stop) keeps the match. Plain
+    `S` types into the field, so `S`-again-as-next (the product brief) is not bound: a query must be able
+    to contain an s. The pure model is `treeSearchMatches` / `treeSearchTarget` / `treeSearchStep`.
     Enter is the button's own click; `Mod+Enter` is the row's double-click — Files, Specs and Artifacts open
     kept (a deleted artifact restores first), Changes opens its kept diff with `claimPreview`; rows without
     a double-click treat it as Enter.
@@ -2297,7 +2330,7 @@ menu has closed, because a closing menu returns focus to its row; disabled
     chevrons, kebabs, Settle / Keep active, the project's Create workspace `+`, a creation's retry /
     dismiss, an artifact's chat chip and Restore); each action stays reachable — arrows expand, the row's
     menu carries the rest (Create workspace, Settle, Keep active, Open ‹chat›, Restore), a creation's
-    actions are in the creation view its row opens. dnd-kit's draggable `attributes` stay unspread on the project name
+    actions are in the creation view its row opens; hint mode labels none of them, by the same markup. dnd-kit's draggable `attributes` stay unspread on the project name
     (they would add a second tab stop); dragging needs only its listeners.
 - **Row actions: one menu, two triggers.** Every **file** row (both views) is wrapped in
   **`ChangeRowActions`**: a hover-revealed `⌄` button *and* right-click on the row (Shift+F10 / Menu key on it) open the same

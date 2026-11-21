@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
 	CHANGE_MUTATIONS_PROTOCOL_VERSION,
 	HOST_UPDATE_RUN_PROTOCOL_VERSION,
+	KEYBINDINGS_PROTOCOL_VERSION,
 	PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION,
 	PLAN_SUMMARY_GENERATION_PROTOCOL_VERSION,
 	type Project,
@@ -18,10 +19,12 @@ import {
 	mergeSessionStateRecords,
 	supportsChangeMutations,
 	supportsHostUpdateRun,
+	supportsKeybindings,
 	supportsPlanReview,
 	supportsPlanSummaryGeneration,
 	supportsRichAnchors,
 	supportsUserThemes,
+	updateKeybindings,
 } from "./wireTransport";
 
 test("tool responses bind the exact current run, interaction, revision and call", async () => {
@@ -89,6 +92,47 @@ test("user theme files are read only from a host at or beyond their capability v
 	expect(supportsUserThemes(USER_THEMES_PROTOCOL_VERSION)).toBe(true);
 	expect(supportsUserThemes(USER_THEMES_PROTOCOL_VERSION - 1)).toBe(false);
 	expect(supportsUserThemes(null)).toBe(false);
+});
+
+test("keybindings are written only to a host at or beyond their capability version", () => {
+	expect(supportsKeybindings(KEYBINDINGS_PROTOCOL_VERSION)).toBe(true);
+	expect(supportsKeybindings(KEYBINDINGS_PROTOCOL_VERSION + 1)).toBe(true);
+	expect(supportsKeybindings(KEYBINDINGS_PROTOCOL_VERSION - 1)).toBe(false);
+	expect(supportsKeybindings(null)).toBe(false);
+});
+
+describe("updateKeybindings", () => {
+	const requests: [string, unknown][] = [];
+	let spy: ReturnType<typeof spyOn> | null = null;
+	beforeEach(() => {
+		requests.length = 0;
+		const transport = {
+			request: (method: string, params: unknown) => {
+				requests.push([method, params]);
+				return Promise.resolve({});
+			},
+		} as unknown as ReturnType<typeof wireTransport.getTransport>;
+		spy = spyOn(wireTransport, "getTransport").mockReturnValue(transport);
+		useAppStore.setState({ keybindingOverrides: {} });
+	});
+	afterEach(() => {
+		spy?.mockRestore();
+		useAppStore.setState({ protocolVersion: null, keybindingOverrides: {} });
+	});
+
+	test("refuses an older host without sending anything", async () => {
+		useAppStore.setState({ protocolVersion: KEYBINDINGS_PROTOCOL_VERSION - 1 });
+		expect(await updateKeybindings({ "search.open": ["Mod+Alt+KeyS"] })).toBe(false);
+		expect(requests).toEqual([]);
+	});
+
+	test("sends the whole map as one settings update and leaves the store to the broadcast", async () => {
+		useAppStore.setState({ protocolVersion: KEYBINDINGS_PROTOCOL_VERSION });
+		const keybindings = { "search.open": ["Mod+Alt+KeyS"], "tab.close": [] };
+		expect(await updateKeybindings(keybindings)).toBe(true);
+		expect(requests).toEqual([["settings.update", { config: { keybindings } }]]);
+		expect(useAppStore.getState().keybindingOverrides).toEqual({});
+	});
 });
 
 test("host update execution is offered only by a host at or beyond the v70 capability", () => {

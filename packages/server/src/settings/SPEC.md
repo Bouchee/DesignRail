@@ -13,7 +13,7 @@ The server-synchronized app config: opaque fixed-theme selection, fixed/system m
 pair, host-owned new-chat model and
 effort defaults, terminal replay budget and Windows shell preference, chat composer growth preset, chat/file
 visual line widths plus independent pane bounds, bounded custom layout-preset catalog, the host-wide subagent default, plan-review policy, the host-registry extensions the
-user turned off, and the UI language preference (`locale`). `defaultModel` / `defaultEffort`
+user turned off, the UI language preference (`locale`), and the user’s shortcuts (`keybindings`). `defaultModel` / `defaultEffort`
 select the defaults every new chat receives (unset model means the configured verified model, with non-environment connections preferred over environment ones; unset effort means medium);
 `reviewModel` / `reviewEffort`
 select the reviewer runtime (unset means that same new-chat default); `reviewAutoFix: false` records a `request_changes`
@@ -41,7 +41,7 @@ clamps `terminalReplayKb`, so a hand-edited config cannot exhaust memory. Settin
 - **Owns:** cached current `AppConfig`; `getConfig()`; `updateConfig(partial)` (reject a non-object or unknown key → merge → validate known fields → persist → publish the merged `AppConfig` and successful applied `AppConfigUpdate`); the font settings' shape (`interfaceFont` / `codeFont` through `isFontChoice`, `codeFontSize`, `codeLigatures`, `fontWeightOffset`), each normalized back to its own default on load — which family a choice names, and whether it renders, is the client's; line-width and resource-free custom-preset validation/normalization; custom-preset safety caps; `setSettingsPublisher`; and `resetConfigCache` for tests.
 - **Public surface (barrel):** `getConfig`, `updateConfig`, `noteRecentModel`, `setSettingsPublisher`, `SettingsPublisher`, `resetConfigCache`, plus pure custom-preset normalization used by host startup after persistence load.
 - **Allowed deps:** `persistence` (`loadConfig`/`saveConfig`); `contracts` (`AppConfig`, `LayoutPreset`,
-  `isTerminalWindowsShell`).
+  `isTerminalWindowsShell`, `isKeybindingOverrides`); `shared` (`CodedError`).
 - **Forbidden:** host or another feature sibling; current-layout document/snapshot types; workspace ids/resources; current frame validation; owning WS channels; or importing web preset definitions.
 
 ## Get right
@@ -83,6 +83,15 @@ clamps `terminalReplayKb`, so a hand-edited config cannot exhaust memory. Settin
   boolean values, or the whole mutation is rejected; it is **merged per key** into the stored map, so a
   Settings switch never resets an extension's other settings. Like `disabledExtensions`, undeclared names
   and keys are kept and inert — the registry's descriptors decide what a key means.
+- `keybindings` maps a command id to the user's chords (`[]` = unbound; absent = the command's defaults);
+  absent means `{}`. Settings checks **shape and grammar only** (`contracts`' `isKeybindingOverrides`):
+  non-blank ids, lists of `isKeybindingChord` strings; a malformed value rejects the whole mutation with
+  the `CodedError` `KEYBINDINGS_INVALID`. An update **replaces the whole map** (an editor writes every
+  binding it keeps) and dedupes each list; **unknown ids are kept** — an extension may be switched off or
+  not installed, and which chord a command may take (no plain keys, conflicts) is the client's resolver's
+  rule ([[submodule-web-keybindings]]). On load, malformed chords are dropped, an entry left with none falls
+  back to its defaults, and a stored `[]` stays unbound. Gated on `KEYBINDINGS_PROTOCOL_VERSION` (v126):
+  an older host rejects the key, so the client sends it only above the gate (`supportsKeybindings`).
 - `locale` is `"system"` (default) or a canonical BCP-47 tag (`isLocalePreference`: `pt-BR`, not
   `pt-br`). Settings never checks that a language is available — bundled catalogs belong to the web build
   and local files to [[submodule-server-locales]] — so a tag whose file was deleted persists and returns

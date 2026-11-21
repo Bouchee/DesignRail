@@ -24,6 +24,7 @@ export {
 	supportsExtensionSettings,
 	supportsFonts,
 	supportsHostUpdateRun,
+	supportsKeybindings,
 	supportsPlanReview,
 	supportsPlanSummaryGeneration,
 	supportsRichAnchors,
@@ -31,4 +32,5 @@ export {
 	supportsTextSearch,
 	supportsTurnChanges,
 	supportsUserThemes,
+	updateKeybindings,
 } from "./wireTransport";

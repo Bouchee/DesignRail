@@ -239,13 +239,15 @@ export function ChangesReviewPane({ tab }: { tab: ChangesTab }) {
 		headerFocus.current?.();
 		const root = rootRef.current;
 		if (!root) return;
-		headerFocus.current = focusWhenRevealed(
-			() =>
-				Array.from(root.querySelectorAll<HTMLElement>('[data-testid="changes-section"]'))
-					.find((section) => section.dataset.path === path)
-					?.querySelector('[data-testid="changes-section-header"]'),
-			root,
-		);
+		headerFocus.current = focusWhenRevealed(() => {
+			const section = Array.from(
+				root.querySelectorAll<HTMLElement>('[data-testid="changes-section"]'),
+			).find((candidate) => candidate.dataset.path === path);
+			return (
+				section?.querySelector<HTMLElement>('[data-testid="changes-section-toggle"]') ??
+				section?.querySelector<HTMLElement>('[data-testid="changes-section-header"]')
+			);
+		}, root);
 	};
 	const reveal = (path: string, commentId: string | undefined, focus: boolean) => {
 		headerFocus.current?.();

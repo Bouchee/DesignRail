@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import {
 	defineWebExtension,
+	type GlobalOverlayProps,
 	type ToolRegistrationOptions,
 	type ToolRenderProps,
 	type WebExtension,
@@ -64,5 +65,42 @@ describe("defineWebExtension", () => {
 		expect(onOpenFile).toHaveBeenCalledWith("src/example.ts");
 		expect(extension.toolRenderers.file.options.summary(props)).toBe("running");
 		expect(defineWebExtension({ name: "empty", toolRenderers: {} }).toolRenderers).toEqual({});
+	});
+});
+
+describe("web-only contribution points", () => {
+	it("preserves display copy, a global overlay, commands and shortcut rows, with no tool renderers", () => {
+		const overlay = mock((_props: GlobalOverlayProps) => null);
+		const descriptor = {
+			name: "keyboard-aid",
+			title: "hintMode.title",
+			description: "hintMode.description",
+			globalOverlay: overlay,
+			commands: [
+				{
+					id: "keyboard-aid.show",
+					title: "hintMode.shortcuts.show",
+					chords: [
+						{ code: "KeyF", key: "f" },
+						{ code: "Semicolon", key: ";", mod: true },
+					],
+				},
+			],
+			shortcuts: [
+				{
+					id: "keyboard-aid.exit",
+					title: "hintMode.shortcuts.exit",
+					keys: [{ code: "Escape", key: "Escape" }],
+				},
+			],
+		} satisfies WebExtension;
+		const extension = defineWebExtension(descriptor);
+
+		expect(extension).toBe(descriptor);
+		expect(extension).not.toHaveProperty("toolRenderers");
+		expect(extension.globalOverlay).toBe(overlay);
+		expect(extension.commands[0]?.chords[1]).toEqual({ code: "Semicolon", key: ";", mod: true });
+		expect(extension.shortcuts[0]?.keys[0]).toEqual({ code: "Escape", key: "Escape" });
+		expect(overlay).not.toHaveBeenCalled();
 	});
 });

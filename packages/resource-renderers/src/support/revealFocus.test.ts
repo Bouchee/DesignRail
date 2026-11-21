@@ -25,8 +25,9 @@ class NodeFixture {
 	scrollIntoView() {
 		this.scrolls++;
 	}
-	matches() {
-		return this.disabled;
+	matches(selector: string) {
+		if (selector === "[data-comment-id]") return this.dataset.commentId !== undefined;
+		return selector === ":disabled" && this.disabled;
 	}
 	focus() {
 		focused = this;
@@ -74,10 +75,15 @@ beforeEach(() => {
 	replace("window", browser);
 	replace("document", {
 		body: {},
+		get activeElement() {
+			return focused;
+		},
 		querySelector: () => layers[0] ?? null,
 		querySelectorAll: () => layers,
 	});
 	replace("Element", NodeFixture);
+	replace("HTMLElement", NodeFixture);
+	replace("HTMLTextAreaElement", class {});
 	replace("MutationObserver", ObserverFixture);
 	replace("requestAnimationFrame", (callback: FrameRequestCallback) => {
 		frames.set(++frameId, callback);

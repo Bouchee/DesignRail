@@ -54,6 +54,7 @@ They can import pure helper types without an execution dependency.
 
 ## Current members
 
+- `hint-mode` is web-only and contributes the keyboard overlay and its shortcut reference.
 - `visualize` supplies one SDK visualization tool and strict server Mermaid validation.
 - `ask-user-question` supplies SDK interruption and validated saved-response execution with a docked questionnaire renderer.
 - `web-access` supplies DeepSeek Search and Fetch through injected host services and existing app-local web cards.

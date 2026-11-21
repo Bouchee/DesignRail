@@ -1,4 +1,4 @@
-import { focusFirstControl, watchFocusIntent, whenFocusReady } from "@thinkrail/ui/focus";
+import { watchFocusIntent, whenFocusReady } from "@thinkrail/ui/focus";
 import { isNavigationChange, useAppStore } from "../store";
 
 function focusRequest(isCurrent: () => boolean = () => true): AbortController {
@@ -11,7 +11,7 @@ function focusRequest(isCurrent: () => boolean = () => true): AbortController {
 }
 
 export function focusWhenRevealed(
-	find: () => Element | null | undefined,
+	find: () => HTMLElement | null | undefined,
 	scope: Element,
 ): () => void {
 	const request = focusRequest();
@@ -21,8 +21,16 @@ export function focusWhenRevealed(
 				request.abort();
 				return false;
 			}
-			const container = find();
-			return container ? focusFirstControl(container) : false;
+			const target = find();
+			if (
+				!target?.isConnected ||
+				target.getClientRects().length === 0 ||
+				target.closest("[inert]") ||
+				target.matches(":disabled")
+			)
+				return false;
+			target.focus({ preventScroll: true });
+			return document.activeElement === target;
 		},
 		60,
 		request,
