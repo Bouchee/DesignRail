@@ -134,6 +134,13 @@ import {
 } from "./modelConfiguration";
 import { assertCompletedPlanReviewResponse, planReviewOutput } from "./planReviewOutput";
 import {
+	applicationRequirementsSkill,
+	createRequirementsTools,
+	type RequirementsReview,
+	requirementsInstructions,
+	requirementsSkill,
+} from "./requirementsTools";
+import {
 	SANDBOX_ARCHIVE_BYTES,
 	SandboxMemory,
 	SandboxMemoryRunner,
@@ -178,6 +185,8 @@ interface ActiveRun {
 	memory?: SandboxMemory;
 	suspended?: boolean;
 	inputId?: string;
+	requirementsPresentation?: RequirementsReview | undefined;
+	requirementsShown?: { presentationId: string; messageId: string } | undefined;
 	enabledExtensions: SdkExtensionSnapshot[];
 	ready?: Promise<void>;
 	markReady?: () => void;
@@ -748,12 +757,22 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 					? [{ type: "text" as const, text: part.refusal }]
 					: [],
 		);
+		const review = run.requirementsPresentation;
+		const showReview =
+			review &&
+			!review.applyCallId &&
+			item.rawItem.content.some(
+				(part) => part.type === "output_text" && part.text.includes(review.id),
+			);
+		if (showReview) content.push({ type: "text", text: review.markdown });
 		if (blockOutput(run, content.map((part) => part.text).join(""))) return;
 		delete run.streamText;
 		const previous = startAssistant(entry, run);
 		const message = assistant(entry, previous.id ?? randomUUID(), content, "stop", item.agent.name);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_end", message });
+		run.requirementsShown =
+			showReview && message.id ? { presentationId: review.id, messageId: message.id } : undefined;
 		run.finalAssistant = {
 			messageId: previous.id ?? "",
 			providerId: item.rawItem.id,
@@ -2650,7 +2669,6 @@ async function buildSessionAgent(
 		!definition || definition.inheritProjectContext
 			? workspaceInstructions(entry.store.record.cwd)
 			: "";
-	const skillCatalog = skillInstructions(skillOptions, model);
 	// A standalone chat is not a repository: it and its children get no Spec tools or rule.
 	const repository =
 		loadWorkspaces().find((item) => item.id === entry.store.record.workspaceId)?.kind !== "chat";
@@ -2661,7 +2679,62 @@ async function buildSessionAgent(
 				return run.sandbox;
 			}
 		: undefined;
+	const toolGrant = {
+		workspaceId: entry.store.record.workspaceId,
+		cwd: entry.store.record.cwd,
+		signal: run.controller.signal,
+		assertActive: active,
+	};
+	let nativeRequirements = false;
+	if (!definition && repository && !sandboxEnabled && skillOptions.admission().resourceTrusted) {
+		try {
+			applicationRequirementsSkill(skillOptions, requirementsSkill);
+			nativeRequirements = true;
+		} catch {
+			nativeRequirements = entry.store.record.requirements !== undefined;
+		}
+	}
+	const catalogOptions = nativeRequirements
+		? { ...skillOptions, excludedSkills: [requirementsSkill] }
+		: skillOptions;
+	const skillCatalog = skillInstructions(catalogOptions, model);
+	const requirementsTools = nativeRequirements
+		? createRequirementsTools({
+				grant: { ...toolGrant, assertActive: assertOwner },
+				skills: skillOptions,
+				binding: () => entry.store.record.requirements,
+				saveBinding: (binding) =>
+					entry.store.update((record) => {
+						record.requirements = binding;
+					}),
+				userText: () => {
+					const input = entry.store.record.messages.findLast((message) => message.role === "user");
+					if (
+						!input ||
+						input.id !== run.inputId ||
+						entry.store.record.queue.some((item) => item.kind === "steering")
+					)
+						return undefined;
+					return textOf(input.content);
+				},
+				priorDisplay: () => {
+					const messages = entry.store.record.messages;
+					const inputIndex = messages.findIndex((message) => message.id === run.inputId);
+					for (let index = inputIndex - 1; index >= 0; index--) {
+						const message = messages[index];
+						if (message?.role === "user") break;
+						if (message?.role === "assistant" && textOf(message.content).trim()) return message.id;
+					}
+					return undefined;
+				},
+				onPresentation: (review) => {
+					run.requirementsPresentation = review;
+					delete run.requirementsShown;
+				},
+			})
+		: [];
 	const applicationTools = [
+		...requirementsTools,
 		...(definition
 			? []
 			: createWorkspaceActions({
@@ -2688,7 +2761,7 @@ async function buildSessionAgent(
 			: []),
 		...(definition && !definition.extensions && !definition.skills?.length
 			? []
-			: createSkillTools(skillOptions)),
+			: createSkillTools(catalogOptions)),
 		...(await (definition
 			? Promise.resolve([])
 			: sessionMcpTools({
@@ -2713,21 +2786,13 @@ async function buildSessionAgent(
 			const commandInstructions = sandboxEnabled
 				? "Sandbox bash supports bare pwd directly and rm -- <relative-file> with approval. Other command forms are rejected. Use apply_patch for approved edits."
 				: "Use apply_patch for edits and bash to run project checks. Request approval for commands and edits.";
-			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}`;
+			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}`;
 		},
 		model: sdkModel,
 		tools: [
 			...applicationTools,
 			...(run.memory && sandboxSession ? [run.memory.readTool(sandboxSession, active)] : []),
-			...workspaceTools(
-				{
-					workspaceId: entry.store.record.workspaceId,
-					cwd: entry.store.record.cwd,
-					signal: run.controller.signal,
-					assertActive: active,
-				},
-				sandboxSession,
-			),
+			...workspaceTools(toolGrant, sandboxSession),
 			...registrySdkTools(
 				{
 					cwd: entry.store.record.cwd,
@@ -2765,15 +2830,31 @@ async function buildSessionAgent(
 				childDefinition ? "child" : "parent",
 			),
 		],
-		// A tool result marked `terminate` ends the run without another model call.
-		toolUseBehavior: (_context, results) =>
-			results.some(
+		toolUseBehavior: (_context, results) => {
+			const review = run.requirementsPresentation;
+			const callId = review?.applyCallId;
+			if (
+				nativeRequirements &&
+				review &&
+				callId &&
+				!run.guardrailOutcomes?.has(callId) &&
+				!run.toolCalls.get(callId)?.failed &&
+				results.some(
+					(result) => result.type === "function_output" && result.runItem.rawItem.callId === callId,
+				)
+			) {
+				assertOwner();
+				review.applyAccepted = true;
+				return { isFinalOutput: true, isInterrupted: undefined, finalOutput: review.markdown };
+			}
+			return results.some(
 				(result) =>
 					result.type === "function_output" &&
 					run.structuredResults?.get(result.runItem.rawItem.callId)?.terminate,
 			)
 				? { isFinalOutput: true, isInterrupted: undefined, finalOutput: "" }
-				: { isFinalOutput: false, isInterrupted: undefined },
+				: { isFinalOutput: false, isInterrupted: undefined };
+		},
 		modelSettings: {
 			...responsesClientSettings,
 			maxTokens: modelOutputBudget(model),
@@ -3454,6 +3535,40 @@ async function executeRun(
 					const output = stream.finalOutput;
 					if (!isPlanReviewOutput(output)) throw new Error("Invalid Plan review output");
 					commitReviewOutput(entry, run, output, run.finalAssistant.messageId);
+				}
+				const review = run.requirementsPresentation;
+				let shown = run.requirementsShown;
+				if (
+					review?.applyAccepted &&
+					review.applyCallId &&
+					!run.guardrailOutcomes?.has(review.applyCallId) &&
+					stream.finalOutput === review.markdown
+				) {
+					assertActive(entry, run);
+					if (blockOutput(run, review.markdown))
+						throw new Error("Requirements review blocked by the output guardrail");
+					const messageId = randomUUID();
+					const message = assistant(
+						entry,
+						messageId,
+						[{ type: "text", text: review.markdown }],
+						"stop",
+						run.author,
+					);
+					appendMessage(entry, message);
+					emit(entry, { type: "message_end", message });
+					run.finalAssistant = { messageId };
+					shown = { presentationId: review.id, messageId };
+				}
+				if (
+					shown &&
+					shown.presentationId === review?.id &&
+					shown.messageId === run.finalAssistant?.messageId
+				) {
+					assertActive(entry, run);
+					entry.store.update((record) => {
+						if (record.requirements) record.requirements.displayed = shown;
+					});
 				}
 				break;
 			}

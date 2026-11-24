@@ -35,6 +35,13 @@ streaming output, tool approval and Stop. Sessions save conversation history, in
 approvals or questions. Steering reaches the next eligible model call; follow-ups wait for normal task
 completion. Pending input stays visible until admission succeeds.
 
+Ordinary chats in a trusted worktree can interpret a design brief and hold a review before saving a
+requirements baseline. Install the complete `requirements-workflow-host` (3.0.3 or later) and
+`json-exporter` Skill directories in RailDesign's application `skills/` directory (`~/.raildesign/skills/` by default).
+The RailDesign host needs Python 3.11 or later on PATH. Ask the chat to review a brief in the
+worktree, check the presented requirements and reply “I confirm the displayed requirements.” to
+commit and deliver the JSON baseline. Reopen the same chat to continue its review, or open another chat for a separate requirements task.
+
 The per-chat Sandbox toggle uses the SDK's Unix-local session to read the selected worktree, with
 the same approved file edits. It runs bare `pwd` directly and asks for approval before removing one
 regular worktree file with `rm -- <relative-file>`. Other shell commands are rejected. Unix-local

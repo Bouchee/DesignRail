@@ -30,6 +30,7 @@ export interface SkillToolOptions {
 	loadOptions?: SkillLoadOptions;
 	manualSkills?: readonly string[];
 	allowedSkills?: readonly string[];
+	excludedSkills?: readonly string[];
 	assertActive: () => void;
 	signal: AbortSignal;
 }
@@ -41,6 +42,7 @@ function admittedSkills(options: SkillToolOptions): Skill[] {
 		.entries.filter(
 			({ catalog }) =>
 				catalog.decision === "load" &&
+				!options.excludedSkills?.includes(catalog.name) &&
 				(!options.allowedSkills || options.allowedSkills.includes(catalog.name)),
 		)
 		.map(({ skill }) => skill);

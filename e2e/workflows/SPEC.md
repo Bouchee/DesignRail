@@ -78,6 +78,27 @@ watchdog budgets, judge/user-simulation parsing, snapshot masking and file/spec 
 exercise a model, advanced tool registration or session recovery. It also checks the wire driver's
 forbid/stop precedence, denial/abort, question anchors, final snapshot and missing-stop failure.
 
+`requirements-agent.live.spec.ts` opens two product chats in the same disposable workspace.
+It installs the staged `requirements-workflow-host` and `json-exporter` in the isolated application's
+skills directory, then follows actual tool results and workspace bytes through a sourced display,
+read-only progress, revision, stale and cross-chat confirmation, reattachment, baseline confirmation
+and export reuse. The brief and revision are fixed test inputs. The proof retains the visible
+transcript, artifact and receipt, source locators/hashes, and request accounting.
+
+Run with the existing protected `RAILDESIGN_E2E_CONFIG`, an absolute
+`RAILDESIGN_E2E_DESIGN_AGENT_DIST` created by design-agent's `distribution/stage.py`, and a new
+disposable `RAILDESIGN_REQUIREMENTS_LEDGER` path. Set `RAILDESIGN_E2E_REQUIREMENTS_PYTHON`
+to an absolute Python 3.11+ executable when the hermetic test PATH does not already supply one.
+
+```sh
+bun run e2e:agent e2e/workflows/requirements-agent.live.spec.ts --retries=0
+```
+
+The optional external distribution is required for this case. Its test-only preload admits at most
+32 requests to the verified model endpoint, sets model retries to zero and limits each request to
+60 seconds. `RAILDESIGN_REQUIREMENTS_REQUEST_CAP` can lower the cap to the remaining
+allowance after an earlier attempt. Each turn can run for 90 seconds and may make fewer than 24 tool calls.
+
 `routing.live.spec.ts` migrates all ten original routing business scenarios to the current SDK host:
 feature/bug/PR/setup routes, direct questions/renames, empty/code-only dispatch and declined spec-graph
 extension. Actual successful Skill reads/order, forbidden calls and git status decide the result.

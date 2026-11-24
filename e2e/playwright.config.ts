@@ -34,10 +34,15 @@ assertLivePlaywrightRunner(process.env, process.argv);
 const bunExecutable = resolveBunExecutable();
 const hostPath = hermeticE2ePath(E2E_FAKE_BIN_DIR);
 if (executableOnPath(hostPath, "pi")) throw new Error("e2e host PATH must not contain pi");
+const requirementsAdmission =
+	liveMode && process.env.RAILDESIGN_REQUIREMENTS_LEDGER
+		? " --preload ./e2e/fixtures/requirementsAdmission.ts"
+		: "";
+const hostStart = `${JSON.stringify(bunExecutable)}${requirementsAdmission} packages/server/src/dev.ts`;
 const hostCommand =
 	process.env.THINKRAIL_E2E_SKIP_BUILD === "1"
-		? `${JSON.stringify(bunExecutable)} packages/server/src/dev.ts`
-		: `${JSON.stringify(bunExecutable)} run build:web && ${JSON.stringify(bunExecutable)} packages/server/src/dev.ts`;
+		? hostStart
+		: `${JSON.stringify(bunExecutable)} run build:web && ${hostStart}`;
 export default defineConfig({
 	testDir: ".",
 	// The headless workflow-test suite has its own config (e2e/playwright.workflows.config.ts) — no browser,

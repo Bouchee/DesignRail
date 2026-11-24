@@ -402,6 +402,30 @@ Image dimensions, MIME detection and payload/request budgets remain in the pure 
 Its retained tests validate those rules; the current verified text-only model does not enable vision.
 
 
+## Requirements understanding tools
+
+An ordinary chat in a resource-trusted worktree can call the requirements tools when
+`requirements-workflow-host` (3.0.3 or later) is admitted from the user's RailDesign application Skill directory.
+The tool launches the installed Python workflow and uses the admitted companion `json-exporter`.
+Project instructions and manual Skill aliases do not authorize execution of Python code.
+Sandbox, specialist and child agents do not receive these host tools.
+
+The chat's atomic session record binds the Python session to its existing workspace ID and cwd. The
+tools pass caller-local paths and no model-supplied session IDs to the workflow. Python owns drafts,
+source records, the current presentation, and the final document/receipt and delivery. The host
+owns the source of current user text. A decision applies to the last assistant message with visible
+text in the immediately preceding turn. Trailing thinking or tool rows do not supersede a display.
+When apply returns `required_user`, the SDK ends the turn with the frozen review from RailDesign
+instead of making a further model request. The host publishes the review through the normal
+guarded assistant transcript and records its message ID only on successful settlement. A rejected
+draft returns its error to the model for repair. The draft's question targets must be exact eligible
+requirement IDs or zero-based operations that produce a requirement. For an explicit re-display
+after resume or a partial decision, the assistant refers to the frozen ID and RailDesign appends
+the same review to its reply. Cancellation, failed output, ambiguous replies, stale references,
+and other chats cannot create a decision. Resume reads runner state. The SDK worktree grant
+bounds the subprocess and excludes provider secrets. Apply, decide and export each supply the
+admitted exporter root to the runner, including automatic delivery of a refreshed pair.
+
 ## Preserved MCP management
 
 Configuration validation, fingerprints, CRUD, per-project approval/overrides, logs/redaction and status

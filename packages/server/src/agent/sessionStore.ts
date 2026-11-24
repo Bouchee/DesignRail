@@ -32,6 +32,7 @@ import {
 	type HandoffGraphSnapshot,
 	handoffTargets,
 } from "./handoffGraph";
+import { type RequirementsBinding, requirementsBindingSchema } from "./requirementsTools";
 import { SANDBOX_ARCHIVE_BYTES } from "./sandboxMemory";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
@@ -112,6 +113,7 @@ export interface SessionHandoffs {
 
 export interface SessionRecord {
 	version: 2;
+	requirements?: RequirementsBinding | undefined;
 	childRun?: ChildRunRecord | undefined;
 	handoffs?: SessionHandoffs | undefined;
 	sessionId: string;
@@ -380,6 +382,7 @@ const handoffsSchema = z
 const recordSchema = z
 	.object({
 		version: z.literal(2),
+		requirements: requirementsBindingSchema.optional(),
 		childRun: z
 			.object({
 				parentSessionId: idSchema,
