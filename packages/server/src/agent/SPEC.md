@@ -426,6 +426,50 @@ and other chats cannot create a decision. Resume reads runner state. The SDK wor
 bounds the subprocess and excludes provider secrets. Apply, decide and export each supply the
 admitted exporter root to the runner, including automatic delivery of a refreshed pair.
 
+## Formal concept scheme tools
+
+The same trusted worktree and application Skill admission used by requirements understanding
+govern formal scheme generation. One native workflow tool runs per chat, including the upstream
+requirements tools. The current requirements binding supplies the exact committed document and
+receipt. Only actual user messages authorize start, revision, review or delivery. New baseline
+versions require explicit rebinding and same-identity validation by the scheme runner. The native
+tools preserve the full runner view and verify any paged reference before use.
+For first drafts, RailDesign asks the model to call `scheme_stage` immediately with only the
+functions supported by the confirmed baseline. Each receipt suggests one missing shared field,
+then one missing candidate field, and supplies guidance for that field. Explicitly requesting
+continuation can include a colon and drafting instructions. Review and delivery require
+their own exact authorization.
+The author can discard an unpublished candidate saved under a mistaken key. Each stage returns
+the current content digest and missing fields. RailDesign retains this progress with the bound
+session. `scheme_apply` takes the draft binding and exact staged digest to validate and publish the
+assembled design. After a validation error, the model can replace the affected fields and submit
+the new digest. With a current design, the runner supplies a revision template. The model sends only replacements against its bound revision, using stable
+candidate and item IDs. RailDesign forwards the submitted bytes. The shared runner applies the
+changes to the frozen design, records their impact and validates the complete result before publishing.
+The full draft view is accompanied by a read-only projection of confirmed hard constraints, with
+the exact statement for direct constraints, the distinct baseline target criterion (including null),
+and the definition locator used for baseline-backed quantity facts. Draft guidance preserves
+required keys and retains multidimensional values and ranges in operating-context text.
+Checks use their exact target conditions and record missing evidence as unknown. An initial concept
+can leave analyses empty. A revision of an existing candidate retains its identity.
+Changed conclusions need reassessment before the runner can publish a review. Analysis inputs refer to candidate parameters
+or assumptions, or use exact source locators. Unknowns referring to candidate-local data belong
+to that candidate. A rejected parameter fact returns targeted repair guidance for that parameter
+while preserving the runner's error and the draft's operating context and checks. The host's
+frozen review supplies the user-facing presentation.
+
+RailDesign persists the scheme session, run and revision with the current state fingerprint,
+upstream identity and active draft, pending or committed boundary. A finished apply publishes
+the frozen presentation through the guarded assistant transcript. Review binds a real user
+decision to the preceding visible message, presentation digest and candidate version. Only
+review is available, and the returned formal pair must authorize no downstream candidates.
+Status queries never invoke scheme resume, which may apply an on-disk draft. Explicit redisplay
+uses only a previously published frozen review that is still current.
+
+Formal JSON delivery is a separate user request. The host stages the runner's export, verifies
+that it came from an internal commit and agrees with the recorded pair, and publishes the exact
+read-back bytes atomically to the worktree. A mismatched or uncommitted export is never published.
+
 ## Preserved MCP management
 
 Configuration validation, fingerprints, CRUD, per-project approval/overrides, logs/redaction and status

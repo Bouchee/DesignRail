@@ -29,7 +29,13 @@ import { TodoStore } from "@thinkrail/todos/core";
 import { z } from "zod";
 import * as fsModule from "../fs";
 import { gitDiffFile } from "../git";
-import { loadConfig, loadWorkspaces, saveConfig, saveWorkspaces } from "../persistence";
+import {
+	loadConfig,
+	loadWorkspaces,
+	saveConfig,
+	saveProjects,
+	saveWorkspaces,
+} from "../persistence";
 import { resetConfigCache, updateConfig } from "../settings";
 import * as subprocessModule from "../subprocess";
 import { setTrashImplementationForTests } from "../trash";
@@ -64,6 +70,7 @@ import {
 	respondToTool,
 	sendSteeringNow,
 	setExtUiPublisher,
+	setSessionProjectResolver,
 	setSessionPublisher,
 	setSessionResourceCleanup,
 	setSessionSandbox,
@@ -117,6 +124,7 @@ afterEach(() => {
 	setTrashImplementationForTests(undefined);
 	configureAgentModelFactory();
 	setExtUiPublisher(() => {});
+	setSessionProjectResolver(() => null);
 	setSessionPublisher(() => {});
 	setSessionStatePublisher(() => {});
 	for (const [name, value] of Object.entries({
@@ -2149,6 +2157,39 @@ test("Stop during workspace admission aborts the host signal and rejects the lat
 		),
 	).toMatchObject({ isError: true });
 });
+test("native scheme start and revision use the ordinary model output budget", async () => {
+	const project = {
+		id: "project",
+		name: "Project",
+		slug: "project",
+		path: worktree,
+		lastOpened: 1,
+		resourceTrust: "granted" as const,
+	};
+	saveProjects([project]);
+	setSessionProjectResolver(() => "project");
+	const { sessionId } = await createSession({ cwd: worktree, workspaceId: "workspace" });
+	const start = "按已确认的需求生成一个概念方案";
+	const revise = "请修订当前方案：调整名称。";
+	const skill = join(root, "data/skills/scheme-generation-workflow-host");
+	const model = new ScriptedModel([done(), done(), done()]);
+	configureAgentModelFactory(() => model);
+	await promptSession(sessionId, start);
+	mkdirSync(skill, { recursive: true });
+	writeFileSync(
+		join(skill, "SKILL.md"),
+		"---\nname: scheme-generation-workflow-host\ndescription: Formal scheme workflow fixture\n---\nFormal scheme work",
+	);
+	await promptSession(sessionId, start);
+	await promptSession(sessionId, revise);
+	model.assertComplete();
+	const requests = model.calls.map(({ request }) => request);
+	expect(requests.map((request) => request.modelSettings.maxTokens)).toEqual([8_192, 8_192, 8_192]);
+	expect(requests[0]?.tools.map((candidate) => candidate.name)).not.toContain("scheme_start");
+	expect(requests[1]?.tools.map((candidate) => candidate.name)).toContain("scheme_start");
+	expect(requests[2]?.tools.map((candidate) => candidate.name)).toContain("scheme_revise");
+});
+
 test("steering reaches the next model boundary once and remains separate from follow-ups", async () => {
 	const frames: SessionEventPayload[] = [];
 	setSessionPublisher((frame) => frames.push(frame));

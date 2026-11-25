@@ -42,6 +42,13 @@ The RailDesign host needs Python 3.11 or later on PATH. Ask the chat to review a
 worktree, check the presented requirements and reply “I confirm the displayed requirements.” to
 commit and deliver the JSON baseline. Reopen the same chat to continue its review, or open another chat for a separate requirements task.
 
+For formal concept generation and revision, install `scheme-generation-workflow-host` 3.1.0 and
+its matching `fbs-transformer` and `scheme-constraint-checker` Skills from the same design-agent distribution.
+In the chat that confirmed the requirements, send “Generate one formal concept scheme from the
+current confirmed requirements.” Inspect the displayed candidates and unresolved conditions, or
+request a revision in the same chat. Reply “I confirm the displayed concept scheme set for review.”
+Then send “Export the current reviewed concept scheme set as JSON.” to get the committed file.
+
 The per-chat Sandbox toggle uses the SDK's Unix-local session to read the selected worktree, with
 the same approved file edits. It runs bare `pwd` directly and asks for approval before removing one
 regular worktree file with `rm -- <relative-file>`. Other shell commands are rejected. Unix-local

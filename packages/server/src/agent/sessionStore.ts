@@ -34,6 +34,7 @@ import {
 } from "./handoffGraph";
 import { type RequirementsBinding, requirementsBindingSchema } from "./requirementsTools";
 import { SANDBOX_ARCHIVE_BYTES } from "./sandboxMemory";
+import { type SchemeBinding, schemeBindingSchema } from "./schemeTools";
 import { type CompactOptions, type CompactResult, compactSession } from "./sessionSummary";
 
 const log = logger("agent");
@@ -114,6 +115,7 @@ export interface SessionHandoffs {
 export interface SessionRecord {
 	version: 2;
 	requirements?: RequirementsBinding | undefined;
+	scheme?: SchemeBinding | undefined;
 	childRun?: ChildRunRecord | undefined;
 	handoffs?: SessionHandoffs | undefined;
 	sessionId: string;
@@ -383,6 +385,7 @@ const recordSchema = z
 	.object({
 		version: z.literal(2),
 		requirements: requirementsBindingSchema.optional(),
+		scheme: schemeBindingSchema.optional(),
 		childRun: z
 			.object({
 				parentSessionId: idSchema,

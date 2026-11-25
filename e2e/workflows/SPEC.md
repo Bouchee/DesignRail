@@ -95,9 +95,51 @@ bun run e2e:agent e2e/workflows/requirements-agent.live.spec.ts --retries=0
 ```
 
 The optional external distribution is required for this case. Its test-only preload admits at most
-32 requests to the verified model endpoint, sets model retries to zero and limits each request to
-60 seconds. `RAILDESIGN_REQUIREMENTS_REQUEST_CAP` can lower the cap to the remaining
-allowance after an earlier attempt. Each turn can run for 90 seconds and may make fewer than 24 tool calls.
+32 requests to the verified model endpoint, sets model retries to zero and defaults to 60 seconds
+per request. `RAILDESIGN_REQUIREMENTS_REQUEST_CAP` can lower the cap to the remaining
+allowance after an earlier attempt. The preload accepts `RAILDESIGN_REQUIREMENTS_REQUEST_TIMEOUT_MS`
+as an integer from 1 to 150000 ms and records the active timeout in the request ledger. Each
+requirements turn can run for 90 seconds and may make fewer than 24 tool calls.
+The request ledger includes the numeric `max_output_tokens` when sent and records the outbound
+reasoning effort as `none`, `null` for absent, or `other`. It observes just the response terminal type,
+documented incomplete reason and numeric token usage. It forwards the original stream bytes and
+leaves settlement to the SDK.
+
+`scheme-generation-agent.live.spec.ts` uses that same protected runner, distribution, Python
+and request ledger for a hand trolley brief with concrete single-box loading and floor route
+conditions. It takes the committed requirement document and
+receipt from the production chat before asking for a formal concept. It checks the exact pair
+passed to the scheme workflow, the native FBS and Checker process artifacts, and the sourced
+frozen review. First generation stages functions alone, adds shared and candidate fields and submits their latest digest
+to the same runner for full validation. The two apply checkpoints compare each settled turn's
+workspace POST timestamps
+with the actual tool completion and require no provider continuation after a successful apply.
+The revision must submit changed values in the bound revision envelope and produce a changed
+candidate architecture. The scenario also checks read-only progress, stale and other-chat
+denial, reattachment, a user review with no selection authority, and a separate verified JSON
+delivery. The proof keeps the turn transcript and actual request ledger, including failures, as
+an attachment and a private `proof.json` in the Playwright test output directory.
+Once they exist, the exact requirement JSON bytes and matching receipt are attached independently
+for the portable Skill replay. The delivered scheme file is also retained byte for byte for digest
+checks after workspace teardown.
+
+Run the scheme case using the supported Go target with the RailDesign thinking setting at `off`.
+Each turn checks that the request omits reasoning effort. Workspace workflow requests use the
+ordinary 8,192-token cap and must reach a completed provider response. The ledger records reported
+reasoning usage for diagnosis.
+
+The expanded trolley brief reached `requirements_prepare`. One live response timed out at
+60 seconds. A later attempt at 150 seconds ended with `response.incomplete` before
+`requirements_apply`, with 8586 output tokens reported by the SDK. The scenario asks for concise
+sourced concept requirements, candidate wording and revision details. A later 210-second formal
+scheme start turn expired while the model was correcting two remaining draft validation errors.
+Allow 360 seconds for formal scheme start, 450 seconds for revision, 210 seconds for other turns and 41 minutes
+for the scenario. The 150-second request deadline, request cap and zero retries still apply.
+
+```sh
+RAILDESIGN_REQUIREMENTS_REQUEST_TIMEOUT_MS=150000 \
+  bun run e2e:agent e2e/workflows/scheme-generation-agent.live.spec.ts --retries=0
+```
 
 `routing.live.spec.ts` migrates all ten original routing business scenarios to the current SDK host:
 feature/bug/PR/setup routes, direct questions/renames, empty/code-only dispatch and declined spec-graph

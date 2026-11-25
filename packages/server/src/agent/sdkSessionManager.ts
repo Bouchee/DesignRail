@@ -134,9 +134,7 @@ import {
 } from "./modelConfiguration";
 import { assertCompletedPlanReviewResponse, planReviewOutput } from "./planReviewOutput";
 import {
-	applicationRequirementsSkill,
 	createRequirementsTools,
-	type RequirementsReview,
 	requirementsInstructions,
 	requirementsSkill,
 } from "./requirementsTools";
@@ -146,6 +144,7 @@ import {
 	SandboxMemoryRunner,
 	sandboxArchiveLimits,
 } from "./sandboxMemory";
+import { createSchemeTools, schemeInstructions, schemeSkill } from "./schemeTools";
 import { type StructuredToolResult, structuredToolResult } from "./sdkToolResult";
 import { workspaceTools } from "./sdkTools";
 import {
@@ -169,6 +168,7 @@ import {
 	workspaceInstructions,
 } from "./skillTools";
 import { readWebAccessKey, webFetch, webSearch } from "./webAccess";
+import { applicationWorkflowSkill, createWorkflowHost, type WorkflowReview } from "./workflowHost";
 import { createWorkspaceActions } from "./workspaceActions";
 
 const log = logger("agent");
@@ -185,8 +185,8 @@ interface ActiveRun {
 	memory?: SandboxMemory;
 	suspended?: boolean;
 	inputId?: string;
-	requirementsPresentation?: RequirementsReview | undefined;
-	requirementsShown?: { presentationId: string; messageId: string } | undefined;
+	workflowPresentation?: WorkflowReview | undefined;
+	workflowShown?: { presentationId: string; messageId: string } | undefined;
 	enabledExtensions: SdkExtensionSnapshot[];
 	ready?: Promise<void>;
 	markReady?: () => void;
@@ -757,7 +757,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 					? [{ type: "text" as const, text: part.refusal }]
 					: [],
 		);
-		const review = run.requirementsPresentation;
+		const review = run.workflowPresentation;
 		const showReview =
 			review &&
 			!review.applyCallId &&
@@ -771,7 +771,7 @@ function projectStream(entry: Entry, run: ActiveRun, event: RunStreamEvent): voi
 		const message = assistant(entry, previous.id ?? randomUUID(), content, "stop", item.agent.name);
 		appendMessage(entry, message);
 		emit(entry, { type: "message_end", message });
-		run.requirementsShown =
+		run.workflowShown =
 			showReview && message.id ? { presentationId: review.id, messageId: message.id } : undefined;
 		run.finalAssistant = {
 			messageId: previous.id ?? "",
@@ -2685,56 +2685,84 @@ async function buildSessionAgent(
 		signal: run.controller.signal,
 		assertActive: active,
 	};
-	let nativeRequirements = false;
-	if (!definition && repository && !sandboxEnabled && skillOptions.admission().resourceTrusted) {
+	const host = createWorkflowHost({ ...toolGrant, assertActive: assertOwner }, skillOptions);
+	const allowedWorkflows = () =>
+		!definition && repository && !sandboxEnabled && skillOptions.admission().resourceTrusted;
+	const admitted = (skill: string, bound: boolean) => {
+		if (!allowedWorkflows()) return false;
 		try {
-			applicationRequirementsSkill(skillOptions, requirementsSkill);
-			nativeRequirements = true;
+			applicationWorkflowSkill(skillOptions, skill);
+			return true;
 		} catch {
-			nativeRequirements = entry.store.record.requirements !== undefined;
+			return bound;
 		}
-	}
-	const catalogOptions = nativeRequirements
-		? { ...skillOptions, excludedSkills: [requirementsSkill] }
-		: skillOptions;
+	};
+	const nativeRequirements = admitted(
+		requirementsSkill,
+		entry.store.record.requirements !== undefined,
+	);
+	const nativeScheme = admitted(schemeSkill, entry.store.record.scheme !== undefined);
+	const excludedSkills = [
+		...(nativeRequirements ? [requirementsSkill] : []),
+		...(nativeScheme ? [schemeSkill] : []),
+	];
+	const catalogOptions = excludedSkills.length ? { ...skillOptions, excludedSkills } : skillOptions;
 	const skillCatalog = skillInstructions(catalogOptions, model);
+	const workflowTurn = {
+		host,
+		userText: () => {
+			const input = entry.store.record.messages.findLast((message) => message.role === "user");
+			if (
+				!input ||
+				input.id !== run.inputId ||
+				entry.store.record.queue.some((item) => item.kind === "steering")
+			)
+				return undefined;
+			return textOf(input.content);
+		},
+		priorDisplay: () => {
+			const messages = entry.store.record.messages;
+			const inputIndex = messages.findIndex((message) => message.id === run.inputId);
+			for (let index = inputIndex - 1; index >= 0; index--) {
+				const message = messages[index];
+				if (message?.role === "user") break;
+				if (message?.role === "assistant" && textOf(message.content).trim()) return message.id;
+			}
+			return undefined;
+		},
+		onPresentation: (review: WorkflowReview | undefined) => {
+			run.workflowPresentation = review;
+			delete run.workflowShown;
+		},
+	};
 	const requirementsTools = nativeRequirements
 		? createRequirementsTools({
-				grant: { ...toolGrant, assertActive: assertOwner },
-				skills: skillOptions,
+				...workflowTurn,
 				binding: () => entry.store.record.requirements,
 				saveBinding: (binding) =>
 					entry.store.update((record) => {
 						record.requirements = binding;
 					}),
-				userText: () => {
-					const input = entry.store.record.messages.findLast((message) => message.role === "user");
-					if (
-						!input ||
-						input.id !== run.inputId ||
-						entry.store.record.queue.some((item) => item.kind === "steering")
-					)
-						return undefined;
-					return textOf(input.content);
-				},
-				priorDisplay: () => {
-					const messages = entry.store.record.messages;
-					const inputIndex = messages.findIndex((message) => message.id === run.inputId);
-					for (let index = inputIndex - 1; index >= 0; index--) {
-						const message = messages[index];
-						if (message?.role === "user") break;
-						if (message?.role === "assistant" && textOf(message.content).trim()) return message.id;
-					}
-					return undefined;
-				},
-				onPresentation: (review) => {
-					run.requirementsPresentation = review;
-					delete run.requirementsShown;
+			})
+		: [];
+	const schemeTools = nativeScheme
+		? createSchemeTools({
+				...workflowTurn,
+				binding: () => entry.store.record.scheme,
+				saveBinding: (binding) =>
+					entry.store.update((record) => {
+						record.scheme = binding;
+					}),
+				requirementsSession: () => entry.store.record.requirements?.sessionId,
+				displayText: (messageId) => {
+					const message = entry.store.record.messages.find((message) => message.id === messageId);
+					return message?.role === "assistant" ? textOf(message.content) : undefined;
 				},
 			})
 		: [];
 	const applicationTools = [
 		...requirementsTools,
+		...schemeTools,
 		...(definition
 			? []
 			: createWorkspaceActions({
@@ -2786,7 +2814,7 @@ async function buildSessionAgent(
 			const commandInstructions = sandboxEnabled
 				? "Sandbox bash supports bare pwd directly and rm -- <relative-file> with approval. Other command forms are rejected. Use apply_patch for approved edits."
 				: "Use apply_patch for edits and bash to run project checks. Request approval for commands and edits.";
-			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}`;
+			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}${nativeScheme ? `\n${schemeInstructions}` : ""}`;
 		},
 		model: sdkModel,
 		tools: [
@@ -2831,11 +2859,11 @@ async function buildSessionAgent(
 			),
 		],
 		toolUseBehavior: (_context, results) => {
-			const review = run.requirementsPresentation;
+			const review = run.workflowPresentation;
 			const callId = review?.applyCallId;
 			if (
-				nativeRequirements &&
 				review &&
+				(review.workflow === "requirements" ? nativeRequirements : nativeScheme) &&
 				callId &&
 				!run.guardrailOutcomes?.has(callId) &&
 				!run.toolCalls.get(callId)?.failed &&
@@ -3536,8 +3564,8 @@ async function executeRun(
 					if (!isPlanReviewOutput(output)) throw new Error("Invalid Plan review output");
 					commitReviewOutput(entry, run, output, run.finalAssistant.messageId);
 				}
-				const review = run.requirementsPresentation;
-				let shown = run.requirementsShown;
+				const review = run.workflowPresentation;
+				let shown = run.workflowShown;
 				if (
 					review?.applyAccepted &&
 					review.applyCallId &&
@@ -3562,12 +3590,20 @@ async function executeRun(
 				}
 				if (
 					shown &&
-					shown.presentationId === review?.id &&
+					review &&
+					shown.presentationId === review.id &&
 					shown.messageId === run.finalAssistant?.messageId
 				) {
 					assertActive(entry, run);
 					entry.store.update((record) => {
-						if (record.requirements) record.requirements.displayed = shown;
+						if (review.workflow === "requirements" && record.requirements)
+							record.requirements.displayed = shown;
+						else if (
+							review.workflow === "scheme" &&
+							record.scheme?.state.kind === "pending" &&
+							record.scheme.state.pending.digest === shown.presentationId
+						)
+							record.scheme.state.pending.messageId = shown.messageId;
 					});
 				}
 				break;

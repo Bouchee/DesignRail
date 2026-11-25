@@ -4,7 +4,9 @@ import { responsesClientSettings } from "@thinkrail/server/agent";
 const cap = Number(process.env.RAILDESIGN_REQUIREMENTS_REQUEST_CAP ?? "32");
 if (!Number.isInteger(cap) || cap < 1 || cap > 32)
 	throw new Error("Requirements acceptance request allowance must be an integer from 1 to 32");
-const REQUEST_TIMEOUT_MS = 60_000;
+const requestTimeoutMs = Number(process.env.RAILDESIGN_REQUIREMENTS_REQUEST_TIMEOUT_MS ?? 60_000);
+if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 150_000)
+	throw new Error("Requirements acceptance request timeout must be an integer from 1 to 150000 ms");
 const URL = "https://opencode.ai/inference/go/openai/v1/responses";
 const MODEL = "deepseek-v4.1-flash";
 const ledger = process.env.RAILDESIGN_REQUIREMENTS_LEDGER;
@@ -18,15 +20,73 @@ if (
 
 const append = (entry: Record<string, unknown>) =>
 	appendFileSync(ledger, `${JSON.stringify(entry)}\n`);
+const tokenCount = (value: unknown) =>
+	typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+const terminalTypes = new Set(["response.completed", "response.incomplete", "response.failed"]);
+const incompleteReasons = new Set([
+	"max_output_tokens",
+	"max_messages",
+	"content_filter",
+	"steered",
+]);
 
-writeFileSync(
-	ledger,
-	`${JSON.stringify({ cap, retries: 0, requestTimeoutMs: REQUEST_TIMEOUT_MS })}\n`,
-	{
-		flag: "wx",
-		mode: 0o600,
-	},
-);
+function observeTerminal(response: Response, number: number, started: number): Response {
+	if (!response.ok || !response.body) return response;
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let observed = false;
+	const stream = response.body.pipeThrough(
+		new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, destination) {
+				destination.enqueue(chunk);
+				if (observed) return;
+				buffer += decoder.decode(chunk, { stream: true });
+				for (
+					let boundary = /\r?\n\r?\n/.exec(buffer);
+					boundary;
+					boundary = /\r?\n\r?\n/.exec(buffer)
+				) {
+					const data = buffer
+						.slice(0, boundary.index)
+						.split(/\r?\n/)
+						.filter((line) => line.startsWith("data:"))
+						.map((line) => line.slice(5).trimStart())
+						.join("\n");
+					buffer = buffer.slice(boundary.index + boundary[0].length);
+					if (!data || data === "[DONE]") continue;
+					try {
+						const event = JSON.parse(data);
+						if (!terminalTypes.has(event?.type)) continue;
+						observed = true;
+						buffer = "";
+						const reason = event.response?.incomplete_details?.reason;
+						const usage = event.response?.usage;
+						append({
+							event: event.type,
+							number,
+							elapsedMs: Math.round(performance.now() - started),
+							incomplete_details: incompleteReasons.has(reason) ? { reason } : undefined,
+							usage: {
+								input_tokens: tokenCount(usage?.input_tokens),
+								output_tokens: tokenCount(usage?.output_tokens),
+								total_tokens: tokenCount(usage?.total_tokens),
+								reasoning_tokens: tokenCount(usage?.output_tokens_details?.reasoning_tokens),
+							},
+						});
+					} catch {
+						// Observation errors must not interrupt the SDK stream.
+					}
+				}
+			},
+		}),
+	);
+	return new Response(stream, response);
+}
+
+writeFileSync(ledger, `${JSON.stringify({ cap, retries: 0, requestTimeoutMs })}\n`, {
+	flag: "wx",
+	mode: 0o600,
+});
 responsesClientSettings.retry.maxRetries = 0;
 const originalFetch = globalThis.fetch;
 let requests = 0;
@@ -61,6 +121,7 @@ globalThis.fetch = Object.assign(
 		}
 		const number = ++requests;
 		const started = performance.now();
+		const effort = body.reasoning?.effort;
 		append({
 			event: "sent",
 			number,
@@ -68,12 +129,14 @@ globalThis.fetch = Object.assign(
 			url: URL,
 			model: MODEL,
 			stream: body.stream === true,
+			reasoning_effort: effort === "none" ? "none" : effort === undefined ? null : "other",
+			max_output_tokens: tokenCount(body.max_output_tokens) ?? null,
 			tools,
 		});
 		try {
 			const response = await originalFetch(
 				new Request(request, {
-					signal: AbortSignal.any([request.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+					signal: AbortSignal.any([request.signal, AbortSignal.timeout(requestTimeoutMs)]),
 				}),
 			);
 			append({
@@ -83,7 +146,7 @@ globalThis.fetch = Object.assign(
 				elapsedMs: Math.round(performance.now() - started),
 			});
 			if (!response.ok) stopped = true;
-			return response;
+			return body.stream === true ? observeTerminal(response, number, started) : response;
 		} catch {
 			append({ event: "transport_error", number });
 			stopped = true;

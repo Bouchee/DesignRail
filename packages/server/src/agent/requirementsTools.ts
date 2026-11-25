@@ -1,13 +1,9 @@
-import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, delimiter, isAbsolute, join, relative, sep } from "node:path";
+import { realpathSync, statSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import { resolveWorktreeFile } from "../fs";
-import { dataDir } from "../persistence";
-import { runBounded } from "../subprocess";
-import { modelKeyEnvironmentNames } from "./modelConfiguration";
-import { type ToolGrant, toolEnvironment } from "./sdkTools";
-import { readAdmittedSkill, type SkillToolOptions } from "./skillTools";
+import { type WorkflowHost, type WorkflowReview, workflowScratchPrefix } from "./workflowHost";
 
 export const requirementsSkill = "requirements-workflow-host";
 const exporterSkill = "json-exporter";
@@ -93,14 +89,7 @@ export const requirementsBindingSchema = z.strictObject({
 });
 export type RequirementsBinding = z.infer<typeof requirementsBindingSchema>;
 
-export type RequirementsReview = {
-	id: string;
-	markdown: string;
-	applyCallId?: string | undefined;
-	applyAccepted?: true | undefined;
-};
-
-function frozenReview(value: z.infer<typeof presentation>): RequirementsReview {
+function frozenReview(value: z.infer<typeof presentation>): WorkflowReview {
 	const inline = (text: string) =>
 		text.replace(/\s+/gu, " ").replace(/[\\`*_{}[\]<>()[\]!|&]/gu, "\\$&");
 	const statement = (item: z.infer<typeof definition>) => {
@@ -185,32 +174,16 @@ function frozenReview(value: z.infer<typeof presentation>): RequirementsReview {
 			"Reply “确认” or “I confirm the displayed requirements.” to confirm pending requirements, or describe what to change.",
 		);
 	}
-	return { id: value.presentation_id, markdown: lines.join("\n") };
+	return { workflow: "requirements", id: value.presentation_id, markdown: lines.join("\n") };
 }
 
 interface RequirementsOptions {
-	grant: ToolGrant;
-	skills: SkillToolOptions;
+	host: WorkflowHost;
 	binding: () => RequirementsBinding | undefined;
 	saveBinding: (binding: RequirementsBinding) => void;
 	userText: () => string | undefined;
 	priorDisplay: () => string | undefined;
-	onPresentation: (review: RequirementsReview | undefined) => void;
-}
-
-export function applicationRequirementsSkill(options: SkillToolOptions, name: string) {
-	const skill = readAdmittedSkill(options, name, null);
-	const root = join(realpathSync(dataDir()), "skills", name);
-	if (skill.path !== join(root, "SKILL.md"))
-		throw new Error(`Install and enable ${name} in the RailDesign application skills directory.`);
-	return { root, guidance: skill.text };
-}
-
-function executableInSkill(root: string, name: string): string {
-	const path = join(root, "scripts", name);
-	if (realpathSync(path) !== path || !statSync(path).isFile())
-		throw new Error(`Reinstall the application Skill containing ${name}.`);
-	return path;
+	onPresentation: (review: WorkflowReview | undefined) => void;
 }
 
 export function requirementsDecision(
@@ -266,56 +239,11 @@ export const requirementsInstructions =
 	"Only delivery.path with verified delivery status is a delivered file. Use requirements_export to retry a failed delivery or supply an existing baseline.";
 
 export function createRequirementsTools(options: RequirementsOptions) {
-	const { grant, skills } = options;
-	let busy = false;
-	const env = toolEnvironment(
-		new Set(modelKeyEnvironmentNames().map((name) => name.toUpperCase())),
-	);
-
-	async function perform<Result>(
-		signal: AbortSignal | undefined,
-		operation: () => Promise<Result>,
-	) {
-		grant.assertActive();
-		signal?.throwIfAborted();
-		if (!skills.admission().resourceTrusted) throw new Error("Project resources are not trusted");
-		if (busy) throw new Error("Wait for the previous requirements tool to finish");
-		busy = true;
-		try {
-			return await operation();
-		} finally {
-			busy = false;
-		}
-	}
-
-	function installed(name: string) {
-		try {
-			return applicationRequirementsSkill(skills, name);
-		} catch {
-			throw new Error(`Install and enable ${name} in the RailDesign application skills directory.`);
-		}
-	}
+	const { host } = options;
+	const { grant, perform, installed } = host;
 
 	async function run(args: string[], signal?: AbortSignal): Promise<RunnerResult> {
-		grant.assertActive();
-		signal?.throwIfAborted();
-		const script = executableInSkill(installed(requirementsSkill).root, "requirements_runner.py");
-		const path = (env.PATH ?? env.Path ?? "").split(delimiter).filter(isAbsolute).join(delimiter);
-		const python =
-			path && Bun.which(process.platform === "win32" ? "python" : "python3", { PATH: path });
-		if (!python)
-			throw new Error("Install Python 3.11 or later and add it to the RailDesign host PATH");
-		const output = await runBounded([python, "-E", "-s", "-B", "-X", "utf8", script, ...args], {
-			cwd: grant.cwd,
-			env,
-			maxOutputBytes: 4 * 1024 * 1024,
-			timeoutMs: 60_000,
-			signal: signal ? AbortSignal.any([signal, grant.signal]) : grant.signal,
-		});
-		grant.assertActive();
-		signal?.throwIfAborted();
-		if (output.launchFailed || output.timedOut || output.aborted || output.outputLimitExceeded)
-			throw new Error("Requirements runner did not finish. Resume the workflow before retrying.");
+		const output = await host.run(requirementsSkill, "requirements_runner.py", args, signal);
 		const result = (
 			args[0] === "read-view" && output.ok
 				? toolResult.extend({
@@ -324,7 +252,7 @@ export function createRequirementsTools(options: RequirementsOptions) {
 						eof: z.boolean(),
 					})
 				: toolResult.extend({ reason: z.string() })
-		).safeParse(JSON.parse(output.out));
+		).safeParse(output.data);
 		if (!result.success || (!output.ok && result.data.reason !== "blocked"))
 			throw new Error("Requirements runner returned an invalid result");
 		const existing = options.binding();
@@ -365,22 +293,18 @@ export function createRequirementsTools(options: RequirementsOptions) {
 		const first = relative(realpathSync(grant.cwd), actual).split(sep)[0]?.toLowerCase();
 		if (
 			[".requirements", "requirements-work"].includes(first ?? "") ||
-			first?.startsWith(".requirements-input-")
+			first?.startsWith(workflowScratchPrefix)
 		)
 			throw new Error("Use the original source file, outside the requirements working records");
 		return absolute;
 	}
 
 	async function withInputFile(text: string, action: (path: string) => Promise<RunnerResult>) {
-		grant.assertActive();
-		const directory = mkdtempSync(join(grant.cwd, ".requirements-input-"));
-		try {
-			const file = join(directory, "input.json");
-			writeFileSync(file, text, { flag: "wx", mode: 0o600 });
-			return await action(`${basename(directory)}/input.json`);
-		} finally {
-			rmSync(directory, { recursive: true, force: true });
-		}
+		return host.withScratch(async (directory) => {
+			const input = `${directory}/input.json`;
+			writeFileSync(join(grant.cwd, input), text, { flag: "wx", mode: 0o600 });
+			return action(input);
+		});
 	}
 
 	function userText() {
@@ -390,8 +314,8 @@ export function createRequirementsTools(options: RequirementsOptions) {
 	}
 
 	function exporterRoot() {
+		host.script(exporterSkill, "json_exporter.py");
 		const { root } = installed(exporterSkill);
-		executableInSkill(root, "json_exporter.py");
 		return root;
 	}
 
