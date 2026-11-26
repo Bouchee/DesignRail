@@ -116,6 +116,7 @@ export interface SessionRecord {
 	version: 2;
 	requirements?: RequirementsBinding | undefined;
 	scheme?: SchemeBinding | undefined;
+	designReviews?: z.infer<typeof independentDesignReviewSchema>[] | undefined;
 	childRun?: ChildRunRecord | undefined;
 	handoffs?: SessionHandoffs | undefined;
 	sessionId: string;
@@ -381,11 +382,25 @@ const handoffsSchema = z
 		},
 		{ message: "Invalid Handoff ownership record" },
 	);
+const independentDesignReviewSchema = z.looseObject({
+	id: idSchema,
+	schemeSessionId: idSchema,
+	revision: z.number().int().positive(),
+	fingerprint: z.string(),
+	status: z.enum(["running", "pass", "revise", "incomplete", "interrupted"]),
+	details: z.unknown().optional(),
+	reportPath: z.string().optional(),
+	receiptPath: z.string().optional(),
+	reportDigest: z.string().optional(),
+	receiptDigest: z.string().optional(),
+});
+
 const recordSchema = z
 	.object({
 		version: z.literal(2),
 		requirements: requirementsBindingSchema.optional(),
 		scheme: schemeBindingSchema.optional(),
+		designReviews: z.array(independentDesignReviewSchema).optional(),
 		childRun: z
 			.object({
 				parentSessionId: idSchema,

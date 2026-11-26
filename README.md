@@ -49,6 +49,28 @@ current confirmed requirements.” Inspect the displayed candidates and unresolv
 request a revision in the same chat. Reply “I confirm the displayed concept scheme set for review.”
 Then send “Export the current reviewed concept scheme set as JSON.” to get the committed file.
 
+To install independent design review, copy the five SDK runtime files from a trusted
+design-agent release into a **new** review directory. From the design-agent release root,
+run the following in Bash or Zsh (the DesignRail data directory must already exist).
+
+```sh
+(
+  set -e
+  review_dir="${THINKRAIL_DATA_DIR:-$HOME/.raildesign}/design-review-distribution"
+  mkdir "$review_dir"
+  mkdir "$review_dir/design-review" "$review_dir/distribution"
+  cp design-review/{agents-sdk.mjs,core.mjs,review.mjs,review-prompt.txt} "$review_dir/design-review/"
+  cp distribution/active-skills.json "$review_dir/distribution/"
+)
+```
+
+If you previously installed the full distribution, move that review directory aside first.
+Confirm the scheme for review as above. DesignRail calls the shared OpenAI Agents SDK entry
+with the chat's configured model.
+The same chat shows the result and findings for that version. On pass, open the reviewed report
+and receipt from the chat. After an interruption, send “Retry independent review of the current
+scheme.” to review that submitted version again.
+
 The per-chat Sandbox toggle uses the SDK's Unix-local session to read the selected worktree, with
 the same approved file edits. It runs bare `pwd` directly and asks for approval before removing one
 regular worktree file with `rm -- <relative-file>`. Other shell commands are rejected. Unix-local

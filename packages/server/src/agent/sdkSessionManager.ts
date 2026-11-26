@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
 	Agent,
@@ -94,6 +95,9 @@ import {
 } from "./chatResources";
 import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitions";
 import { toSpawnMapping } from "./childMapping";
+import { deliverDesignReview, verifyDesignReviewDelivery } from "./designReviewDelivery";
+import type { DesignReviewInput } from "./designReviewInput";
+import { type DesignReviewFinding, runDesignReview } from "./designReviewRunner";
 import {
 	GuardrailOutputBlockedError,
 	type GuardrailPolicy,
@@ -144,7 +148,13 @@ import {
 	SandboxMemoryRunner,
 	sandboxArchiveLimits,
 } from "./sandboxMemory";
-import { createSchemeTools, schemeInstructions, schemeSkill } from "./schemeTools";
+import {
+	createSchemeTools,
+	type SchemeBinding,
+	schemeIndependentReviewInstructions,
+	schemeInstructions,
+	schemeSkill,
+} from "./schemeTools";
 import { type StructuredToolResult, structuredToolResult } from "./sdkToolResult";
 import { workspaceTools } from "./sdkTools";
 import {
@@ -179,7 +189,17 @@ type SessionAgent = Agent<SessionContext, "text" | typeof planReviewOutput>;
 
 const agentNodes = new WeakMap<object, string>();
 
+type ReviewRecord = NonNullable<SessionRecord["designReviews"]>[number];
+
+interface PendingDesignReview {
+	attempt: ReviewRecord;
+	prepare: (signal?: AbortSignal) => Promise<DesignReviewInput>;
+	distributionRoot: string;
+	callId: string | undefined;
+}
+
 interface ActiveRun {
+	designReview?: PendingDesignReview;
 	state?: RunState<SessionContext, SessionAgent>;
 	sandbox?: UnixLocalSandboxSession;
 	memory?: SandboxMemory;
@@ -2611,6 +2631,236 @@ function assertWorkspaceContext(context: unknown, entry: Entry): asserts context
 		);
 }
 
+function designReviewsForScheme(record: SessionRecord, binding: SchemeBinding): ReviewRecord[] {
+	const { state } = binding;
+	if (state.kind !== "committed") return [];
+	return (
+		record.designReviews?.filter(
+			(item) =>
+				item.schemeSessionId === binding.sessionId &&
+				item.fingerprint === state.documentFingerprint &&
+				item.revision === state.receipt.revision,
+		) ?? []
+	);
+}
+
+function scheduleDesignReview(
+	entry: Entry,
+	run: ActiveRun,
+	distributionRoot: string,
+	prepare: PendingDesignReview["prepare"],
+	trigger: "commit" | "retry",
+	callId: string | undefined,
+): { accepted: boolean; message?: string } {
+	assertActive(entry, run);
+	const binding = entry.store.record.scheme;
+	if (binding?.state.kind !== "committed")
+		return { accepted: false, message: "The current scheme has not been submitted for review." };
+	const { documentFingerprint: fingerprint, receipt } = binding.state;
+	const matching = designReviewsForScheme(entry.store.record, binding);
+	const previous = matching.at(-1);
+	if (run.designReview || (trigger === "retry" ? previous?.status !== "interrupted" : !!previous))
+		return {
+			accepted: false,
+			message:
+				trigger === "retry"
+					? `Only interrupted independent reviews can be retried. This submitted version's independent review status is ${previous?.status ?? "not_started"}.`
+					: "An independent review already exists for this submitted version.",
+		};
+	const attempt: ReviewRecord = {
+		id: randomUUID(),
+		schemeSessionId: binding.sessionId,
+		revision: receipt.revision,
+		fingerprint,
+		status: "running",
+	};
+	entry.store.update((record) => {
+		record.designReviews ??= [];
+		record.designReviews.push(attempt);
+	});
+	run.designReview = {
+		attempt,
+		prepare,
+		distributionRoot,
+		callId,
+	};
+	return { accepted: true };
+}
+
+function completeDesignReview(
+	entry: Entry,
+	id: string,
+	result: Pick<
+		ReviewRecord,
+		"status" | "details" | "reportPath" | "receiptPath" | "reportDigest" | "receiptDigest"
+	>,
+	markdown: string,
+): void {
+	const message = assistant(entry, id, [{ type: "text", text: markdown }]);
+	entry.store.update((record) => {
+		const attempt = record.designReviews?.find((item) => item.id === id);
+		if (attempt?.status !== "running")
+			throw new Error("The independent review attempt is no longer active");
+		Object.assign(attempt, result);
+		record.messages.push(message);
+		record.eventSeq += 1;
+	});
+	publishEvent(entry, { type: "message_end", message });
+}
+
+function formatDesignReviewFindings(findings: readonly DesignReviewFinding[]): string {
+	return findings
+		.map(
+			(finding, index) =>
+				`${index + 1}. ${finding.location}
+   - 依据 · ${finding.basis}
+   - 差异 · ${finding.difference}
+   - 建议 · ${finding.action}`,
+		)
+		.join("\n");
+}
+
+function interruptedDesignReview(
+	entry: Entry,
+	settling: ReviewRecord | undefined,
+	reason: string,
+	details?: unknown,
+	retry = true,
+): void {
+	if (!settling) return;
+	const attempt = entry.store.record.designReviews?.find((item) => item.id === settling.id);
+	if (attempt?.status !== "running") return;
+	completeDesignReview(
+		entry,
+		attempt.id,
+		{ status: "interrupted", details },
+		`### 独立设计评审 · v${attempt.revision} · 未完成
+
+${reason}${retry ? "\n\n在这个版本仍为当前送审版本时，可以发送“请重试当前方案的独立评审”。" : ""}`,
+	);
+}
+
+async function finishDesignReview(entry: Entry, run: ActiveRun, model: WireModel): Promise<void> {
+	const pending = run.designReview;
+	if (!pending) return;
+	const { attempt, distributionRoot, prepare } = pending;
+	const signal = run.controller.signal;
+	const checkCurrent = () => {
+		assertActive(entry, run);
+		const current = entry.store.record.scheme;
+		if (
+			current?.sessionId !== attempt.schemeSessionId ||
+			current.state.kind !== "committed" ||
+			current.state.receipt.revision !== attempt.revision ||
+			current.state.documentFingerprint !== attempt.fingerprint ||
+			entry.store.record.designReviews?.at(-1)?.id !== attempt.id ||
+			!entry.store.record.designReviews?.some(
+				(item) => item.id === attempt.id && item.status === "running",
+			) ||
+			!loadProjects().find(
+				(project) =>
+					project.id === projectOf(entry.store.record.workspaceId) &&
+					project.resourceTrust === "granted",
+			)
+		)
+			throw new Error("The submitted version is no longer available for independent review.");
+	};
+	try {
+		checkCurrent();
+		const input = await prepare(signal);
+		await input.verifyCurrent(signal);
+		checkCurrent();
+		const thinkingLevel = entry.store.record.thinkingLevel;
+		const result = await runDesignReview(distributionRoot, {
+			model: createConfiguredModel(model, entry.store.record.sessionId),
+			modelSettings: {
+				...responsesClientSettings,
+				maxTokens: modelOutputBudget(model),
+				...(model.reasoning && thinkingLevel !== "off"
+					? { reasoning: { effort: thinkingLevel } }
+					: {}),
+			},
+			signal,
+			publicTask: input.publicTask,
+			report: input.report,
+			evidence: input.evidence,
+		});
+		await input.verifyCurrent(signal);
+		checkCurrent();
+		const label = { pass: "通过", revise: "需要修改", incomplete: "证据不足" }[result.status];
+		const findings = formatDesignReviewFindings(result.findings);
+		const markdown = `### 独立设计评审 · v${attempt.revision} · ${label}
+
+${result.summary}${
+	findings
+		? `
+
+${findings}`
+		: ""
+}`;
+		if (
+			blockOutput(
+				run,
+				`${markdown}
+${result.report}`,
+			)
+		)
+			throw new Error("The independent review output was blocked.");
+		const committed = entry.store.record.scheme?.state;
+		if (committed?.kind !== "committed")
+			throw new Error("The submitted scheme was replaced before delivery.");
+		const details = {
+			schemeReceipt: committed.receipt,
+			presentationDigest: committed.presentationDigest,
+			schemeFingerprint: attempt.fingerprint,
+			reportDigest: result.reportDigest,
+			evidence: result.evidence,
+		};
+		const paths =
+			result.status === "pass"
+				? deliverDesignReview(
+						entry.store.record.cwd,
+						attempt.id,
+						result.report,
+						result.reportDigest,
+						{
+							sessionId: entry.store.record.sessionId,
+							attemptId: attempt.id,
+							status: result.status,
+							...details,
+						},
+					)
+				: undefined;
+		const links = paths
+			? `
+
+[打开评审报告](${paths.reportPath}) · [查看评审回执](${paths.receiptPath})`
+			: "";
+		completeDesignReview(
+			entry,
+			attempt.id,
+			{ status: result.status, details, ...paths },
+			markdown + links,
+		);
+	} catch (error) {
+		const aborted = signal.aborted || !run.granted;
+		const failure = error instanceof Error ? error.message : String(error);
+		const exceedsLimit =
+			!aborted && /^(Review context exceeds|Complete-answer review exceeds)/.test(failure);
+		const reason = aborted
+			? "评审已中断，已送审版本仍可查看。"
+			: exceedsLimit
+				? "完整方案、报告或证据超出评审范围上限。已送审版本仍可查看。可减少方案中的重复内容，再提交新版。"
+				: failure.includes('"response.incomplete"')
+					? "模型服务返回未完成，本项没有结论。已送审版本仍可查看。"
+					: "评审未能完成，已送审版本仍可查看。";
+		const detail = run.guardrails?.redact(failure);
+		log.warn("Independent design review stopped", { attemptId: attempt.id, detail });
+		interruptedDesignReview(entry, attempt, reason, { detail }, !exceedsLimit);
+		if (aborted) throw error;
+	}
+}
+
 async function buildSessionAgent(
 	entry: Entry,
 	run: ActiveRun,
@@ -2745,6 +2995,8 @@ async function buildSessionAgent(
 					}),
 			})
 		: [];
+	const reviewDistribution = join(dataDir(), "design-review-distribution");
+	const independentReview = nativeScheme && existsSync(reviewDistribution);
 	const schemeTools = nativeScheme
 		? createSchemeTools({
 				...workflowTurn,
@@ -2753,6 +3005,24 @@ async function buildSessionAgent(
 					entry.store.update((record) => {
 						record.scheme = binding;
 					}),
+				independentReviewStatus: (binding) => {
+					const { record } = entry.store;
+					const review = designReviewsForScheme(record, binding).at(-1);
+					return {
+						status: review?.status ?? "not_started",
+						report_available:
+							review?.status === "pass" && verifyDesignReviewDelivery(record.cwd, review),
+					};
+				},
+				...(independentReview
+					? {
+							onIndependentReview: (
+								prepare: PendingDesignReview["prepare"],
+								trigger: "commit" | "retry",
+								callId?: string,
+							) => scheduleDesignReview(entry, run, reviewDistribution, prepare, trigger, callId),
+						}
+					: {}),
 				requirementsSession: () => entry.store.record.requirements?.sessionId,
 				displayText: (messageId) => {
 					const message = entry.store.record.messages.find((message) => message.id === messageId);
@@ -2814,7 +3084,7 @@ async function buildSessionAgent(
 			const commandInstructions = sandboxEnabled
 				? "Sandbox bash supports bare pwd directly and rm -- <relative-file> with approval. Other command forms are rejected. Use apply_patch for approved edits."
 				: "Use apply_patch for edits and bash to run project checks. Request approval for commands and edits.";
-			return `${definition?.systemPrompt ?? ""}\nYou are DesignRail, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}${nativeScheme ? `\n${schemeInstructions}` : ""}`;
+			return `${definition?.systemPrompt ?? ""}\nYou are DesignRail, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}${nativeScheme ? `\n${schemeInstructions}` : ""}${independentReview ? `\n${schemeIndependentReviewInstructions}` : ""}`;
 		},
 		model: sdkModel,
 		tools: [
@@ -2859,6 +3129,18 @@ async function buildSessionAgent(
 			),
 		],
 		toolUseBehavior: (_context, results) => {
+			const independentCallId = run.designReview?.callId;
+			if (
+				independentCallId &&
+				!run.guardrailOutcomes?.has(independentCallId) &&
+				!run.toolCalls.get(independentCallId)?.failed &&
+				results.some(
+					(result) =>
+						result.type === "function_output" &&
+						result.runItem.rawItem.callId === independentCallId,
+				)
+			)
+				return { isFinalOutput: true, isInterrupted: undefined, finalOutput: "" };
 			const review = run.workflowPresentation;
 			const callId = review?.applyCallId;
 			if (
@@ -3659,6 +3941,7 @@ async function executeRun(
 			assertOwnerAgent(entry, next.currentAgent);
 			run.state = next;
 		}
+		await finishDesignReview(entry, run, model);
 		if (run.sandbox) {
 			const { sessionId, workspaceId, cwd, revision } = entry.store.record;
 			const archive = run.memory?.completed ? await run.sandbox.persistWorkspace() : undefined;
@@ -3694,6 +3977,7 @@ async function executeRun(
 			});
 		}
 		if (run.suspended) return;
+		interruptedDesignReview(entry, run.designReview?.attempt, "评审已中断，已送审版本仍可查看。");
 		const tripwire = error instanceof InputGuardrailTripwireTriggered ? error : undefined;
 		const aborted = !streamFailed && (!run.granted || run.controller.signal.aborted);
 		const rule = run.blocked?.rule ?? (aborted ? undefined : tripwire?.result.guardrail.name);
@@ -4680,6 +4964,10 @@ export async function ensureSessionAttached(
 	sessions.set(sessionId, entry);
 	reconcileStoredChildren(entry);
 	observeStore(entry);
+	const interruptedReviews =
+		record.designReviews?.filter((attempt) => attempt.status === "running") ?? [];
+	for (const attempt of interruptedReviews)
+		interruptedDesignReview(entry, attempt, "DesignRail 重启时评审尚未完成，已送审版本仍可查看。");
 	const interruptedEffects = Object.entries(record.effects).filter(
 		([, effect]) => effect.status !== "completed" && effect.runId === record.state.runId,
 	);
@@ -4691,6 +4979,7 @@ export async function ensureSessionAttached(
 	if (
 		unsupportedReview ||
 		(checkpoint?.granted &&
+			interruptedReviews.length === 0 &&
 			interruptedEffects.length === 0 &&
 			(record.pendingApproval ||
 				record.pendingToolResponse ||
@@ -4781,12 +5070,31 @@ export async function getSessionMessages(sessionId: string, workspaceId: string,
 	if (!(await ensureSessionAttached(sessionId, workspaceId, cwd)))
 		throw new Error("Unknown session in this workspace");
 	const entry = mustGet(sessionId);
+	const { record } = entry.store;
+	const damaged = new Map(
+		record.designReviews
+			?.filter(
+				(attempt) => attempt.status === "pass" && !verifyDesignReviewDelivery(record.cwd, attempt),
+			)
+			.map((attempt) => [attempt.id, attempt.revision]),
+	);
+	const messages = record.messages.map((message) => {
+		const revision = message.id && damaged.get(message.id);
+		if (!revision || message.role !== "assistant") return message;
+		return {
+			...message,
+			content: [
+				{
+					type: "text" as const,
+					text: `### 独立设计评审 · v${revision} · 原结论通过\n\n报告或回执已缺失或改动，无法打开经过核对的交付件。`,
+				},
+			],
+		};
+	});
 	return {
 		summary: summaryOf(entry),
-		messages: structuredClone(
-			projectImages(entry.store.record.messages, imageOwner(entry)),
-		) as TranscriptMessage[],
-		eventSeq: entry.store.record.eventSeq,
+		messages: structuredClone(projectImages(messages, imageOwner(entry))) as TranscriptMessage[],
+		eventSeq: record.eventSeq,
 	};
 }
 export const sessionImageSource: ImageSource = {

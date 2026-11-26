@@ -426,6 +426,24 @@ and other chats cannot create a decision. Resume reads runner state. The SDK wor
 bounds the subprocess and excludes provider secrets. Apply, decide and export each supply the
 admitted exporter root to the runner, including automatic delivery of a refreshed pair.
 
+## Independent concept scheme review
+
+The SDK review installation at `<data>/design-review-distribution` contains four files from
+the trusted design-agent release (`design-review/{agents-sdk.mjs,core.mjs,review.mjs,review-prompt.txt}`)
+and its `distribution/active-skills.json`. The host commits the user's confirmed presentation first.
+When the generation run settles, the host calls the distribution's `design-review/agents-sdk.mjs` entry with the
+configured model, SDK settings and cancellation signal. It supplies the public task, the report
+and the exact evidence bound to the submission. The report includes the shared design basis and
+each candidate’s engineering fields, including its complete structure, operating sequence and
+verification limits. The shared entry owns the review rules and its document size limits.
+
+The host records the attempt against the session, scheme fingerprint and revision. It rechecks
+the binding and source evidence before publishing the exact approved report and receipt.
+Both files must still match their digests to open from the restored chat. Other verdicts
+leave the user's submission available with the review findings. A failure or Stop leaves
+the attempt interrupted. The user can request a new review of the same current submission.
+Opening the chat never starts a new review.
+
 ## Formal concept scheme tools
 
 The same trusted worktree and application Skill admission used by requirements understanding
