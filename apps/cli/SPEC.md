@@ -12,7 +12,7 @@ references: [module-artifact-tests]
 ## DesignRail identity and execution
 
 DesignRail uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `DesignRail`
-CLI, and updates from `https://github.com/Bouchee/raildesign/releases/download/desktop-updates`.
+CLI, and updates from `https://github.com/Bouchee/DesignRail/releases/download/desktop-updates`.
 The SDK execution path belongs to the shared host. Launchers contain native startup and packaging only.
 No JetBrains service, PostHog key, attribution or survey integration ships in development builds.
 The fork does not import the official application's records or configuration.

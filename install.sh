@@ -2,7 +2,7 @@
 # DesignRail binary installer — downloads the single-file `DesignRail` executable for your platform from
 # the GitHub releases, verifies its checksum, and puts it on your PATH.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Bouchee/DesignRail/DesignRail/install.sh | bash
 #
 # Options (pass after `-s --`):
 #   --channel stable|nightly   (default: stable)
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-REPO="${THINKRAIL_REPO:-Bouchee/raildesign}"
+REPO="${THINKRAIL_REPO:-Bouchee/DesignRail}"
 CHANNEL="stable"
 VERSION="latest"
 if [ -z "${HOME:-}" ]; then
@@ -31,7 +31,7 @@ usage() {
 DesignRail binary installer.
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/Bouchee/DesignRail/DesignRail/install.sh | bash
   curl -fsSL ... | bash -s -- --channel nightly --version 0.2.0-nightly.4 --prefix ~/.local
 
 Options:

@@ -49,7 +49,7 @@ terminal navigation and the corresponding palette commands. Desktop zoom remains
 The product is DesignRail, identifier `io.github.bouchee.raildesign`, CLI `DesignRail`.
 Fresh application records live under `~/.raildesign`; installers use independent metadata and caches.
 The application never imports pi sessions, credentials or plugins, or official ThinkRail data.
-Fork releases and updates come only from `Bouchee/raildesign`.
+Fork releases and updates come only from `Bouchee/DesignRail`.
 
 JetBrains services, telemetry, attribution and surveys are removed. SDK tracing starts disabled.
 The interface keeps its bundled fonts and themes; font family names are not service integrations.

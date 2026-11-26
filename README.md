@@ -136,8 +136,8 @@ does not establish a released installer or cross-platform acceptance.
 Use the Bun version pinned in `package.json` and Git on the host.
 
 ```bash
-git clone --branch DesignRail https://github.com/Bouchee/raildesign.git
-cd raildesign
+git clone --branch DesignRail https://github.com/Bouchee/DesignRail.git
+cd DesignRail
 bun install
 bun run dev
 ```
@@ -169,7 +169,7 @@ DesignRail's application identifier is `io.github.bouchee.raildesign`. Its defau
 records and does not import official ThinkRail or pi sessions, credentials or plugins.
 Sessions use format 2. Earlier-format files remain on disk and are not migrated.
 
-Updates are configured only for [this fork's releases](https://github.com/Bouchee/raildesign/releases),
+Updates are configured only for [this fork's releases](https://github.com/Bouchee/DesignRail/releases),
 with the desktop channel under `releases/download/desktop-updates`. Signing, installation and an actual
 update between releases remain separate release gates.
 
