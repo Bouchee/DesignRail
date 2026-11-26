@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { AgentInputItem } from "@openai/agents";
 import {
 	assistantMessage,
@@ -20,17 +21,20 @@ import {
 	type ScriptedModelInput,
 } from "@openai/agents/testing";
 import { saveProjects, saveWorkspaces } from "../persistence";
+import { formatDesignReviewReport } from "./designReviewInput";
 import { configureAgentModelFactory } from "./modelConfiguration";
 import { requestedCandidateCount, schemeUserIntent } from "./schemeTools";
 import {
+	abortSession,
 	createSession,
 	disposeAllSessions,
 	ensureSessionAttached,
+	getSessionMessages,
 	promptSession,
 	setSessionProjectResolver,
 	settleSessionsForShutdown,
 } from "./sdkSessionManager";
-import { readSessionRecord } from "./sessionStore";
+import { readSessionRecord, writeSessionRecord } from "./sessionStore";
 
 const environment = {
 	THINKRAIL_DATA_DIR: "",
@@ -148,6 +152,7 @@ test("scheme authority accepts explicit approved user phrases and separates deci
 		["请继续方案生成并导出", undefined],
 		["请继续方案生成：先补功能，然后导出。", "continue"],
 		[accept, "review"],
+		["请重试当前方案的独立评审。", "retry_review"],
 		[exportRequest, "export"],
 		["请只说明当前方案进度。", undefined],
 		["不要确认当前方案用于审阅", undefined],
@@ -159,9 +164,8 @@ test("scheme authority accepts explicit approved user phrases and separates deci
 	expect(requestedCandidateCount("请生成２个正式概念方案。")).toBe(2);
 });
 
-test.skipIf(!dist)(
-	"real installed scheme workflow uses the current confirmed pair, exposes only actual reviews, and verifies formal JSON",
-	async () => {
+function checkInstalledScheme(independent: false | "pass" | "revise") {
+	return async () => {
 		if (!dist)
 			throw new Error("Set RAILDESIGN_SCHEME_TEST_DIST to a staged design-agent distribution.");
 		const skills = join(root, "data", "skills");
@@ -286,7 +290,7 @@ test.skipIf(!dist)(
 		for (let index = 0; index < 10; index++)
 			candidate.unknowns.push({
 				unknown_id: `Unverified-${index}`,
-				statement: "载荷与导向精度待验证。".repeat(700),
+				statement: "载荷与导向精度待验证。".repeat(independent ? 3 : 700),
 				target_refs: ["B-guidance"],
 				affects: ["comparison"],
 				next_action: "进行实际测量",
@@ -516,13 +520,21 @@ test.skipIf(!dist)(
 		await settleSessionsForShutdown();
 		disposeAllSessions();
 		expect(await ensureSessionAttached(owner, "worktree", cwd)).toBe(true);
-		const reviewed = await turn(
-			owner,
-			accept,
-			call("scheme_review", { presentation_digest: current.presentation_digest }),
-			call("scheme_export"),
-			reply("Review saved"),
-		);
+		const submit = call("scheme_review", { presentation_digest: current.presentation_digest });
+		const reviewRoot = join(root, "data", "design-review-distribution");
+		if (independent) {
+			for (const file of [
+				"design-review/agents-sdk.mjs",
+				"design-review/core.mjs",
+				"design-review/review.mjs",
+				"design-review/review-prompt.txt",
+				"distribution/active-skills.json",
+			])
+				cpSync(join(dist, file), join(reviewRoot, file));
+		}
+		const reviewed = independent
+			? await turn(owner, accept, submit)
+			: await turn(owner, accept, submit, call("scheme_export"), reply("Review saved"));
 		const pair = output(reviewed.history, "scheme_review").pair;
 		expect(pair.receipt.committed).toBe(true);
 		expect(pair.document.confirmation).toMatchObject({
@@ -532,6 +544,168 @@ test.skipIf(!dist)(
 			candidate_refs: current.candidate_refs,
 		});
 		expect(pair.document.authorized_candidate_refs).toEqual([]);
+		if (independent) {
+			expect(reviewed.designReviews?.map((attempt) => attempt.status)).toEqual(["interrupted"]);
+			const started = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			const finding = {
+				kind: "error",
+				location: limitId,
+				basis: "同一工况的计算记录为 3 mm",
+				difference: "位移超过 2 mm",
+				action: "修订导向机构后重新计算",
+			};
+			const stoppedModel = new ScriptedModel([
+				modelResponder(({ request }) => {
+					expect(request.systemInstructions).toContain(
+						"call scheme_retry_review immediately as the first action",
+					);
+					return call("scheme_status");
+				}),
+				modelResponder(({ request }) => {
+					expect(output(request.input, "scheme_status")).toMatchObject({
+						state: "committed",
+						revision: pair.receipt.revision,
+						independent_review: { status: "interrupted", report_available: false },
+						tool_instruction: expect.stringContaining("Call scheme_retry_review now"),
+					});
+					return call("scheme_retry_review");
+				}),
+				modelResponder(async () => {
+					started.resolve();
+					await release.promise;
+					return call("read_evidence", { path: "requirements" });
+				}),
+			]);
+			configureAgentModelFactory(() => stoppedModel);
+			const pending = promptSession(owner, "请重试当前方案的独立评审。");
+			await Promise.race([
+				started.promise,
+				pending.then(() => {
+					throw new Error("Review finished before Stop");
+				}),
+			]);
+			const snapshotWhileRunning = readSessionRecord(owner);
+			expect(snapshotWhileRunning?.designReviews?.at(-1)?.status).toBe("running");
+			const stop = abortSession(owner);
+			release.resolve();
+			await Promise.all([pending, stop]);
+			const stopped = readSessionRecord(owner);
+			expect(stopped?.state.completion?.outcome).toBe("cancelled");
+			expect(stopped?.scheme?.state.kind).toBe("committed");
+			expect(stopped?.designReviews?.at(-1)?.status).toBe("interrupted");
+			expect(stopped?.designReviews?.at(-1)?.reportPath).toBeUndefined();
+			const interrupted = stopped?.designReviews?.at(-1);
+			await settleSessionsForShutdown();
+			disposeAllSessions();
+			if (independent === "revise" && snapshotWhileRunning)
+				writeSessionRecord(snapshotWhileRunning);
+			const reopened = await getSessionMessages(owner, "worktree", cwd);
+			const message = JSON.stringify(reopened.messages.find((item) => item.id === interrupted?.id));
+			expect(message).toContain("未完成");
+			if (independent === "revise") expect(message).toContain("重启时评审尚未完成");
+			expect(message).not.toContain("delivery.md");
+			const { segments } = await import(
+				pathToFileURL(join(reviewRoot, "design-review/core.mjs")).href
+			);
+			const submittedReport = formatDesignReviewReport(
+				pair.document,
+				current.check_report,
+				pair.document,
+			);
+			const parts: string[] = segments(submittedReport);
+			const retry = new ScriptedModel([
+				call("scheme_retry_review"),
+				...parts.map(() =>
+					modelResponder(({ request }) => {
+						const content = JSON.stringify(request.input);
+						expect(content).toContain(newName);
+						expect(content).toContain(limitId);
+						expect(content).toContain("checker");
+						expect(request.tools.map(({ name }) => name)).toContain("submit_review");
+						return call("submit_review", {
+							status: independent,
+							summary:
+								independent === "revise" ? "导向端位移超限。" : "The requirement was checked.",
+							findings: independent === "revise" ? [finding] : [],
+						});
+					}),
+				),
+			]);
+			configureAgentModelFactory(() => retry);
+			await promptSession(owner, "请重试当前方案的独立评审");
+			retry.assertComplete();
+			const result = readSessionRecord(owner);
+			expect(result?.designReviews?.map((attempt) => attempt.status)).toEqual([
+				"interrupted",
+				"interrupted",
+				independent,
+			]);
+			const outcome = result?.designReviews?.at(-1);
+			if (independent === "revise") {
+				expect(outcome?.reportPath).toBeUndefined();
+				expect(outcome?.receiptPath).toBeUndefined();
+				expect(JSON.stringify(result?.messages.at(-1))).toContain(finding.difference);
+				await turn(
+					owner,
+					"请重试当前方案的独立评审",
+					call("scheme_retry_review"),
+					reply("Already reviewed."),
+				);
+				expect(readSessionRecord(owner)?.designReviews).toHaveLength(3);
+				return;
+			}
+			if (!outcome?.reportPath || !outcome.receiptPath)
+				throw new Error("Missing independent review delivery");
+			const status = await turn(
+				owner,
+				"请只说明当前方案独立评审状态。",
+				call("scheme_status"),
+				reply("Independent review passed."),
+			);
+			expect(output(status.history, "scheme_status").independent_review).toEqual({
+				status: "pass",
+				report_available: true,
+			});
+			const report = readFileSync(join(cwd, outcome.reportPath));
+			const receipt = JSON.parse(readFileSync(join(cwd, outcome.receiptPath), "utf8"));
+			expect(receipt.schemeReceipt).toEqual(pair.receipt);
+			expect(receipt.presentationDigest).toBe(current.presentation_digest);
+			expect(receipt.reportDigest).toBe(
+				`sha256:${createHash("sha256").update(report).digest("hex")}`,
+			);
+			expect(receipt.evidence.map((entry: { id: string }) => entry.id).sort()).toEqual([
+				"checker",
+				"requirements",
+				"scheme",
+			]);
+			expect(report.toString()).toContain(newName);
+			expect(result?.messages.at(-1)).toMatchObject({
+				content: [{ text: expect.stringContaining(outcome.reportPath) }],
+			});
+			await settleSessionsForShutdown();
+			disposeAllSessions();
+			expect(await ensureSessionAttached(owner, "worktree", cwd)).toBe(true);
+			expect(readSessionRecord(owner)?.designReviews?.at(-1)).toEqual(outcome);
+			const reopen = async () => {
+				const snapshot = await getSessionMessages(owner, "worktree", cwd);
+				return snapshot.messages.find((message) => message.id === outcome.id);
+			};
+			expect(JSON.stringify(await reopen())).toContain(outcome.reportPath);
+			const originalReceipt = readFileSync(join(cwd, outcome.receiptPath));
+			for (const [path, original] of [
+				[outcome.reportPath, report],
+				[outcome.receiptPath, originalReceipt],
+			] as const) {
+				writeFileSync(join(cwd, path), "changed after approval");
+				const reopened = JSON.stringify(await reopen());
+				expect(reopened).toContain("报告或回执已缺失或改动");
+				expect(reopened).not.toContain(outcome.reportPath);
+				expect(reopened).not.toContain(outcome.receiptPath);
+				writeFileSync(join(cwd, path), original);
+			}
+			expect(JSON.stringify(await reopen())).toContain(outcome.reportPath);
+		}
 		expect(existsSync(join(cwd, "scheme-outputs"))).toBe(false);
 		const delivered = await turn(owner, exportRequest, call("scheme_export"), reply("Delivered"));
 		const { deliveries } = output(delivered.history, "scheme_export");
@@ -613,7 +787,10 @@ test.skipIf(!dist)(
 			call("scheme_status"),
 			reply("Baseline has changed"),
 		);
-		expect(output(staleStatus.history, "scheme_status").upstream_current).toBe(false);
+		expect(output(staleStatus.history, "scheme_status")).toMatchObject({
+			upstream_current: false,
+			independent_review: { status: "outdated" },
+		});
 		expect(readFileSync(pointer)).toEqual(reviewedPointer);
 		const rebound = await turn(
 			owner,
@@ -659,6 +836,22 @@ test.skipIf(!dist)(
 		);
 		expect(toolError(wrongPair, "scheme_revise")).toContain("current confirmed baseline");
 		expect(readFileSync(pointer)).toEqual(reboundPointer);
-	},
+	};
+}
+
+test.skipIf(!dist)(
+	"real installed scheme workflow uses the current confirmed pair, exposes only actual reviews, and verifies formal JSON",
+	checkInstalledScheme(false),
+	30_000,
+);
+test.skipIf(!dist)(
+	"independent review uses frozen evidence, retries after interruption, and delivers the exact approved report",
+	checkInstalledScheme("pass"),
+	30_000,
+);
+
+test.skipIf(!dist)(
+	"restored interrupted review can be retried and a revision verdict blocks delivery",
+	checkInstalledScheme("revise"),
 	30_000,
 );

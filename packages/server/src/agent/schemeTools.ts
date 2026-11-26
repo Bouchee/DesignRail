@@ -5,6 +5,11 @@ import { isDeepStrictEqual } from "node:util";
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import { readFile, resolveWorktreeFile } from "../fs";
+import {
+	type DesignReviewInput,
+	designReviewEvidence,
+	formatDesignReviewReport,
+} from "./designReviewInput";
 import { requirementsSkill } from "./requirementsTools";
 import type { WorkflowHost, WorkflowReview } from "./workflowHost";
 
@@ -99,7 +104,8 @@ const successfulResult = resultSchema.extend({
 	run_id: id,
 	revision,
 });
-const reference = z.looseObject({ path: z.string(), sha256, bytes: revision });
+const storedReference = z.looseObject({ path: z.string(), sha256 });
+const reference = storedReference.extend({ bytes: revision });
 const page = z.looseObject({
 	ok: z.literal(true),
 	session_id: sessionId,
@@ -150,18 +156,51 @@ const presentation = z.looseObject({
 	candidate_refs: z.array(candidateRef).min(1),
 	design,
 });
+const checkSummary = z.looseObject({
+	status: z.enum(["reviewable", "incomplete"]),
+	completion_blockers: z.array(z.string()),
+});
 const reviewPair = z.looseObject({
 	document: design.extend({
+		input_sources: z.array(z.looseObject({ text: z.string(), sha256 })),
+		task_scope: z.looseObject({ message: z.string() }),
 		confirmation: z.looseObject({
 			purpose: z.literal("review"),
 			message_text: z.string(),
 			presentation_digest: digest,
 			candidate_refs: z.array(candidateRef),
 		}),
+		candidate_eligibility: z.array(
+			z.strictObject({
+				concept_scheme_id: id,
+				revision,
+				eligible: z.boolean(),
+				reasons: z.array(z.string()),
+			}),
+		),
 		authorized_candidate_refs: z.array(candidateRef).length(0),
 	}),
 	receipt,
 });
+const reviewSnapshot = z.looseObject({
+	format: z.literal(3),
+	session_id: sessionId,
+	run_id: id,
+	revision,
+	context_ref: z.null(),
+	pair_ref: storedReference,
+	presentation_ref: storedReference,
+	baseline_ref: storedReference,
+	tools: z.record(z.string(), storedReference),
+});
+const reviewToolKind = z.enum(["tools", "calculations", "knowledge"]);
+type ReviewViewKind =
+	| "snapshots"
+	| "pairs"
+	| "presentations"
+	| "baselines"
+	| z.infer<typeof reviewToolKind>;
+const viewLimit = 4 * 1024 * 1024;
 const object = z.looseObject({});
 const exactJson = JSON as typeof JSON & {
 	parse(
@@ -265,6 +304,11 @@ export function schemeUserIntent(text: string) {
 		)
 	)
 		return "review";
+	if (
+		/^(?:请)?重试当前方案的独立评审$/u.test(value) ||
+		/^(?:please )?retry independent review of (?:the )?current scheme$/iu.test(value)
+	)
+		return "retry_review";
 	if (
 		/^(?:请)?导出(?:当前|刚才)?(?:已审阅|已确认)?(?:正式)?方案集(?:的)?(?:\s*json(?:文件)?)?$/iu.test(
 			value,
@@ -372,6 +416,11 @@ export const schemeInstructions =
 	"Only a new user message confirming the displayed scheme for review permits scheme_review. Use its literal presentation digest. " +
 	"Only a separate user request to export the committed reviewed scheme set permits scheme_export. Treat the returned unknowns as unresolved and the review as having no downstream selection authority.";
 
+export const schemeIndependentReviewInstructions =
+	"For an explicit retry request such as “请重试当前方案的独立评审。” or “Retry independent review of the current scheme”, call scheme_retry_review immediately as the first action. " +
+	"The retry tool checks the current version's independent review record and reports whether retry was accepted. Use scheme_status when the user asks only for status. " +
+	"Scheme state committed means submitted for review. Use independent_review.status for the independent verdict and independent_review.report_available for report delivery.";
+
 interface Options {
 	host: WorkflowHost;
 	binding: () => SchemeBinding | undefined;
@@ -381,6 +430,15 @@ interface Options {
 	priorDisplay: () => string | undefined;
 	displayText: (messageId: string) => string | undefined;
 	onPresentation: (review: WorkflowReview | undefined) => void;
+	independentReviewStatus?: (binding: SchemeBinding) => {
+		status: string;
+		report_available?: boolean;
+	};
+	onIndependentReview?: (
+		prepare: (signal?: AbortSignal) => Promise<DesignReviewInput>,
+		trigger: "commit" | "retry",
+		callId?: string,
+	) => { accepted: boolean; message?: string };
 }
 
 export function createSchemeTools(options: Options) {
@@ -388,7 +446,7 @@ export function createSchemeTools(options: Options) {
 	const { grant, perform } = host;
 	let editingThisTurn = false;
 
-	function userText(intent: "start" | "revise" | "review" | "export") {
+	function userText(intent: "start" | "revise" | "review" | "retry_review" | "export") {
 		const message = options.userText();
 		if (!message || schemeUserIntent(message) !== intent)
 			throw new Error(
@@ -412,14 +470,17 @@ export function createSchemeTools(options: Options) {
 		return binding;
 	}
 
-	function pointerHash(sid: string) {
-		const path = `.generation/${sid}/current.json`;
+	function workflowFile(path: string, maxBytes: number) {
 		const file = worktreePath(path);
 		if (!lstatSync(file).isFile() || realpathSync(file) !== resolve(realpathSync(grant.cwd), path))
-			throw new Error("Invalid bound scheme workflow pointer.");
-		const { meta } = readFile(grant.workspaceId, path, { maxBytes: 4096 });
-		if (!meta.text || !meta.hash) throw new Error("Invalid bound scheme workflow pointer.");
-		return meta.hash;
+			throw new Error("Invalid bound scheme workflow file.");
+		const { content, meta } = readFile(grant.workspaceId, path, { maxBytes });
+		if (!meta.text || !meta.hash) throw new Error("Invalid bound scheme workflow file.");
+		return { content, hash: meta.hash };
+	}
+
+	function pointerHash(sid: string) {
+		return workflowFile(`.generation/${sid}/current.json`, 4096).hash;
 	}
 
 	function currentPointer(binding: SchemeBinding) {
@@ -495,11 +556,21 @@ export function createSchemeTools(options: Options) {
 	) {
 		const ref = reference.safeParse(value);
 		if (!ref.success) return { value, raw: undefined };
-		const { path, sha256: hash, bytes } = ref.data;
-		if (bytes > 4 * 1024 * 1024)
-			throw new Error("The scheme view exceeds the RailDesign runner output limit.");
+		return readView(sid, kind, ref.data, signal);
+	}
+
+	async function readView(
+		sid: string,
+		kind: ReviewViewKind | "contexts" | "draft-progress",
+		ref: z.infer<typeof storedReference> & { bytes?: number },
+		signal?: AbortSignal,
+	) {
+		const { path, sha256: hash } = ref;
+		let bytes = ref.bytes;
 		if (path !== `.generation/${sid}/${kind}/${hash.slice(0, 32)}.json`)
 			throw new Error("The scheme view is outside the current workflow and stage.");
+		if (bytes !== undefined && bytes > viewLimit)
+			throw new Error("The scheme view exceeds the RailDesign runner output limit.");
 		const content: string[] = [];
 		const hasher = createHash("sha256");
 		let offset = 0;
@@ -519,6 +590,9 @@ export function createSchemeTools(options: Options) {
 				signal,
 			);
 			const fragment = page.parse(response.value);
+			bytes ??= fragment.bytes;
+			if (bytes > viewLimit)
+				throw new Error("The scheme view exceeds the RailDesign runner output limit.");
 			if (
 				fragment.session_id !== sid ||
 				fragment.sha256 !== hash ||
@@ -575,6 +649,109 @@ export function createSchemeTools(options: Options) {
 			!isDeepStrictEqual(doc.source_requirement_baseline_ref, binding.upstream.receipt)
 		)
 			throw new Error("The scheme design does not match the bound run and requirements baseline.");
+	}
+
+	async function prepareReview(
+		binding: SchemeBinding,
+		signal?: AbortSignal,
+	): Promise<DesignReviewInput> {
+		const state = binding.state;
+		if (state.kind !== "committed") throw new Error("Only a submitted scheme can be reviewed.");
+		host.assertActive(signal);
+		const pointer = workflowFile(`.generation/${binding.sessionId}/current.json`, 4096);
+		if (pointer.hash !== binding.pointerSha256)
+			throw new Error("The saved scheme pointer changed before independent review.");
+		const tracked: z.infer<typeof storedReference>[] = [];
+		async function frozen(kind: ReviewViewKind, ref: z.infer<typeof storedReference>) {
+			const value = await readView(binding.sessionId, kind, ref, signal);
+			tracked.push(ref);
+			return value;
+		}
+		const snapshotRef = storedReference.parse(JSON.parse(pointer.content));
+		const snapshot = reviewSnapshot.parse((await frozen("snapshots", snapshotRef)).value);
+		if (
+			snapshot.session_id !== binding.sessionId ||
+			snapshot.run_id !== binding.runId ||
+			snapshot.revision !== binding.revision
+		)
+			throw new Error("The review snapshot does not match the submitted scheme.");
+		const original = await frozen("pairs", snapshot.pair_ref);
+		const pair = reviewPair.parse(original.value);
+		const exact = object.parse(parseWithExactNumbers(original.raw));
+		verifyDesign(pair.document, binding, binding.revision);
+		if (
+			!isDeepStrictEqual(pair.receipt, state.receipt) ||
+			documentFingerprint(exact.document) !== state.documentFingerprint ||
+			pair.document.confirmation.presentation_digest !== state.presentationDigest
+		)
+			throw new Error("The submitted scheme's original document no longer matches its receipt.");
+
+		const base = await frozen("baselines", snapshot.baseline_ref);
+		if (!isDeepStrictEqual(requirementsPair.parse(base.value).receipt, binding.upstream.receipt))
+			throw new Error("The stored requirements are not the submitted scheme's requirements.");
+		const baselineFingerprint = documentFingerprint(parseWithExactNumbers(base.raw));
+		const published = await frozen("presentations", snapshot.presentation_ref);
+		const shown = presentation.extend({ check_report: checkSummary }).parse(published.value);
+		if (
+			shown.presentation_digest !== state.presentationDigest ||
+			!isDeepStrictEqual(shown.candidate_refs, pair.document.confirmation.candidate_refs)
+		)
+			throw new Error("The checker result belongs to a different shown scheme.");
+		const evidence = [
+			designReviewEvidence("requirements", snapshot.baseline_ref.path, base.raw),
+			designReviewEvidence("scheme", snapshot.pair_ref.path, original.raw),
+			designReviewEvidence(
+				"checker",
+				`${snapshot.presentation_ref.path}#/check_report`,
+				JSON.stringify(object.parse(parseWithExactNumbers(published.raw)).check_report),
+			),
+		];
+		const references = new Set<string>();
+		JSON.stringify(pair.document, (_key, value: unknown) => {
+			if (typeof value === "string") {
+				const source = value.split("#", 1)[0];
+				if (source && Object.hasOwn(snapshot.tools, source)) references.add(source);
+			}
+			return value;
+		});
+		for (const key of references) {
+			const ref = snapshot.tools[key];
+			if (!ref) continue;
+			const tool = await frozen(reviewToolKind.parse(ref.path.split("/")[2]), ref);
+			evidence.push(designReviewEvidence(key, ref.path, tool.raw));
+		}
+		const publicTask = [
+			...new Set([
+				...pair.document.input_sources.map((source) => source.text),
+				pair.document.task_scope.message,
+				pair.document.confirmation.message_text,
+			]),
+		].join("\n\n");
+
+		async function verifyCurrent(checkSignal?: AbortSignal) {
+			host.assertActive(checkSignal);
+			if (!isDeepStrictEqual(options.binding(), binding))
+				throw new Error("The scheme version changed during independent review.");
+			const active = await requireBaseline(binding, checkSignal);
+			if (documentFingerprint(active.exactPair) !== baselineFingerprint)
+				throw new Error("The stored requirements changed during independent review.");
+			for (const ref of tracked) {
+				if (workflowFile(ref.path, viewLimit).hash !== ref.sha256)
+					throw new Error("The scheme or its evidence changed during independent review.");
+			}
+			currentPointer(binding);
+			host.assertActive(checkSignal);
+		}
+		return {
+			publicTask,
+			report: formatDesignReviewReport(
+				pair.document,
+				shown.check_report,
+				object.parse(exact.document),
+			),
+			evidence,
+			verifyCurrent,
+		};
 	}
 
 	function failure(result: SchemeResult) {
@@ -870,7 +1047,8 @@ export function createSchemeTools(options: Options) {
 		tool({
 			name: "scheme_status",
 			description:
-				"Read the current formal scheme workflow without changing its state. Explicit requests to show the pending scheme again redisplay the same current frozen presentation.",
+				"Read the scheme workflow and the independent review status for its current submitted version. Explicit redisplay shows the current frozen presentation." +
+				(options.onIndependentReview ? " Call scheme_retry_review for a retry request." : ""),
 			parameters: z.object({}),
 			errorFunction: null,
 			execute: (_input, _context, details) =>
@@ -880,11 +1058,8 @@ export function createSchemeTools(options: Options) {
 					const active = await baseline(details?.signal);
 					const upstream_current = isDeepStrictEqual(active.binding, binding.upstream);
 					const state = binding.state;
-					if (
-						upstream_current &&
-						state.kind === "pending" &&
-						schemeUserIntent(options.userText() ?? "") === "redisplay"
-					) {
+					const intent = schemeUserIntent(options.userText() ?? "");
+					if (upstream_current && state.kind === "pending" && intent === "redisplay") {
 						const markdown =
 							state.pending.messageId && options.displayText(state.pending.messageId);
 						if (!markdown)
@@ -912,9 +1087,7 @@ export function createSchemeTools(options: Options) {
 							? {
 									draft_binding: state.draftBinding,
 									staged: state.staged,
-									...(upstream_current &&
-									binding.revision === 0 &&
-									schemeUserIntent(options.userText() ?? "") === "continue"
+									...(upstream_current && binding.revision === 0 && intent === "continue"
 										? {
 												tool_instruction: state.staged
 													? nextStageInstruction(state.staged)
@@ -930,7 +1103,18 @@ export function createSchemeTools(options: Options) {
 									displayed: !!state.pending.messageId,
 								}
 							: state.kind === "committed"
-								? { receipt: state.receipt }
+								? {
+										receipt: state.receipt,
+										independent_review: upstream_current
+											? (options.independentReviewStatus?.(binding) ?? { status: "not_started" })
+											: { status: "outdated" },
+										...(upstream_current && intent === "retry_review" && options.onIndependentReview
+											? {
+													tool_instruction:
+														"Call scheme_retry_review now to carry out the user's explicit retry request.",
+												}
+											: {}),
+									}
 								: {}),
 					};
 				}),
@@ -1029,18 +1213,48 @@ export function createSchemeTools(options: Options) {
 					const exact = expanded.raw
 						? object.parse(parseWithExactNumbers(expanded.raw))
 						: object.parse(object.parse(parseWithExactNumbers(result.raw)).pair);
-					options.saveBinding(
-						bindingFor(value, binding.upstream, {
-							kind: "committed",
-							receipt: pair.receipt,
-							documentFingerprint: documentFingerprint(exact.document),
-							presentationDigest: frozen.digest,
-						}),
-					);
+					const committed = bindingFor(value, binding.upstream, {
+						kind: "committed",
+						receipt: pair.receipt,
+						documentFingerprint: documentFingerprint(exact.document),
+						presentationDigest: frozen.digest,
+					});
+					options.saveBinding(committed);
 					options.onPresentation(undefined);
-					return { ...value, pair };
+					const review = options.onIndependentReview?.(
+						(signal) => prepareReview(committed, signal),
+						"commit",
+						details?.toolCall?.callId,
+					);
+					return { ...value, pair, ...(review ? { independent_review: review } : {}) };
 				}),
 		}),
+		...(options.onIndependentReview
+			? [
+					tool({
+						name: "scheme_retry_review",
+						description:
+							"Call first when the user explicitly says “请重试当前方案的独立评审。” or asks to retry independent review of the current scheme. Checks the current version's independent review record and retries an interrupted review.",
+						parameters: z.object({}),
+						errorFunction: null,
+						execute: (_input, _context, details) =>
+							perform(details?.signal, async () => {
+								userText("retry_review");
+								const binding = bound();
+								if (binding.state.kind !== "committed")
+									throw new Error("Only a submitted scheme can be reviewed.");
+								await requireBaseline(binding, details?.signal);
+								currentPointer(binding);
+								const review = options.onIndependentReview?.(
+									(signal) => prepareReview(binding, signal),
+									"retry",
+									details?.toolCall?.callId,
+								);
+								return { ok: review?.accepted === true, independent_review: review };
+							}),
+					}),
+				]
+			: []),
 		tool({
 			name: "scheme_export",
 			description:
