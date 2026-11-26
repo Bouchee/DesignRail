@@ -178,7 +178,7 @@ function namesUnder(cwd: string, name: string): string[] {
 }
 
 test(
-	"RailDesign routes a design brief through revision, restored-chat confirmation and delivery",
+	"DesignRail routes a design brief through revision, restored-chat confirmation and delivery",
 	{
 		tag: "@agent",
 	},

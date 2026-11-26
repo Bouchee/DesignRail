@@ -31,7 +31,7 @@ bun run dev
 
 `bun run dev` boots the host and the web client together and cleans up on `Ctrl+C`. Source/dev runs and
 locally unstamped builds expose no application updater: update a checkout with Git and rebuild it.
-Running `thinkrail update` from source installs a published binary; it does not pull, install
+Running `DesignRail update` from source installs a published binary; it does not pull, install
 dependencies, or rebuild the checkout. On-disk app state (projects, workspaces, worktrees) lives under
 `~/.thinkrail`.
 

@@ -596,7 +596,7 @@ test("a chat whose deletion did not finish refuses attach, terminals, sessions a
 	expect(loadChats().chats.some((chat) => chat.id === workspace.id)).toBe(false);
 }, 30_000);
 
-test("chat.inspect counts a chat's own files, not RailDesign's scaffolding, never follows a symlink and yields while it walks", async () => {
+test("chat.inspect counts a chat's own files, not DesignRail's scaffolding, never follows a symlink and yields while it walks", async () => {
 	const created = (await handleRequest("chat.create", {}, CTX)) as ChatCreateResult;
 	const folder = created.workspace.worktreePath;
 	const inspect = () =>

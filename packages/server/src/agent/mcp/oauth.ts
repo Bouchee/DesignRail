@@ -124,7 +124,7 @@ export class OwnedMcpOAuthProvider implements OAuthClientProvider {
 	get clientMetadata(): OAuthClientProvider["clientMetadata"] {
 		const oauth = this.options.config.oauth;
 		return {
-			client_name: oauth?.clientName ?? "RailDesign",
+			client_name: oauth?.clientName ?? "DesignRail",
 			redirect_uris: [this.redirectUrl],
 			grant_types: ["authorization_code", "refresh_token"],
 			response_types: ["code"],

@@ -3,19 +3,19 @@ import { windowsFileIdentity } from "./windowsIdentity";
 
 test("names each channel and maps its version to four numeric parts", () => {
 	expect(windowsFileIdentity({ version: "0.2.0", channel: "stable" })).toEqual({
-		productName: "RailDesign",
+		productName: "DesignRail",
 		companyName: "Bouchee",
 		copyright: "Copyright © 2026 Bouchee",
 		fileVersion: "0.2.0.0",
 		fileVersionParts: [0, 2, 0, 0],
 	});
 	expect(windowsFileIdentity({ version: "0.3.0-nightly.6", channel: "nightly" })).toMatchObject({
-		productName: "RailDesign Nightly",
+		productName: "DesignRail Nightly",
 		fileVersion: "0.3.0.6",
 		fileVersionParts: [0, 3, 0, 6],
 	});
 	expect(windowsFileIdentity({ version: "0.0.0-dev", channel: "dev" })).toMatchObject({
-		productName: "RailDesign Dev",
+		productName: "DesignRail Dev",
 		fileVersion: "0.0.0.0",
 	});
 });

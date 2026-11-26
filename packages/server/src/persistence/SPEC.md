@@ -38,7 +38,7 @@ Durable host state—projects, workspaces, cross-frontend app config, terminal c
   cached store, never on a fresh read, so a save after a failed load cannot overwrite the chats the load
   missed; the legacy files keep saving either way. `chatsRoot()`
   (`<dataDir>/chats`) names the reserved folder: `isUnderChatsRoot()` is the lexical test for spellings
-  RailDesign stored, `landsInChatsRoot()` the door policy for a path someone typed or picked
+  DesignRail stored, `landsInChatsRoot()` the door policy for a path someone typed or picked
   (lexical, or canonical through the nearest existing ancestors — [[submodule-server-projects]]).
 - **Public surface (barrel):** `dataDir`, `chatsRoot`, `isUnderChatsRoot`, `landsInChatsRoot`, `loadChats`, `chatsStoreProblem` (+ `ChatsStoreProblem`),
   `isChatsContainer`, `isChatWorkspace`, `PersistedChats`, `CHATS_FILE_VERSION`, the data-folder helpers above, project/workspace/config and terminal-catalog load-save operations, session receipt load-save operations.

@@ -1,57 +1,57 @@
 import { expect, test } from "bun:test";
-import { parseRailDesignDeepLink } from "./deepLink";
+import { parseDesignRailDeepLink } from "./deepLink";
 
 test("parses a file path, line and column", () => {
 	expect(
-		parseRailDesignDeepLink(
+		parseDesignRailDeepLink(
 			"raildesign://open?file=/Users/me/thinkrail/apps/web/src/main.tsx&line=12&column=3",
 		),
 	).toEqual({ file: "/Users/me/thinkrail/apps/web/src/main.tsx", line: 12, column: 3 });
 });
 
 test("defaults line to 1 and keeps column optional", () => {
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/src/a.ts")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/src/a.ts")).toEqual({
 		file: "/repo/src/a.ts",
 		line: 1,
 	});
-	expect(parseRailDesignDeepLink("raildesign://open/?file=/repo/src/a.ts&line=7")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open/?file=/repo/src/a.ts&line=7")).toEqual({
 		file: "/repo/src/a.ts",
 		line: 7,
 	});
 });
 
 test("decodes percent-encoded and unencoded paths without turning + into a space", () => {
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/a%20b/c.tsx&line=2")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/a%20b/c.tsx&line=2")).toEqual({
 		file: "/repo/a b/c.tsx",
 		line: 2,
 	});
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/routes/+page.svelte")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/routes/+page.svelte")).toEqual({
 		file: "/repo/routes/+page.svelte",
 		line: 1,
 	});
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/проект/a b.ts")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/проект/a b.ts")).toEqual({
 		file: "/repo/проект/a b.ts",
 		line: 1,
 	});
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/a%2Bb.ts&line=3")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/a%2Bb.ts&line=3")).toEqual({
 		file: "/repo/a+b.ts",
 		line: 3,
 	});
 });
 
 test("accepts Windows absolute paths and ignores unknown parameters", () => {
-	expect(parseRailDesignDeepLink("raildesign://open?file=C%3A%5Crepo%5Csrc%5Ca.ts&line=4")).toEqual(
+	expect(parseDesignRailDeepLink("raildesign://open?file=C%3A%5Crepo%5Csrc%5Ca.ts&line=4")).toEqual(
 		{
 			file: "C:\\repo\\src\\a.ts",
 			line: 4,
 		},
 	);
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/a.ts&source=locator")).toEqual({
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/a.ts&source=locator")).toEqual({
 		file: "/repo/a.ts",
 		line: 1,
 	});
 	expect(
-		parseRailDesignDeepLink(
+		parseDesignRailDeepLink(
 			`raildesign://open?file=${encodeURIComponent("\\\\server\\share\\repo\\a.ts")}`,
 		),
 	).toEqual({
@@ -74,7 +74,7 @@ test("rejects other schemes, hosts, paths and URL parts", () => {
 		"raildesign://open?file=/repo/src/a.ts#L3",
 		`raildesign://open?file=/repo/${"a".repeat(9000)}.ts`,
 	];
-	for (const raw of invalid) expect(parseRailDesignDeepLink(raw)).toBeNull();
+	for (const raw of invalid) expect(parseDesignRailDeepLink(raw)).toBeNull();
 });
 
 test("rejects Windows device namespaces before any path can reach the host", () => {
@@ -89,7 +89,7 @@ test("rejects Windows device namespaces before any path can reach the host", () 
 		"//server",
 	]) {
 		expect(
-			parseRailDesignDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`),
+			parseDesignRailDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`),
 		).toBeNull();
 	}
 });
@@ -102,11 +102,11 @@ test("rejects DOS device aliases only in Windows filename components", () => {
 		"\\\\server\\share\\LPT¹.txt",
 	]) {
 		expect(
-			parseRailDesignDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`),
+			parseDesignRailDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`),
 		).toBeNull();
 	}
 	for (const file of ["/repo/CON", "\\\\aux\\share\\repo\\a.ts"]) {
-		expect(parseRailDesignDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`)).toEqual({
+		expect(parseDesignRailDeepLink(`raildesign://open?file=${encodeURIComponent(file)}`)).toEqual({
 			file,
 			line: 1,
 		});
@@ -128,7 +128,7 @@ test("rejects relative, escaping, ambiguous and malformed file paths", () => {
 		"raildesign://open?file=/repo/a.ts&file=/etc/passwd",
 		`raildesign://open?file=/${"a".repeat(4100)}`,
 	];
-	for (const raw of invalid) expect(parseRailDesignDeepLink(raw)).toBeNull();
+	for (const raw of invalid) expect(parseDesignRailDeepLink(raw)).toBeNull();
 });
 
 test("rejects malformed, zero, negative and huge positions", () => {
@@ -144,8 +144,8 @@ test("rejects malformed, zero, negative and huge positions", () => {
 		"raildesign://open?file=/repo/src/a.ts&column=0",
 		"raildesign://open?file=/repo/src/a.ts&column=x",
 	];
-	for (const raw of invalid) expect(parseRailDesignDeepLink(raw)).toBeNull();
-	expect(parseRailDesignDeepLink("raildesign://open?file=/repo/a.ts&line=2000000")).toEqual({
+	for (const raw of invalid) expect(parseDesignRailDeepLink(raw)).toBeNull();
+	expect(parseDesignRailDeepLink("raildesign://open?file=/repo/a.ts&line=2000000")).toEqual({
 		file: "/repo/a.ts",
 		line: 2_000_000,
 	});

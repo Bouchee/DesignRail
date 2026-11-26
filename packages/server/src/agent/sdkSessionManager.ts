@@ -2814,7 +2814,7 @@ async function buildSessionAgent(
 			const commandInstructions = sandboxEnabled
 				? "Sandbox bash supports bare pwd directly and rm -- <relative-file> with approval. Other command forms are rejected. Use apply_patch for approved edits."
 				: "Use apply_patch for edits and bash to run project checks. Request approval for commands and edits.";
-			return `${definition?.systemPrompt ?? ""}\nYou are RailDesign, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}${nativeScheme ? `\n${schemeInstructions}` : ""}`;
+			return `${definition?.systemPrompt ?? ""}\nYou are DesignRail, a coding assistant. Work only in the assigned worktree: ${entry.store.record.cwd}. Use read and search to inspect files. ${commandInstructions} A denied operation is not permission to try another route. Report actual checks and remaining limits.\n${projectContext}\n${preloadedSkills() ?? ""}\n${skillCatalog}\n${TODO_RULE}\n${repository ? SPEC_RULE : ""}\n${WORKFLOW_RULE}\n${ARTIFACTS_RULE}${nativeRequirements ? `\n${requirementsInstructions}` : ""}${nativeScheme ? `\n${schemeInstructions}` : ""}`;
 		},
 		model: sdkModel,
 		tools: [
@@ -4301,7 +4301,7 @@ export async function compactSession(
 			signal: controller.signal,
 			summarize: async (prefix, signal) => {
 				const agent = new Agent({
-					name: "RailDesign summary",
+					name: "DesignRail summary",
 					model: createConfiguredModel(selected, sessionId),
 					instructions:
 						"Summarize the older conversation for continuation. Preserve user requirements, decisions, file paths, exact facts, tool outcomes and unfinished work. Do not invent facts. Return only the summary.",

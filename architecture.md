@@ -2,7 +2,7 @@
 id: architecture
 type: architecture-design
 status: active
-title: RailDesign — top-level architecture
+title: DesignRail — top-level architecture
 parent: goal-and-requirements
 covers: [client-host-split, cli-entrypoint, wire-contract, transport-endpoint, ui-shell-panels, git-worktrees, remote-tailscale, hydrate-then-stream, domain-vs-view-state, frontend-local-workbench-frame, client-local-navigation, central-integration, portable-pi-packages, thinkrail-extensions]
 tags: [architecture]
@@ -10,7 +10,7 @@ tags: [architecture]
 
 ## Drivers
 
-RailDesign keeps the workbench and Git workspaces from ThinkRail while replacing the execution kernel
+DesignRail keeps the workbench and Git workspaces from ThinkRail while replacing the execution kernel
 with the OpenAI Agents SDK. The host owns application state and persistence. The SDK owns model calls,
 the agent loop and tool dispatch. Use one execution path; do not preserve pi readers, adapters or fallback engines.
 
@@ -27,7 +27,7 @@ apps/web              React workbench; application state projection and presenta
 packages/contracts    application-owned messages, events, methods and versioned wire
 packages/server       SDK execution + filesystem, Git, workspaces, PTY, approvals and persistence
 packages/shared       server-side platform utilities, paths, release identity and native icons
-apps/cli              raildesign browser launcher and standalone binary
+apps/cli              DesignRail browser launcher and standalone binary
 apps/desktop          Electrobun native shell over the same host and web artifact
 ```
 
@@ -60,7 +60,7 @@ native actions and physical assets. Agent, Git and PTY behavior lives in shared 
    `.git`, original text and the current run grant before edits. Keep subprocess timeout/output bounds.
    Stop revokes the grant before aborting the model and owned process tree. Old callbacks cannot write
    or launch tools after revocation. Approval decisions bind session/run/interaction/revision.
-8. **Host-owned records.** RailDesign starts with new records under `~/.raildesign`. Model history and
+8. **Host-owned records.** DesignRail starts with new records under `~/.raildesign`. Model history and
    full display transcript have distinct purposes. Persist important tool/interaction states before
    side effects. Interrupted or unknown effects never replay automatically. Do not read or migrate
    upstream app data, pi sessions, credentials or plugins.
@@ -76,8 +76,8 @@ native actions and physical assets. Agent, Git and PTY behavior lives in shared 
 12. **Engine-neutral review.** Resource renderers and anchored review comments work through their
     documented public seams. Changing the execution kernel does not justify moving renderer or Git
     business logic into the desktop shell.
-13. **Independent product identity.** Product name is RailDesign; identifier is
-    `io.github.bouchee.raildesign`; CLI executable is `raildesign`; default data is `~/.raildesign`.
+13. **Independent product identity.** Product name is DesignRail; identifier is
+    `io.github.bouchee.raildesign`; CLI executable is `DesignRail`; default data is `~/.raildesign`.
     Install metadata/cache and icons are independent of official ThinkRail. The fork is
     `https://github.com/Bouchee/raildesign`; desktop updates use its
     `releases/download/desktop-updates` channel only. Release signing uses fork-maintainer identities.
@@ -89,7 +89,7 @@ native actions and physical assets. Agent, Git and PTY behavior lives in shared 
     owns windows, native actions, microphone permissions, updates and local host lifecycle only.
 16. **Presentation standards.** User-facing text comes from keyed locale catalogs. Preserve semantic
     theme tokens, accessibility and reduced-motion behavior. User locale/theme/font files live below
-    the RailDesign data directory. See owning UI and locale SPECs for detailed contracts.
+    the DesignRail data directory. See owning UI and locale SPECs for detailed contracts.
 
 ## Verification
 

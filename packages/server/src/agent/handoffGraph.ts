@@ -6,7 +6,7 @@ import { type AgentDefinition, discoverAgentDefinitions } from "./childDefinitio
 import { summaryOperationId } from "./sessionSummary";
 
 export const HANDOFF_ROOT = "$root";
-export const ROOT_AGENT_NAME = "RailDesign";
+export const ROOT_AGENT_NAME = "DesignRail";
 
 /** The SDK agent name and displayed identity of a graph node. */
 export function agentName(node: string): string {

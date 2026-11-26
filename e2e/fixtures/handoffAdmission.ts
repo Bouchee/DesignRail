@@ -145,7 +145,7 @@ function install(ledgerPath: string): () => void {
 				assert.equal(request.method, "POST");
 				assert.equal(body.model, MODEL);
 				assert.equal(body.stream, true);
-				assert.equal(request.headers.get("user-agent"), "RailDesign/0.1");
+				assert.equal(request.headers.get("user-agent"), "DesignRail/0.1");
 				assert(
 					Array.isArray(body.tools) &&
 						body.tools.every((item: { type?: unknown }) => item.type === "function"),

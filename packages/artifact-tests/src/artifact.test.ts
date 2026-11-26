@@ -34,25 +34,25 @@ const desktopTargets: {
 	{
 		platform: "darwin",
 		arch: "arm64",
-		launcher: "build/dev-macos-arm64/RailDesign-dev.app/Contents/MacOS/launcher",
+		launcher: "build/dev-macos-arm64/DesignRail-dev.app/Contents/MacOS/launcher",
 		decoy: "build/dev-macos-arm64/Another.app/Contents/MacOS/launcher",
 	},
 	{
 		platform: "win32",
 		arch: "x64",
-		launcher: "build/dev-win-x64/RailDesign-dev/bin/launcher.exe",
+		launcher: "build/dev-win-x64/DesignRail-dev/bin/launcher.exe",
 		decoy: "build/dev-win-x64/Another/bin/launcher.exe",
 	},
 	{
 		platform: "linux",
 		arch: "x64",
-		launcher: "build/dev-linux-x64/RailDesign-dev/bin/launcher",
+		launcher: "build/dev-linux-x64/DesignRail-dev/bin/launcher",
 		decoy: "build/dev-linux-x64/Another/bin/launcher",
 	},
 	{
 		platform: "linux",
 		arch: "arm64",
-		launcher: "build/dev-linux-arm64/RailDesign-dev/bin/launcher",
+		launcher: "build/dev-linux-arm64/DesignRail-dev/bin/launcher",
 		decoy: "build/dev-linux-arm64/Another/bin/launcher",
 	},
 ];
@@ -121,8 +121,8 @@ test("default artifact paths stay rooted at the repository from every invocation
 		"build",
 		`dev-${os}-${process.arch}`,
 		...(process.platform === "darwin"
-			? ["RailDesign-dev.app", "Contents", "MacOS", "launcher"]
-			: ["RailDesign-dev", "bin", process.platform === "win32" ? "launcher.exe" : "launcher"]),
+			? ["DesignRail-dev.app", "Contents", "MacOS", "launcher"]
+			: ["DesignRail-dev", "bin", process.platform === "win32" ? "launcher.exe" : "launcher"]),
 	);
 	const source = `
 		import { binaryArtifactPath, locateDesktopLauncher } from ${JSON.stringify(join(import.meta.dir, "artifact.ts"))};
@@ -151,42 +151,42 @@ test("names the Windows setup executable per channel", () => {
 
 test("locates the channel-suffixed setup executable inside an expanded ZIP", () => {
 	const root = packageDir(
-		"RailDesign-Setup-canary.exe",
-		join(".installer", "RailDesign-Setup-canary.tar.zst"),
+		"DesignRail-Setup-canary.exe",
+		join(".installer", "DesignRail-Setup-canary.tar.zst"),
 	);
 	expect(locateWindowsSetupExecutable(root, "canary")).toBe(
-		join(root, "RailDesign-Setup-canary.exe"),
+		join(root, "DesignRail-Setup-canary.exe"),
 	);
 });
 
 test("locates the unsuffixed setup executable for the stable channel", () => {
-	const root = packageDir("RailDesign-Setup.exe");
-	expect(locateWindowsSetupExecutable(root, "stable")).toBe(join(root, "RailDesign-Setup.exe"));
+	const root = packageDir("DesignRail-Setup.exe");
+	expect(locateWindowsSetupExecutable(root, "stable")).toBe(join(root, "DesignRail-Setup.exe"));
 });
 
 test("refuses a ZIP whose setup executable belongs to another channel", () => {
-	const root = packageDir("RailDesign-Setup-canary.exe");
+	const root = packageDir("DesignRail-Setup-canary.exe");
 	expect(() => locateWindowsSetupExecutable(root, "stable")).toThrow(
-		"desktop ZIP does not contain RailDesign-Setup.exe",
+		"desktop ZIP does not contain DesignRail-Setup.exe",
 	);
 });
 
-test.each(["stable", "canary"])("selects only RailDesign's exact %s setup name", (channel) => {
+test.each(["stable", "canary"])("selects only DesignRail's exact %s setup name", (channel) => {
 	const root = packageDir(
 		"Another-Setup.exe",
 		"Another-Setup-canary.exe",
-		"RailDesign-Setup.exe",
-		"RailDesign-Setup-canary.exe",
+		"DesignRail-Setup.exe",
+		"DesignRail-Setup-canary.exe",
 	);
 	expect(locateWindowsSetupExecutable(root, channel)).toBe(
-		join(root, `RailDesign${windowsSetupExecutableSuffix(channel)}`),
+		join(root, `DesignRail${windowsSetupExecutableSuffix(channel)}`),
 	);
 });
 
 test.each(["stable", "canary"])(
 	"refuses similarly named or nested %s setup executables",
 	(channel) => {
-		const name = `RailDesign${windowsSetupExecutableSuffix(channel)}`;
+		const name = `DesignRail${windowsSetupExecutableSuffix(channel)}`;
 		const root = packageDir(`Another${windowsSetupExecutableSuffix(channel)}`, join("other", name));
 		expect(() => locateWindowsSetupExecutable(root, channel)).toThrow(
 			`desktop ZIP does not contain ${name}`,

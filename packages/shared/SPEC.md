@@ -8,9 +8,9 @@ depends-on: [module-contracts]
 tags: [host]
 ---
 
-## RailDesign identity and execution
+## DesignRail identity and execution
 
-RailDesign uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `raildesign`
+DesignRail uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `DesignRail`
 CLI, and updates from `https://github.com/Bouchee/raildesign/releases/download/desktop-updates`.
 The SDK execution path belongs to the shared host. Launchers contain native startup and packaging only.
 No JetBrains service, PostHog key, attribution or survey integration ships in development builds.
@@ -117,7 +117,7 @@ untouched by this utility.
   - **`SSH_AUTH_SOCK`** (darwin only) — when absent, recover the launchd ssh-agent socket via
     `launchctl getenv SSH_AUTH_SOCK` (3s timeout, never throws, no-op when launchd reports none).
     Without it both the host's own git pushes (`pr`) and every embedded terminal lose the user's
-    ssh-agent: `ssh-add` inside a RailDesign terminal answers "Could not open a connection to your
+    ssh-agent: `ssh-add` inside a DesignRail terminal answers "Could not open a connection to your
     authentication agent", and a key loaded in Terminal.app never reaches the host's push.
 
   All repairs land on `process.env`, which is what makes them reach *every* shell the host spawns: the PTY
@@ -127,7 +127,7 @@ untouched by this utility.
   the underlying single-port check. `parsePort(value)`: strict port parse (plain decimal digits, 0-65535, else `undefined`), so an empty,
   `0x10`, `1e3` or out-of-range `THINKRAIL_PORT` is ignored instead of becoming port 0 or `NaN`.
 - **/startupMark** — the launchers' one boot signature: a committed 42×20 `RD` silhouette built from a
-  cyclic `RAILDESIGN·` field, composed with the product identity, a caller-supplied honest status, and its
+  cyclic `DESIGNRAIL·` field, composed with the product identity, a caller-supplied honest status, and its
   resolved endpoint. At 72+ columns it is a right-hand lockup; from 42–71 it stacks, and below 42 it uses
   the identity/status alone rather than wrapping the artwork.
   Rendering is one synchronous write's worth of text: terminal-palette green + sparse bright signals +
@@ -138,9 +138,9 @@ untouched by this utility.
 - **/version** — the one permanent release-stamping seam. Source runs report `0.0.0-dev`; release CI
   overwrites this module in its throwaway checkout before building either artifact family so CLI
   `--version`, desktop package metadata and `server.welcome.appVersion` cannot drift. It contains release identity data and has no launcher dependency.
-- **/windowsIdentity** — `windowsFileIdentity({ version, channel })`: what Windows shows for a RailDesign
+- **/windowsIdentity** — `windowsFileIdentity({ version, channel })`: what Windows shows for a DesignRail
   executable. The product name, which also serves as the file description Task Manager displays, is
-  `RailDesign` on stable, `RailDesign Nightly` on nightly and `RailDesign Dev` on unstamped builds. The
+  `DesignRail` on stable, `DesignRail Nightly` on nightly and `DesignRail Dev` on unstamped builds. The
   publisher and copyright are Bouchee, as in `LICENSE` and the signing certificate. The version
   takes the four numeric parts Windows requires: `X.Y.Z` plus the prerelease's trailing number
   (`0.3.0-nightly.6` → `0.3.0.6`), else `.0`. An unknown channel or a part above 65535 throws, so a
@@ -156,7 +156,7 @@ untouched by this utility.
   Never hand-edit a raster; regenerate them with `bun run --cwd packages/shared generate-icons`
   (`@resvg/resvg-js` rasterizes straight from the vector, `resedit` packs the ICO). The outputs are the
   macOS iconset, the Linux 512 px PNG, and the Windows ICO, whose path `windowsIconPath` exports.
-  - **Artwork.** The new RD mark uses a rounded-square silhouette: the RailDesign RD glyph in the dark-family
+  - **Artwork.** The new RD mark uses a rounded-square silhouette: the DesignRail RD glyph in the dark-family
     brand green (`#8dff4f`) on a solid black tile. Translucent glass, highlights, and decorative edging
     are excluded so small taskbar frames stay crisp.
   - **ICO frames.** PNG-compressed at 256/128/80/72/64/56/48/40/36/32/28/24/20/16: Microsoft's
@@ -183,7 +183,7 @@ untouched by this utility.
   locked past the backoff throws, and a failure no delay can fix (`ENOTDIR`, …) throws on the first
   attempt. `options.remove` is the injected-remover seam the unit test drives; `attempts`/`delayMs` let a
   caller trade patience for speed.
-- **/paths** — the worktree-relative path conventions RailDesign owns, named once so current and future
+- **/paths** — the worktree-relative path conventions DesignRail owns, named once so current and future
   consumers agree (today: `workspaces` *creates* the scratch dir and git *ignores* it):
   `WORKSPACE_INTERNAL_DIR` (`.raildesign` — the repo-local host-managed dir, today holding the ephemeral
   scratch, the intended home for future host files like a cached spec index; **not** hidden from the file

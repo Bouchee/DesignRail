@@ -56,7 +56,7 @@ function within(root: string, path: string): boolean {
 	return path === root || path.startsWith(root + sep);
 }
 
-/** Lexical, for the spellings RailDesign stores (both resolved, architecture Decision 22). */
+/** Lexical, for the spellings DesignRail stores (both resolved, architecture Decision 22). */
 export function isUnderChatsRoot(path: string): boolean {
 	return within(chatsRoot(), resolve(path));
 }

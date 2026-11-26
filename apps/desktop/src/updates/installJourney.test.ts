@@ -200,7 +200,7 @@ test("a handoff that never starts shutdown fails the attempt with the SDK error 
 	expect(await controller.getState()).toMatchObject({
 		status: "error",
 		failedPhase: "install",
-		error: "RailDesign couldn't start the installer",
+		error: "DesignRail couldn't start the installer",
 	});
 });
 

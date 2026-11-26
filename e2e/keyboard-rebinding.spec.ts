@@ -216,7 +216,7 @@ test("a plain key asks for a modifier, a desktop or browser chord is refused or 
 	await pressPlatformShortcut(page, "Comma");
 	await expect(message(page, "view.toggleLeft")).toHaveAttribute("data-kind", "desktop");
 	await expect(message(page, "view.toggleLeft")).toContainText(
-		`${modLabel(",")} is used by the RailDesign desktop app`,
+		`${modLabel(",")} is used by the DesignRail desktop app`,
 	);
 
 	await page.keyboard.press("Enter");
@@ -342,7 +342,7 @@ test("Export downloads every row, locked ones included, and Import summarizes a 
 		buffer: Buffer.from(JSON.stringify({ format: "something-else" })),
 	});
 	await expect(page.getByTestId("toast")).toContainText(
-		"This is not a RailDesign keybindings file",
+		"This is not a DesignRail keybindings file",
 	);
 
 	await input.setInputFiles({
@@ -405,7 +405,7 @@ test("a switched-off extension's command records Mod+K without a warning, and se
 	await expect(page.getByTestId("search-palette")).toBeVisible();
 });
 
-test("a RailDesign chord over an extension's marks the extension's chord inactive while F still starts hint mode", async ({
+test("a DesignRail chord over an extension's marks the extension's chord inactive while F still starts hint mode", async ({
 	page,
 }) => {
 	await openFixtureProject(page);

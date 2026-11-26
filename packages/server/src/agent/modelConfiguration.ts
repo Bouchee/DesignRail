@@ -42,7 +42,7 @@ type Endpoint = z.infer<typeof endpointSchema>;
 const VERIFIED_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 const VERIFIED_MODEL = "deepseek-v4.1-flash";
 const VERIFIED_CONTEXT_WINDOW = 1_000_000;
-const CLIENT_USER_AGENT = "RailDesign/0.1";
+const CLIENT_USER_AGENT = "DesignRail/0.1";
 const MAX_RETRY_DELAY_MS = 16000;
 const transientFailure = retryPolicies.any(
 	retryPolicies.networkError(),
@@ -91,7 +91,7 @@ function readConfig(): { version: 1; endpoints: Endpoint[] } {
 	} catch (error) {
 		if (error instanceof Error && "code" in error && error.code === "ENOENT")
 			return { version: 1, endpoints: [] };
-		throw new Error("RailDesign model configuration is unreadable", { cause: error });
+		throw new Error("DesignRail model configuration is unreadable", { cause: error });
 	}
 }
 

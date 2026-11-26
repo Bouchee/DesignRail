@@ -233,7 +233,7 @@ export const requirementsInstructions =
 	"Use a separate chat for a separate requirements task. " +
 	"Use requirements_resume for explanations and progress; do not change the workflow on those turns. " +
 	"For revisions or clarifications, use requirements_prepare with the current user message. " +
-	"RailDesign displays a successful pending review from requirements_apply directly. When re-displaying a review from requirements_resume or requirements_decide, include the literal presentation_id in your final reply so RailDesign attaches it. " +
+	"DesignRail displays a successful pending review from requirements_apply directly. When re-displaying a review from requirements_resume or requirements_decide, include the literal presentation_id in your final reply so DesignRail attaches it. " +
 	"Stop and wait for the user. Only an explicit decision on that display allows requirements_decide. " +
 	"For ambiguity ask for a reply such as 'I confirm the displayed requirements.' or '确认'. " +
 	"Only delivery.path with verified delivery status is a delivered file. Use requirements_export to retry a failed delivery or supply an existing baseline.";
@@ -280,7 +280,7 @@ export function createRequirementsTools(options: RequirementsOptions) {
 				? {
 						...result,
 						display_instruction:
-							"Include this literal presentation_id in the final reply so RailDesign attaches the frozen review, then wait for the user's decision.",
+							"Include this literal presentation_id in the final reply so DesignRail attaches the frozen review, then wait for the user's decision.",
 					}
 				: result;
 	}
@@ -392,7 +392,7 @@ export function createRequirementsTools(options: RequirementsOptions) {
 		tool({
 			name: "requirements_apply",
 			description:
-				"Apply the completed JSON draft from requirements_prepare, using exact template IDs and source quotes. For unresolved_items target_requirement_ids, use operation:N for a zero-based draft operation that produces a requirement, an existing ID from context.target_ids, or [] for a general question. Never invent IDs or use requirement names. RailDesign displays the frozen review and waits for the user's decision.",
+				"Apply the completed JSON draft from requirements_prepare, using exact template IDs and source quotes. For unresolved_items target_requirement_ids, use operation:N for a zero-based draft operation that produces a requirement, an existing ID from context.target_ids, or [] for a general question. Never invent IDs or use requirement names. DesignRail displays the frozen review and waits for the user's decision.",
 			parameters: z.object({
 				draft_json: z
 					.string()

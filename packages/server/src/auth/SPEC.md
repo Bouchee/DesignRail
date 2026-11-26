@@ -11,7 +11,7 @@ tags: [auth, pi]
 
 ## Responsibility
 
-Report the configuration status of RailDesign's SDK Responses endpoints. Endpoint keys and private
+Report the configuration status of DesignRail's SDK Responses endpoints. Endpoint keys and private
 configuration remain inside the agent module. No provider login, OAuth mailbox, external-agent
 credential discovery, JetBrains Central process or upstream configuration reader remains.
 

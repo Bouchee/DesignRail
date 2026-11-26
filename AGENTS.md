@@ -1,8 +1,8 @@
-# RailDesign
+# DesignRail
 
-RailDesign keeps the workbench and isolated Git workspaces from ThinkRail. The host owns application
+DesignRail keeps the workbench and isolated Git workspaces from ThinkRail. The host owns application
 state and persistence; the OpenAI Agents SDK owns model calls, the agent loop and tool dispatch.
-Use fresh RailDesign records. Do not import pi sessions, credentials or plugins.
+Use fresh DesignRail records. Do not import pi sessions, credentials or plugins.
 
 ## Read context proportionally
 

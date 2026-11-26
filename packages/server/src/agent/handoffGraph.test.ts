@@ -77,7 +77,7 @@ test.each([
 		"chat agent name",
 		{
 			...graph,
-			agents: [...graph.agents, { definition: "RailDesign", targets: [], history: "all" }],
+			agents: [...graph.agents, { definition: "DesignRail", targets: [], history: "all" }],
 		},
 		"chat agent's name",
 	],

@@ -29,7 +29,7 @@
       "name": "@thinkrail/cli",
       "version": "0.0.0",
       "bin": {
-        "raildesign": "./src/index.ts",
+        "DesignRail": "./src/index.ts",
       },
       "dependencies": {
         "@thinkrail/server": "workspace:*",

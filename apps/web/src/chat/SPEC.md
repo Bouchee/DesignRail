@@ -8,7 +8,7 @@ depends-on: [module-contracts]
 tags: [chat]
 ---
 
-## RailDesign SDK execution contract
+## DesignRail SDK execution contract
 
 The composer Sandbox toggle reads the saved per-chat choice from host session state. It sends the
 change through `session.setSandbox` and disables the control during a run or a pending setting
@@ -1228,7 +1228,7 @@ both message orders. *Rejected:* keeping the modal for non-MCP extensions — ev
   action. Its **Skills** button is the presentational **`SkillsButton`**
   primitive — a `BookOpen` pill, badged when a skill dir changed on disk — also shared with
   `NewWorkspaceDialog` so the two triggers cannot drift), and **`SkillsDialog`** (the **Skills manager**: a catalog
-  grouped by source with **sticky section headers** — RailDesign bundled and application groups lead,
+  grouped by source with **sticky section headers** — DesignRail bundled and application groups lead,
   followed by Personal, plugin groups and project aliases. Each entry retains its admission verdict,
   trust/acknowledgement state, group switches and workspace/project skill overrides. The host-wide
   other-agent-content switch remains reachable in this dialog through `settings.update`; plugin and

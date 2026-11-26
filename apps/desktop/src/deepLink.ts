@@ -47,7 +47,7 @@ function acceptablePath(file: string | undefined): file is string {
 	);
 }
 
-export function parseRailDesignDeepLink(raw: string): NativeOpenFileRequest | null {
+export function parseDesignRailDeepLink(raw: string): NativeOpenFileRequest | null {
 	if (
 		typeof raw !== "string" ||
 		raw.length === 0 ||

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# RailDesign binary installer — downloads the single-file `raildesign` executable for your platform from
+# DesignRail binary installer — downloads the single-file `DesignRail` executable for your platform from
 # the GitHub releases, verifies its checksum, and puts it on your PATH.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.sh | bash
 #
 # Options (pass after `-s --`):
 #   --channel stable|nightly   (default: stable)
 #   --version X.Y.Z|X.Y.Z-nightly.N|latest
 #                              (default: latest)
-#   --prefix DIR               (default: ~/.local; binary lands at <prefix>/bin/raildesign)
+#   --prefix DIR               (default: ~/.local; binary lands at <prefix>/bin/DesignRail)
 #   --no-modify-path           don't touch shell rc files; just print PATH advice
 #
-# After install, run `raildesign`. To update later, run `raildesign update`; to remove it, run
-# `raildesign uninstall`.
+# After install, run `DesignRail`. To update later, run `DesignRail update`; to remove it, run
+# `DesignRail uninstall`.
 
 set -euo pipefail
 
@@ -28,21 +28,21 @@ MODIFY_PATH=1
 
 usage() {
     cat >&2 <<'EOF'
-RailDesign binary installer.
+DesignRail binary installer.
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.sh | bash
   curl -fsSL ... | bash -s -- --channel nightly --version 0.2.0-nightly.4 --prefix ~/.local
 
 Options:
   --channel stable|nightly   (default: stable)
   --version X.Y.Z|X.Y.Z-nightly.N|latest
                              (default: latest)
-  --prefix DIR               (default: ~/.local; binary lands at <prefix>/bin/raildesign)
+  --prefix DIR               (default: ~/.local; binary lands at <prefix>/bin/DesignRail)
   --no-modify-path           don't touch shell rc files; just print PATH advice
 
-After install, run `raildesign`. To update later, run `raildesign update`; to remove it, run
-`raildesign uninstall`.
+After install, run `DesignRail`. To update later, run `DesignRail update`; to remove it, run
+`DesignRail uninstall`.
 EOF
     exit "${1:-0}"
 }
@@ -213,7 +213,7 @@ if [ "$OS" = "darwin" ] && [ "$ARCH" = "x64" ] \
     && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = "1" ]; then
     ARCH="arm64"
 fi
-ASSET_NAME="raildesign-${OS}-${ARCH}"
+ASSET_NAME="DesignRail-${OS}-${ARCH}"
 [ "$OS" = "windows" ] && ASSET_NAME="${ASSET_NAME}.exe"
 
 api() {
@@ -302,15 +302,15 @@ echo "  → ok"
 
 BIN_DIR="$PREFIX/bin"
 mkdir -p "$BIN_DIR"
-DEST="$BIN_DIR/raildesign"
-[ "$OS" = "windows" ] && DEST="$BIN_DIR/raildesign.exe"
+DEST="$BIN_DIR/DesignRail"
+[ "$OS" = "windows" ] && DEST="$BIN_DIR/DesignRail.exe"
 STAGED_BINARY=$(mktemp "$BIN_DIR/.raildesign.new.XXXXXX")
 if ! cp "$TMP/$ASSET_NAME" "$STAGED_BINARY"; then
-    echo "Failed to stage RailDesign in $BIN_DIR; the previous executable was left unchanged." >&2
+    echo "Failed to stage DesignRail in $BIN_DIR; the previous executable was left unchanged." >&2
     exit 1
 fi
 if ! chmod +x "$STAGED_BINARY"; then
-    echo "Failed to make the staged RailDesign executable runnable; the previous executable was left unchanged." >&2
+    echo "Failed to make the staged DesignRail executable runnable; the previous executable was left unchanged." >&2
     exit 1
 fi
 if ! mv -f "$STAGED_BINARY" "$DEST"; then
@@ -340,7 +340,7 @@ fi
 META_TMP=""
 
 echo
-echo "RailDesign ${TAG#v} ($CHANNEL) installed."
+echo "DesignRail ${TAG#v} ($CHANNEL) installed."
 
 PATH_NEEDS_MANUAL_ADD=0
 case ":$PATH:" in
@@ -390,7 +390,7 @@ case ":$PATH:" in
                     END { exit (bad || in_block) ? 1 : 0 }
                 ' "$rc_file" 2>/dev/null; then
                     markers_valid=0
-                    echo "PATH:           warning: malformed RailDesign PATH markers in $rc_file; left it unchanged" >&2
+                    echo "PATH:           warning: malformed DesignRail PATH markers in $rc_file; left it unchanged" >&2
                     PATH_NEEDS_MANUAL_ADD=1
                 fi
 
@@ -446,6 +446,6 @@ if [ "$PATH_NEEDS_MANUAL_ADD" -eq 1 ]; then
     echo "Add to PATH:    export PATH=\"\$PATH:$BIN_DIR\""
 fi
 
-echo "Run:            raildesign"
-echo "Update later:   raildesign update"
-echo "Uninstall:      raildesign uninstall"
+echo "Run:            DesignRail"
+echo "Update later:   DesignRail update"
+echo "Uninstall:      DesignRail uninstall"

@@ -38,7 +38,7 @@ test("the launching terminal's identity and colour forcing do not leak into the 
 	expect(env).toEqual({
 		TERM: "xterm-256color",
 		COLORTERM: "truecolor",
-		TERM_PROGRAM: "RailDesign",
+		TERM_PROGRAM: "DesignRail",
 		USER: "u",
 		LOGNAME: "u",
 	});
@@ -201,7 +201,7 @@ test.skipIf(process.platform === "win32")(
 		});
 		const output = await new Response(child.stdout).text();
 		const uid = process.getuid?.();
-		expect(output).toContain(`${uid}|${uid}|RailDesign|unset|unset|END`);
+		expect(output).toContain(`${uid}|${uid}|DesignRail|unset|unset|END`);
 	},
 	30_000,
 );

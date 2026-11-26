@@ -153,7 +153,7 @@ flowchart LR
    (resume state, scratch plans) are declared by naming their shape. **All temp docs live in the
    workspace's gitignored `.raildesign/context/`** (host-seeded per worktree — see the server's
    workspaces module — so they never reach the committed tree). **A workflow never deletes a temp
-   doc:** it stays as one of the user's artifacts (RailDesign's Artifacts tool), and only the user
+   doc:** it stays as one of the user's artifacts (DesignRail's Artifacts tool), and only the user
    removes it. The owning workflow retires it instead — a task-spec gets `status: done`, which takes it
    out of spec search; a reusable working file is overwritten the next time. A temp doc never becomes
    the record.

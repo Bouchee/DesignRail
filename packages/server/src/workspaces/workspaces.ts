@@ -175,7 +175,7 @@ export async function openExistingWorktree(
 	if (wantedPath === projectPath) return ensureDefaultWorkspace(project);
 	const assertNotCreating = () => {
 		if (creationPaths().has(wantedPath))
-			throw new Error("This worktree is still being created by RailDesign");
+			throw new Error("This worktree is still being created by DesignRail");
 	};
 	assertNotCreating();
 
@@ -193,13 +193,13 @@ export async function openExistingWorktree(
 		(candidate) => candidate.id !== projectId && canonicalPath(candidate.path) === wantedPath,
 	);
 	if (projectOwner)
-		throw new Error("This worktree is already open under another RailDesign project");
+		throw new Error("This worktree is already open under another DesignRail project");
 
 	const all = loadWorkspaces();
 	const existing = all.find((workspace) => canonicalPath(workspace.worktreePath) === wantedPath);
 	if (existing) {
 		if (existing.projectId === projectId) return existing;
-		throw new Error("This worktree is already open under another RailDesign project");
+		throw new Error("This worktree is already open under another DesignRail project");
 	}
 
 	const displayName =
@@ -311,7 +311,7 @@ export function assertManagedPathFree(path: string): void {
 	if (managedPathOwned(path))
 		throw new CodedError(
 			"WORKSPACE_PATH_TAKEN",
-			`The workspace folder is already open in RailDesign: ${path}`,
+			`The workspace folder is already open in DesignRail: ${path}`,
 		);
 }
 
@@ -487,7 +487,7 @@ export function renameWorkspace(
 	const peek = loadWorkspaces().find((w) => w.id === id);
 	if (peek?.kind === "default") throw new Error("The Default workspace cannot be renamed");
 	if (peek?.kind === "external")
-		throw new Error("An existing worktree cannot be renamed by RailDesign");
+		throw new Error("An existing worktree cannot be renamed by DesignRail");
 	if (peek) assertNotChatWorkspace(peek, "renamed");
 	const live = syncManagedBranch(id);
 	const ws = loadWorkspaces().find((w) => w.id === id);

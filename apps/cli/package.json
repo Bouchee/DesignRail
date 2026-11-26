@@ -7,7 +7,7 @@
 		"./artifact": "./scripts/artifactName.ts"
 	},
 	"bin": {
-		"raildesign": "./src/index.ts"
+		"DesignRail": "./src/index.ts"
 	},
 	"scripts": {
 		"dev": "bun run --watch src/index.ts",

@@ -2,14 +2,14 @@
 id: goal-and-requirements
 type: goal-and-requirements
 status: active
-title: RailDesign — product goal and scope
+title: DesignRail — product goal and scope
 covers: [product-goal, product-audience, product-principles, product-capabilities, product-non-goals, engine-decision]
 tags: [product, scope]
 ---
 
 ## Goal
 
-RailDesign is an agent workbench built from ThinkRail's editor, Diff, terminal and Git workspace UI.
+DesignRail is an agent workbench built from ThinkRail's editor, Diff, terminal and Git workspace UI.
 Users give an agent a task in a selected worktree, inspect its actual changes and test output, approve
 operations when required, and stop execution when needed.
 
@@ -46,7 +46,7 @@ terminal navigation and the corresponding palette commands. Desktop zoom remains
 
 ## Product identity and data
 
-The product is RailDesign, identifier `io.github.bouchee.raildesign`, CLI `raildesign`.
+The product is DesignRail, identifier `io.github.bouchee.raildesign`, CLI `DesignRail`.
 Fresh application records live under `~/.raildesign`; installers use independent metadata and caches.
 The application never imports pi sessions, credentials or plugins, or official ThinkRail data.
 Fork releases and updates come only from `Bouchee/raildesign`.

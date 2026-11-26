@@ -75,7 +75,7 @@ marked for the mutation's lifetime and reconciled right after it succeeds, so th
 Cut and Rename never read as "deleted not by you", while a failed mutation leaves no mark. The mark is
 the entry's real location — its parent folder resolved, the leaf itself not followed — so a removal made
 through a link to the artifacts folder (`artifacts-alias/report.md`) is still the user's, while removing
-such a link is no removal of artifacts at all. A user deletion made outside RailDesign (a terminal `rm`)
+such a link is no removal of artifacts at all. A user deletion made outside DesignRail (a terminal `rm`)
 cannot be told from an agent's and shows as deleted; the user discards it once.
 
 **Pasting into the folder.** `prepareArtifactsDestination(workspaceId, directory)` reseeds the artifacts
@@ -185,7 +185,7 @@ entries is best-effort: a kept copy another process holds open (Windows refuses 
 file Excel or a scanner has open) is logged and left behind, never allowed to abort a reconcile, a user's
 Delete that already succeeded, or the workspace's teardown.
 
-## RailDesign ownership and durability
+## DesignRail ownership and durability
 
 Only normalized context-relative regular-file paths are indexable; traversal, reserved .git case variants and symlink escapes are rejected even for persisted records. Public operations require a live workspace in an open project/chat. Closing a project keeps its store but denies access; removal invalidates pending work and deletes the store.
 

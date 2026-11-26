@@ -39,10 +39,10 @@ with their owning modules. The process-tree lifecycle test reads a fixture pid f
 a positive integer, and its grandchild writes an empty file first so that path runs every time; it never
 signals a pid ≤ 0, which would reach the test runner's whole process group.
 
-## RailDesign identity
+## DesignRail identity
 
 Artifact names, bundle names, setup executable names, Windows file properties, icons, installer metadata
-and shell profile markers use RailDesign's own identity. Test fixtures must name the files produced by
+and shell profile markers use DesignRail's own identity. Test fixtures must name the files produced by
 `install.sh`, `install.ps1`, the CLI artifact helper and the desktop packaging configuration. Preserve
 checksum, path validation, atomic replacement, existing-binary retention and malformed-profile checks.
 No fixture update may turn an installation failure into an expected success without checking the actual
@@ -50,7 +50,7 @@ installed executable and metadata.
 
 ## Artifact verification
 
-Shared probes boot the real RailDesign artifact with isolated home, data and cache directories and no
+Shared probes boot the real DesignRail artifact with isolated home, data and cache directories and no
 model credentials. They check health and the served UI, current wire RPC, truthful empty provider
 configuration, an isolated worktree and file reads, an actual PTY command whose output file appears in
 that worktree, PTY resize/close, transcript deletion and record retention after host restart. Native

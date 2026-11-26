@@ -2,7 +2,7 @@
 id: submodule-server-templates
 type: submodule-design
 status: active
-title: templates — RailDesign prompt file CRUD
+title: templates — DesignRail prompt file CRUD
 parent: module-server
 depends-on: [module-contracts]
 tags: [templates, public-surface-checked]
@@ -10,7 +10,7 @@ tags: [templates, public-surface-checked]
 
 ## Scope / trigger
 
-Prompt file CRUD uses RailDesign directories and the installed YAML parser. It does not read pi
+Prompt file CRUD uses DesignRail directories and the installed YAML parser. It does not read pi
 configuration, credentials or prompt files. The host resolves the optional project/workspace path.
 
 ## Public surface

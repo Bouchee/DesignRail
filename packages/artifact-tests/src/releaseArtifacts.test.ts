@@ -25,81 +25,81 @@ afterEach(() => {
 const targets = [
 	{
 		target: "bun-darwin-arm64",
-		stable: "macos-arm64-RailDesign.dmg",
-		nightly: "canary-macos-arm64-RailDesign-canary.dmg",
-		published: "raildesign-desktop-darwin-arm64.dmg",
+		stable: "macos-arm64-DesignRail.dmg",
+		nightly: "canary-macos-arm64-DesignRail-canary.dmg",
+		published: "DesignRail-desktop-darwin-arm64.dmg",
 		updates: {
 			stable: {
 				manifest: "stable-macos-arm64-update.json",
-				archive: "stable-macos-arm64-RailDesign.app.tar.zst",
+				archive: "stable-macos-arm64-DesignRail.app.tar.zst",
 			},
 			nightly: {
 				manifest: "canary-macos-arm64-update.json",
-				archive: "canary-macos-arm64-RailDesign-canary.app.tar.zst",
+				archive: "canary-macos-arm64-DesignRail-canary.app.tar.zst",
 			},
 		},
 	},
 	{
 		target: "bun-darwin-x64",
-		stable: "macos-x64-RailDesign.dmg",
-		nightly: "canary-macos-x64-RailDesign-canary.dmg",
-		published: "raildesign-desktop-darwin-x64.dmg",
+		stable: "macos-x64-DesignRail.dmg",
+		nightly: "canary-macos-x64-DesignRail-canary.dmg",
+		published: "DesignRail-desktop-darwin-x64.dmg",
 		updates: {
 			stable: {
 				manifest: "stable-macos-x64-update.json",
-				archive: "stable-macos-x64-RailDesign.app.tar.zst",
+				archive: "stable-macos-x64-DesignRail.app.tar.zst",
 			},
 			nightly: {
 				manifest: "canary-macos-x64-update.json",
-				archive: "canary-macos-x64-RailDesign-canary.app.tar.zst",
+				archive: "canary-macos-x64-DesignRail-canary.app.tar.zst",
 			},
 		},
 	},
 	{
 		target: "bun-windows-x64",
-		stable: "win-x64-RailDesign-Setup.zip",
-		nightly: "canary-win-x64-RailDesign-Setup-canary.zip",
-		published: "raildesign-desktop-windows-x64.zip",
+		stable: "win-x64-DesignRail-Setup.zip",
+		nightly: "canary-win-x64-DesignRail-Setup-canary.zip",
+		published: "DesignRail-desktop-windows-x64.zip",
 		updates: {
 			stable: {
 				manifest: "stable-win-x64-update.json",
-				archive: "stable-win-x64-RailDesign.tar.zst",
+				archive: "stable-win-x64-DesignRail.tar.zst",
 			},
 			nightly: {
 				manifest: "canary-win-x64-update.json",
-				archive: "canary-win-x64-RailDesign-canary.tar.zst",
+				archive: "canary-win-x64-DesignRail-canary.tar.zst",
 			},
 		},
 	},
 	{
 		target: "bun-linux-x64",
-		stable: "linux-x64-RailDesign-Setup.tar.gz",
-		nightly: "canary-linux-x64-RailDesign-canary-Setup.tar.gz",
-		published: "raildesign-desktop-linux-x64.tar.gz",
+		stable: "linux-x64-DesignRail-Setup.tar.gz",
+		nightly: "canary-linux-x64-DesignRail-canary-Setup.tar.gz",
+		published: "DesignRail-desktop-linux-x64.tar.gz",
 		updates: {
 			stable: {
 				manifest: "stable-linux-x64-update.json",
-				archive: "stable-linux-x64-RailDesign.tar.zst",
+				archive: "stable-linux-x64-DesignRail.tar.zst",
 			},
 			nightly: {
 				manifest: "canary-linux-x64-update.json",
-				archive: "canary-linux-x64-RailDesign-canary.tar.zst",
+				archive: "canary-linux-x64-DesignRail-canary.tar.zst",
 			},
 		},
 	},
 	{
 		target: "bun-linux-arm64",
-		stable: "linux-arm64-RailDesign-Setup.tar.gz",
-		nightly: "canary-linux-arm64-RailDesign-canary-Setup.tar.gz",
-		published: "raildesign-desktop-linux-arm64.tar.gz",
+		stable: "linux-arm64-DesignRail-Setup.tar.gz",
+		nightly: "canary-linux-arm64-DesignRail-canary-Setup.tar.gz",
+		published: "DesignRail-desktop-linux-arm64.tar.gz",
 		updates: {
 			stable: {
 				manifest: "stable-linux-arm64-update.json",
-				archive: "stable-linux-arm64-RailDesign.tar.zst",
+				archive: "stable-linux-arm64-DesignRail.tar.zst",
 			},
 			nightly: {
 				manifest: "canary-linux-arm64-update.json",
-				archive: "canary-linux-arm64-RailDesign-canary.tar.zst",
+				archive: "canary-linux-arm64-DesignRail-canary.tar.zst",
 			},
 		},
 	},
@@ -171,7 +171,7 @@ function fixture(): string {
 			writeFileSync(join(artifacts, update.archive), `${channel}:${target.target}:archive`);
 		}
 	}
-	writeFileSync(join(artifacts, "macos-arm64-RailDesign.app.tar.zst"), "wrong stable prefix");
+	writeFileSync(join(artifacts, "macos-arm64-DesignRail.app.tar.zst"), "wrong stable prefix");
 	writeFileSync(join(artifacts, "stable-win-x64-update-old.json"), "stale manifest");
 	writeFileSync(join(artifacts, "old-setup.zip"), "unrelated");
 	return root;
@@ -358,7 +358,7 @@ for (const target of targets) {
 
 test("refuses a missing requested installer instead of collecting a stale channel", () => {
 	const root = fixture();
-	rmSync(join(root, "apps/desktop/artifacts/macos-arm64-RailDesign.dmg"));
+	rmSync(join(root, "apps/desktop/artifacts/macos-arm64-DesignRail.dmg"));
 	expect(collect(root, "bun-darwin-arm64", "stable").exitCode).not.toBe(0);
 });
 

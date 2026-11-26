@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-	<title>RailDesign</title>
+	<title>DesignRail</title>
 	<rect width="256" height="256" rx="56" fill="#09090b"/>
 	<g fill="#8dff4f">
 		<path fill-rule="evenodd" d="M34 194V62h47c30 0 43 16 43 40 0 20-10 34-27 40l31 52h-28l-29-49H59v49H34Zm25-73h20c14 0 20-6 20-18s-6-17-20-17H59v35Z"/>

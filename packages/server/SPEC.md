@@ -22,7 +22,7 @@ compatibility fixtures to the public live E2E runner. SDK construction and reque
 server-side; no browser entry point or debug RPC is added. It is not a production execution service.
 
 The embeddable Bun host serves the application HTTP/WebSocket protocol and owns workspace services
-and RailDesign state. CLI, desktop and development entries launch the same host. The installed OpenAI
+and DesignRail state. CLI, desktop and development entries launch the same host. The installed OpenAI
 Agents SDK owns model calls, the agent loop and FunctionTool dispatch. There is one execution path.
 
 ## Boundary
@@ -89,9 +89,9 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `assist` | ad-hoc one-shot tasks (plan summaries, PR descriptions) on a cheap model, best-effort | [assist/SPEC.md](src/assist/SPEC.md) |
 | `dialog` | the host's native folder picker | [dialog/SPEC.md](src/dialog/SPEC.md) |
 | `editors` | detect installed editors/IDEs, launch one at a worktree, reveal a worktree in the file manager | [editors/SPEC.md](src/editors/SPEC.md) |
-| `history` | prompt recall and conversation search over full RailDesign transcripts | [history/SPEC.md](src/history/SPEC.md) |
+| `history` | prompt recall and conversation search over full DesignRail transcripts | [history/SPEC.md](src/history/SPEC.md) |
 | `search` | the search palette's host providers (file names and specs from one root, plans, chat transcripts — chats and workspaces are the palette's own rows) and the transcript preview, ranked with the shared matcher; Find in Files' bounded text search over the same root | [search/SPEC.md](src/search/SPEC.md) |
-| `templates` | file CRUD over RailDesign prompt dirs (global + project scoped) | [templates/SPEC.md](src/templates/SPEC.md) |
+| `templates` | file CRUD over DesignRail prompt dirs (global + project scoped) | [templates/SPEC.md](src/templates/SPEC.md) |
 
 ## Internal dependency graph
 
@@ -119,7 +119,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 - `search` -> `git`, `log`, with host-injected project/workspace/history/spec/plan/file readers.
   Host injects history scope filters/labels; history never owns project registries.
 - `history` -> `persistence` for the session root; `templates` -> `persistence` for prompt roots and
-  the installed YAML library. Both read only RailDesign data.
+  the installed YAML library. Both read only DesignRail data.
 - `environment` -> `persistence`, `log`; `settings` -> `persistence`.
 - `speech` -> `subprocess`, `persistence`, `log`; `fonts` -> `subprocess`, `persistence`.
 - Filesystem/watch/terminal/locales/themes/resource-history services use persistence for their own
@@ -138,7 +138,7 @@ process-free default terminal and clears a workspace creation marker only after 
 - Await graceful shutdown in production. Stop revokes agent grants and cancels owned processes; turn
   receipts drain before resource disposal and writer-claim release.
 - Commands return direct results; application events and interaction cards use typed push channels.
-- Session storage is fresh RailDesign JSON. No pi import, old-record reader, migration or alternate
+- Session storage is fresh DesignRail JSON. No pi import, old-record reader, migration or alternate
   execution fallback is supplied.
 - Tests use disposable directories and isolated home variables. They never use ambient developer
   credentials or run a provider unless the focused live gate was explicitly selected.

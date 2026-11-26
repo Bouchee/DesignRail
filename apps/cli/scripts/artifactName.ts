@@ -3,6 +3,6 @@ export function targetsWindows(target?: string): boolean {
 }
 
 export function binaryArtifactName(target?: string): string {
-	const base = target ? `raildesign-${target.replace(/^bun-/, "")}` : "raildesign";
+	const base = target ? `DesignRail-${target.replace(/^bun-/, "")}` : "DesignRail";
 	return targetsWindows(target) ? `${base}.exe` : base;
 }

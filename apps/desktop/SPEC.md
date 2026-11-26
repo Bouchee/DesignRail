@@ -9,9 +9,9 @@ tags: [desktop, launcher, packaging]
 references: [submodule-web-navigation, module-artifact-tests, module-ci-release, submodule-web-shell, module-cli]
 ---
 
-## RailDesign identity and execution
+## DesignRail identity and execution
 
-RailDesign uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `raildesign`
+DesignRail uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `DesignRail`
 CLI, and updates from `https://github.com/Bouchee/raildesign/releases/download/desktop-updates`.
 The SDK execution path belongs to the shared host. Launchers contain native startup and packaging only.
 No JetBrains service, PostHog key, attribution or survey integration ships in development builds.
@@ -71,7 +71,7 @@ data directory is rejected; distinct data directories can run independently.
    startup continues. An update-metadata failure here precedes host acquisition and quits directly.
    Unless the neutral or hidden artifact modes are set, startup then opens a small, centered, frameless
    splash.
-   - It reads "Starting RailDesign…", or "Finishing update to X…" when the update journal is pending,
+   - It reads "Starting DesignRail…", or "Finishing update to X…" when the update journal is pending,
      from the saved native labels (`desktop.splash.*`, the desktop fills in `{{version}}`).
    - Its content is a `data:` URL given at creation. The SDK delays `html:` content behind a 100 ms timer,
      which the synchronous server import would block. Startup awaits the splash's own `dom-ready`,
@@ -79,7 +79,7 @@ data directory is rejected; distinct data directories can run independently.
    - It closes when the main window first reaches `dom-ready`, and the main window is activated.
    - Before the startup error dialog it is hidden, not closed: as the last window it would trigger
      `exitOnLastWindowClosed` before the dialog appears.
-   - Closing the splash before the main window exists quits RailDesign. Closing the main window before
+   - Closing the splash before the main window exists quits DesignRail. Closing the main window before
      it is ready also closes the splash, so the last window still goes and quit runs through the
      coordinator. A splash the user closed natively is never closed again.
    - The main window, RPC, navigation rules and first-`dom-ready` readiness are unchanged. Creating the
@@ -379,7 +379,7 @@ grammar validator, and the preload exposes no host/domain capability.
 
 Webview-to-main RPC uses Electrobun's default loopback WebSocket on every platform. Post-mortem: Electrobun
 2.0.1 bound its fixed default port `50000` with address reuse on Windows, so a second running Electrobun app
-(another RailDesign channel included) shared the port and received this webview's socket traffic; every
+(another DesignRail channel included) shared the port and received this webview's socket traffic; every
 request timed out and every message was lost. The launcher stripped the injected socket-port globals from
 the Windows preload to force the native host bridge. Electrobun 2.0.5's core binds the host transport with
 `SO_EXCLUSIVEADDRUSE` on Windows and moves to the next free port, injecting the port it actually bound, so
@@ -393,19 +393,19 @@ injects the literal URL as code on Linux.
 
 Voice input ([[submodule-web-speech]]) records in the page through `getUserMedia`. The page is the
 host's loopback origin, a secure context, and navigation rules keep every other origin out of the native
-webview, so granting the microphone to the webview grants it only to RailDesign's own UI.
+webview, so granting the microphone to the webview grants it only to DesignRail's own UI.
 
 - **macOS.** `build.mac.entitlements` carries `com.apple.security.device.audio-input`, which the
   hardened runtime needs before TCC can prompt. Its string value is the usage text: Electrobun 2.0.5
   writes it as `NSMicrophoneUsageDescription` into `Info.plist` (verified on a `package:dev` build). The
   first dictation shows macOS's own prompt, plus the Electrobun WKWebView wrapper's per-origin
   "Microphone Access" dialog.
-- **TCC attribution.** macOS asks the *responsible* process. A RailDesign launched from another app's
-  terminal (`bun run desktop:dev` inside RailDesign) is attributed to that parent app. If the parent's
+- **TCC attribution.** macOS asks the *responsible* process. A DesignRail launched from another app's
+  terminal (`bun run desktop:dev` inside DesignRail) is attributed to that parent app. If the parent's
   `Info.plist` has no `NSMicrophoneUsageDescription` (any release before voice input), TCC cannot
   prompt, and WebKit denies `getUserMedia` within milliseconds. This was seen with a dev build started
-  from RailDesign canary 0.4.0-nightly.3 (`responsible_path` in the `tccd` log). Test the microphone
-  with an app opened through LaunchServices (Finder or `open …/RailDesign-dev.app`).
+  from DesignRail canary 0.4.0-nightly.3 (`responsible_path` in the `tccd` log). Test the microphone
+  with an app opened through LaunchServices (Finder or `open …/DesignRail-dev.app`).
 - WebKit also hides `navigator.mediaDevices` entirely in an app whose own `Info.plist` lacks the
   usage string (checked with a minimal WKWebView probe), so the page reports an unsupported browser
   there.
@@ -415,7 +415,7 @@ webview, so granting the microphone to the webview grants it only to RailDesign'
 - **Release signing.** The private pipeline re-signs every Mach-O with its own entitlement plist, so
   `build.mac.entitlements` does not reach release builds; that plist and its verification must carry
   `com.apple.security.device.audio-input` too, or TCC denies the microphone without prompting. Check a
-  release with `codesign -d --entitlements - RailDesign.app`.
+  release with `codesign -d --entitlements - DesignRail.app`.
 - **Unverified.** The Linux behavior is checked on release builds, not in CI.
 
 ## Lifecycle
@@ -523,8 +523,8 @@ and shows them as two taskbar buttons (blackboardsh/electrobun#514). The desktop
 itself:
 
 - **Process ID.** The first thing startup does, before any window, is set an explicit per-channel ID
-  derived from the product name: `JetBrains.RailDesign`, `JetBrains.RailDesign.Nightly`,
-  `JetBrains.RailDesign.Dev`. Stable and nightly stay separate apps.
+  derived from the product name: `JetBrains.DesignRail`, `JetBrains.DesignRail.Nightly`,
+  `JetBrains.DesignRail.Dev`. Stable and nightly stay separate apps.
 - **Shortcut IDs.** Once the main window first reaches `dom-ready` and readiness is reported, the desktop
   writes the same ID onto every shortcut whose target is this install's `bin\launcher.exe`:
   - the Start-menu shortcut Electrobun records in `<channel root>\.electrobun-uninstall.json`
@@ -585,7 +585,7 @@ References: [official v2 migration](https://framework.blackboard.sh/electrobun/g
 Desktop installers ship beside the CLI artifacts for macOS ARM64, macOS x64, Windows x64, Linux x64, and
 Linux ARM64. Nightly maps to Electrobun canary and stable maps to stable. Standard formats are DMG on
 macOS, a setup-EXE-plus-payload ZIP on Windows, and a setup tar.gz on Linux. The private release pipeline
-retains the existing `raildesign-desktop-*` download aliases; its collector selects the exact framework
+retains the existing `DesignRail-desktop-*` download aliases; its collector selects the exact framework
 artifact for the channel and native target. The macOS app archive is transferred privately for SRE
 finalization, never published as an updater payload. Runtime updating is integrated below; feed
 publication remains release-owned and gated by the target policy.

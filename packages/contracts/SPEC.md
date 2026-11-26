@@ -9,7 +9,7 @@ references: [central-integration, submodule-server-agent-background-commands]
 tags: [wire]
 ---
 
-## RailDesign sessions
+## DesignRail sessions
 
 `session.setSandbox { sessionId, enabled }` selects the local Sandbox runtime for future runs in
 an idle chat. The host saves the choice and projects it as `SessionState.sandbox` in live state and
@@ -41,7 +41,7 @@ reason `guardrail` comes from a user-input rule or the host output gate; it is n
 guardrail result.
 `ProjectResourceKind` adds `guardrails` for `.raildesign/guardrails.json`.
 
-The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction, call and revision ownership, and remain visible on reply failure. Queue entries have stable IDs, pending/staged admission state and an optional retained error; admitted input appears in the transcript under the same ID. Queue mutation addresses IDs, never mutable positions. Compaction uses an operation ID and keeps the full transcript. Advanced tool execution remains assigned to stage 3. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
+The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction, call and revision ownership, and remain visible on reply failure. Queue entries have stable IDs, pending/staged admission state and an optional retained error; admitted input appears in the transcript under the same ID. Queue mutation addresses IDs, never mutable positions. Compaction uses an operation ID and keeps the full transcript. Advanced tool execution remains assigned to stage 3. DesignRail does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## Responsibility
 

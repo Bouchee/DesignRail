@@ -168,7 +168,7 @@ function openResolvedProject(path: string, displayName?: string, ownBootstrap?: 
 	if (loadWorkspaces().some((ws) => canonicalPath(ws.worktreePath) === wanted))
 		throw new CodedError(
 			"ALREADY_OPEN",
-			`This folder is already open in RailDesign as a workspace: ${root}`,
+			`This folder is already open in DesignRail as a workspace: ${root}`,
 		);
 
 	const taken = new Set(projects.map((p) => p.slug));
@@ -565,7 +565,7 @@ async function bootstrapRepository(path: string): Promise<void> {
 		const identity: string[] = [];
 		const identityProbe = { action: "read the git identity" };
 		if (!git(path, ["config", "user.name"], identityProbe).out)
-			identity.push("-c", "user.name=RailDesign");
+			identity.push("-c", "user.name=DesignRail");
 		if (!git(path, ["config", "user.email"], identityProbe).out)
 			identity.push("-c", "user.email=thinkrail@localhost");
 		const noAutoGc = ["-c", "maintenance.auto=false", "-c", "gc.auto=0"];

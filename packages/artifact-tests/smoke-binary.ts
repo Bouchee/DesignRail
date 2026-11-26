@@ -27,7 +27,7 @@ async function readServingUrl(stdout: ReadableStream<Uint8Array>): Promise<strin
 	let buffered = "";
 	for await (const chunk of stdout) {
 		buffered += decoder.decode(chunk, { stream: true });
-		const match = buffered.match(/raildesign → (http:\/\/\S+)/);
+		const match = buffered.match(/DesignRail → (http:\/\/\S+)/);
 		if (match?.[1]) return match[1];
 	}
 	throw new Error(`stdout closed without a serving URL: ${JSON.stringify(buffered)}`);
@@ -125,7 +125,7 @@ try {
 		cwd: project,
 	});
 	if (!subcommand.success) throw new Error(`uninstall --help exited ${subcommand.exitCode}`);
-	if (!subcommand.stdout.toString().includes("raildesign uninstall")) {
+	if (!subcommand.stdout.toString().includes("DesignRail uninstall")) {
 		throw new Error("uninstall --help printed no usage");
 	}
 	if (existsSync(marker)) throw new Error("compiled binary executed a project bunfig preload");

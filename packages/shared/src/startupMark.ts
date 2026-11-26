@@ -1,24 +1,24 @@
 const STARTUP_MARK_LINES = [
-	"RAILDESIGN·RAILD      RAILDESIGN·RA",
-	"AILDESIGN·RAILDESI    AILDESIGN·RAILD",
-	"ILDE          ESIGN   ILDE        LDES",
-	"LDES           IGN·   LDES         ESIG",
-	"DESI           GN·R   DESI          IGN·",
-	"ESIG           N·RA   ESIG          GN·R",
-	"SIGN          N·RAI   SIGN          N·RA",
-	"IGN·RAILDESIGN·RAI    IGN·          ·RAI",
-	"GN·RAILDESIGN·RA      GN·R          RAIL",
-	"N·RA      GN·RA       N·RA          AILD",
-	"·RAI       ·RAIL      ·RAI          ILDE",
-	"RAIL        AILDE     RAIL          LDES",
-	"AILD         LDESI    AILD          DESI",
-	"ILDE          ESIGN   ILDE          ESIG",
-	"LDES           IGN·R  LDES          SIGN",
-	"DESI            N·RAI DESI          IGN·",
-	"ESIG             RAILDESIG         IGN·",
-	"SIGN              ILDESIGN        IGN·",
-	"IGN·               DESIGN·RAILDESIGN·",
-	"GN·R                SIGN·RAILDESIG",
+	"DESIGNRAIL·DESIG      DESIGNRAIL·DE",
+	"ESIGNRAIL·DESIGNRA    ESIGNRAIL·DESIG",
+	"SIGN          NRAIL   SIGN        IGNR",
+	"IGNR           AIL·   IGNR         NRAI",
+	"GNRA           IL·D   GNRA          AIL·",
+	"NRAI           L·DE   NRAI          IL·D",
+	"RAIL          L·DES   RAIL          L·DE",
+	"AIL·DESIGNRAIL·DES    AIL·          ·DES",
+	"IL·DESIGNRAIL·DE      IL·D          DESI",
+	"L·DE      IL·DE       L·DE          ESIG",
+	"·DES       ·DESI      ·DES          SIGN",
+	"DESI        ESIGN     DESI          IGNR",
+	"ESIG         IGNRA    ESIG          GNRA",
+	"SIGN          NRAIL   SIGN          NRAI",
+	"IGNR           AIL·D  IGNR          RAIL",
+	"GNRA            L·DES GNRA          AIL·",
+	"NRAI             DESIGNRAI         AIL·",
+	"RAIL              SIGNRAIL        AIL·",
+	"AIL·               GNRAIL·DESIGNRAIL·",
+	"IL·D                RAIL·DESIGNRAI",
 ] as const;
 
 const MARK_WIDTH = 42;
@@ -117,7 +117,7 @@ interface IdentityLines {
 
 function identityLines(status: StartupMarkStatus, endpoint: string): IdentityLines {
 	return {
-		product: [{ text: "RAILDESIGN", tone: "brightGreen" }],
+		product: [{ text: "DESIGNRAIL", tone: "brightGreen" }],
 		description: [{ text: "agentic workbench", tone: "muted" }],
 		status: [
 			{ text: "● ", tone: "brightGreen" },

@@ -66,7 +66,7 @@ pi sessions or restores an old session factory. File/worktree fixtures remain di
 
 Pure unit cases can compare skill-read order and reject an invalid questionnaire option without a
 provider. A missing/invalid model reply is not evidence that a workflow passed. A historical pi JSONL
-fixture cannot seed a RailDesign session.
+fixture cannot seed a DesignRail session.
 
 ## Tests required
 
@@ -123,7 +123,7 @@ Once they exist, the exact requirement JSON bytes and matching receipt are attac
 for the portable Skill replay. The delivered scheme file is also retained byte for byte for digest
 checks after workspace teardown.
 
-Run the scheme case using the supported Go target with the RailDesign thinking setting at `off`.
+Run the scheme case using the supported Go target with the DesignRail thinking setting at `off`.
 Each turn checks that the request omits reasoning effort. Workspace workflow requests use the
 ordinary 8,192-token cap and must reach a completed provider response. The ledger records reported
 reasoning usage for diagnosis.

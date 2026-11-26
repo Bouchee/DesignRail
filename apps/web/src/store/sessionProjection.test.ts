@@ -344,14 +344,14 @@ test("new ownership replaces an approval and a cleared request cannot return fro
 });
 
 test("an agent transfer row and attributed messages converge live with restored history", () => {
-	const root: AssistantMessage = { ...assistant("routing"), id: "root-1", agent: "RailDesign" };
+	const root: AssistantMessage = { ...assistant("routing"), id: "root-1", agent: "DesignRail" };
 	const transfer: AgentTransferMessage = {
 		id: "transfer:t1",
 		role: "custom",
 		customType: "agent-transfer",
 		content: "",
 		display: true,
-		details: { transferId: "t1", from: "RailDesign", to: "analyst", reason: "needs analysis" },
+		details: { transferId: "t1", from: "DesignRail", to: "analyst", reason: "needs analysis" },
 		timestamp: 2,
 	};
 	const target: AssistantMessage = { ...assistant("answer"), id: "target-1", agent: "analyst" };
@@ -366,7 +366,7 @@ test("an agent transfer row and attributed messages converge live with restored 
 	expect(runtime.turns).toEqual(messagesToRuntime([root, transfer, target]).turns);
 	const rows = deriveRows(runtime.turns, {}, false);
 	expect(rows.flatMap((row) => (row.kind === "markdown" ? [[row.agent, row.text]] : []))).toEqual([
-		["RailDesign", "routing"],
+		["DesignRail", "routing"],
 		["analyst", "answer"],
 	]);
 	expect(rows.find((row) => row.kind === "agentTransfer")).toEqual({

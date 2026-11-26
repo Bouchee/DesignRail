@@ -57,16 +57,16 @@ test("installer results become a plain cause, never the raw text as the headline
 	const failed = (failedStep: string | null, detail: string | null = null) =>
 		installFailureCopy(t, { outcome: "failed", failedStep, detail });
 	expect(failed("swapping", "AccessDenied").cause).toBe(
-		"Another program is using RailDesign's install folder",
+		"Another program is using DesignRail's install folder",
 	);
 	expect(failed("swapping", "AccessDenied").advice).toContain("JetBrains Central proxy");
 	expect(failed("swapping", "FileBusy").cause).toBe(
-		"The installer couldn't replace RailDesign's files",
+		"The installer couldn't replace DesignRail's files",
 	);
 	expect(failed("validating_payload").cause).toBe("The downloaded update was invalid");
 	expect(failed("validating").cause).toBe("The downloaded update was invalid");
 	expect(failed("extracting").cause).toBe("The update couldn't be unpacked");
-	expect(failed("waiting_for_parent").cause).toBe("RailDesign took too long to close");
+	expect(failed("waiting_for_parent").cause).toBe("DesignRail took too long to close");
 	expect(failed("integrating").cause).toBe("The new version couldn't be registered");
 	expect(failed("launching").cause).toBe("The new version didn't start");
 	expect(failed("something_new", "Weird").cause).toBe("The installer couldn't finish");
@@ -79,7 +79,7 @@ test("recovery follows the live update state and names the version it acts on", 
 	expect(installRecovery(t, state("ready"))).toEqual({
 		kind: "install",
 		label: "Try again",
-		detail: "Installs RailDesign 0.3.0-nightly.4.",
+		detail: "Installs DesignRail 0.3.0-nightly.4.",
 	});
 	expect(installRecovery(t, state("available"))).toMatchObject({
 		kind: "download",
@@ -141,10 +141,10 @@ test("every structured log event renders translated text; only diagnostics stay 
 		{ kind: "installed", version },
 	];
 	expect(events.map((event) => installLogText(t, event))).toEqual([
-		"Installing RailDesign 1.1.0",
+		"Installing DesignRail 1.1.0",
 		"Stopping agents and terminals",
 		"Preparing the installer handoff",
-		"Installer ready; restarting RailDesign",
+		"Installer ready; restarting DesignRail",
 		"Update to 1.1.0 completed successfully",
 	]);
 	expect(installLogSource(t, "installer")).toBe("installer");

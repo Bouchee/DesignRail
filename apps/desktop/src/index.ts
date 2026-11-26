@@ -451,7 +451,7 @@ async function start(): Promise<void> {
 					windowChromePreloadSeed(windowChrome),
 				);
 	mainWindow = new BrowserWindow({
-		title: "RailDesign",
+		title: "DesignRail",
 		url: neutral ? "about:blank" : `${origin}/${initialRoute}`,
 		preload,
 		...(neutral ? {} : { rpc }),

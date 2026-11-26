@@ -52,7 +52,7 @@ function assistantText(message: SessionRecord["messages"][number]): string {
 async function expectHandlerUi(page: Page): Promise<void> {
 	const transfer = page.getByTestId("agent-transfer");
 	await expect(transfer).toHaveCount(1);
-	await expect(transfer).toContainText("RailDesign handed the conversation to analyst");
+	await expect(transfer).toContainText("DesignRail handed the conversation to analyst");
 	await expect(page.getByTestId("active-agent")).toHaveText("Handled by analyst");
 	await expect(page.getByTestId("assistant-agent").last()).toHaveText("analyst");
 }

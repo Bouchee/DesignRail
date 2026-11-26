@@ -78,7 +78,7 @@ async function bootstrap(build: "source" | "binary"): Promise<void> {
 	const openHost = options.host === "0.0.0.0" || options.host === "::" ? "localhost" : options.host;
 	const url = `http://${openHost}:${port}`;
 	printStartupMark({ status: "host ready", endpoint: url });
-	console.log(`raildesign → ${url}`);
+	console.log(`DesignRail → ${url}`);
 	if (options.open) openBrowser(url);
 }
 

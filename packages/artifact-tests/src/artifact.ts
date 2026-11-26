@@ -26,8 +26,8 @@ export function locateDesktopLauncher(
 		"build",
 		`dev-${os}-${arch}`,
 		...(platform === "darwin"
-			? ["RailDesign-dev.app", "Contents", "MacOS", "launcher"]
-			: ["RailDesign-dev", "bin", platform === "win32" ? "launcher.exe" : "launcher"]),
+			? ["DesignRail-dev.app", "Contents", "MacOS", "launcher"]
+			: ["DesignRail-dev", "bin", platform === "win32" ? "launcher.exe" : "launcher"]),
 	);
 	if (!existsSync(launcher)) {
 		throw new Error(
@@ -42,7 +42,7 @@ export function windowsSetupExecutableSuffix(channel: string): string {
 }
 
 export function locateWindowsSetupExecutable(packageDir: string, channel: string): string {
-	const name = `RailDesign${windowsSetupExecutableSuffix(channel)}`;
+	const name = `DesignRail${windowsSetupExecutableSuffix(channel)}`;
 	const installer = join(packageDir, name);
 	if (!existsSync(installer)) {
 		throw new Error(`desktop ZIP does not contain ${name}`);

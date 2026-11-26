@@ -13,4 +13,4 @@ const running = await bootHost({
 	resolveShellEnv: true,
 	...(staticDir ? { staticDir } : {}),
 });
-console.log(`RailDesign host: http://${host}:${running.port}`);
+console.log(`DesignRail host: http://${host}:${running.port}`);

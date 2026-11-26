@@ -181,7 +181,7 @@ test("an unmapped message hit is a no-op — the overlay stays open and the acti
 	await expect(page.getByTestId("history-expand-hint")).toBeVisible();
 	await query.press("Tab");
 	await expect(hit).toBeVisible();
-	await expect(hit).toContainText("not a RailDesign workspace");
+	await expect(hit).toContainText("not a DesignRail workspace");
 	await query.press("Enter");
 
 	await expect(overlay).toBeVisible();

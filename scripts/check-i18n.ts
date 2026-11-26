@@ -77,7 +77,7 @@ const TEXT_PROPERTIES = new Set([
 	"tooltip",
 ]);
 
-const ALLOWED_TEXT = new Set(["RailDesign"]);
+const ALLOWED_TEXT = new Set(["DesignRail"]);
 
 const WORD = /\p{L}{2,}/u;
 

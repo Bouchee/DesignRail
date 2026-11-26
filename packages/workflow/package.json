@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Workflow instructions and Skills for RailDesign.",
+	"description": "Workflow instructions and Skills for DesignRail.",
 	"keywords": [
 		"workflow",
 		"skills"

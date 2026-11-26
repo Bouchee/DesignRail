@@ -1,6 +1,6 @@
-# RailDesign
+# DesignRail
 
-RailDesign is a fork of ThinkRail's agent workbench with an OpenAI Agents SDK execution kernel.
+DesignRail is a fork of ThinkRail's agent workbench with an OpenAI Agents SDK execution kernel.
 It keeps the project/worktree navigation, Monaco editor, file tree, Diff, terminal, themes and localization.
 Markdown previews include a collapsible heading outline that follows the current section. Choose its
 left or right position in Appearance settings.
@@ -37,8 +37,8 @@ completion. Pending input stays visible until admission succeeds.
 
 Ordinary chats in a trusted worktree can interpret a design brief and hold a review before saving a
 requirements baseline. Install the complete `requirements-workflow-host` (3.0.3 or later) and
-`json-exporter` Skill directories in RailDesign's application `skills/` directory (`~/.raildesign/skills/` by default).
-The RailDesign host needs Python 3.11 or later on PATH. Ask the chat to review a brief in the
+`json-exporter` Skill directories in DesignRail's application `skills/` directory (`~/.raildesign/skills/` by default).
+The DesignRail host needs Python 3.11 or later on PATH. Ask the chat to review a brief in the
 worktree, check the presented requirements and reply “I confirm the displayed requirements.” to
 commit and deliver the JSON baseline. Reopen the same chat to continue its review, or open another chat for a separate requirements task.
 
@@ -107,14 +107,14 @@ Already running children finish.
 Desktop releases and private-server deployment have separate acceptance stages. This source checkout
 does not establish a released installer or cross-platform acceptance.
 
-![RailDesign showing the real notes.txt Diff in the selected worktree](.github/readme-assets/workbench-dark.png)
+![DesignRail showing the real notes.txt Diff in the selected worktree](.github/readme-assets/workbench-dark.png)
 
 ## Develop locally
 
 Use the Bun version pinned in `package.json` and Git on the host.
 
 ```bash
-git clone https://github.com/Bouchee/raildesign.git
+git clone --branch DesignRail https://github.com/Bouchee/raildesign.git
 cd raildesign
 bun install
 bun run dev
@@ -132,7 +132,7 @@ OPENAI_MODEL=deepseek-v4.1-flash
 Keep the API key in protected host configuration. Do not commit it or include it in browser assets.
 Listing a model through `/models` does not prove Responses or tool support.
 
-The CLI is `raildesign`; `--no-open` starts the same host without opening a browser.
+The CLI is `DesignRail`; `--no-open` starts the same host without opening a browser.
 CLI and desktop entries share one execution path. The host, its Git commands and agent tools act on the
 same selected worktree; the displayed Diff comes from the actual files.
 
@@ -142,7 +142,7 @@ column numbers start at one.
 
 ## Identity and local data
 
-RailDesign's application identifier is `io.github.bouchee.raildesign`. Its default state directory is
+DesignRail's application identifier is `io.github.bouchee.raildesign`. Its default state directory is
 `~/.raildesign`; CLI installation metadata and cache use `raildesign` directories. It starts with fresh
 records and does not import official ThinkRail or pi sessions, credentials or plugins.
 Sessions use format 2. Earlier-format files remain on disk and are not migrated.

@@ -306,7 +306,7 @@ for (const context of [{}, { workspaceId: "foreign-workspace" }]) {
 		if (!record?.pendingApproval || !record.runCheckpoint) throw new Error("Missing checkpoint");
 		const fixture = await new Runner({ tracingDisabled: true }).run(
 			new Agent({
-				name: "RailDesign",
+				name: "DesignRail",
 				model: new ScriptedModel([
 					modelResponse([
 						functionCall(

@@ -40,7 +40,7 @@ for (const { failure, userData, home, pendingInstall } of cases) {
 				? "behind an update splash"
 				: "behind a startup splash";
 	test(`${outcomes[failure]} even if the error dialog fails; ${location} ${splash} (user data from ${userData})`, () => {
-		const root = mkdtempSync(join(tmpdir(), "raildesign-desktop-startup-"));
+		const root = mkdtempSync(join(tmpdir(), "DesignRail-desktop-startup-"));
 		try {
 			const runtimePath = join(root, "app", "runtime", "server-runtime.ts");
 			const userDataPath = join(root, "user-data");
@@ -127,7 +127,7 @@ mock.module("electrobun/main", () => ({
       calls.push("updates");
       cwd.updates = process.cwd();
       if (failure === "updates") throw new Error("update metadata failed");
-      return { identifier: "io.github.bouchee.raildesign", channel: "canary", version: "0.0.1", hash: "abc", baseUrl: "https://example.invalid/u", name: "RailDesign-canary" };
+      return { identifier: "io.github.bouchee.raildesign", channel: "canary", version: "0.0.1", hash: "abc", baseUrl: "https://example.invalid/u", name: "DesignRail-canary" };
     },
     updateInfo: () => updateInfo,
     onStatusChange: () => {},
@@ -178,7 +178,7 @@ console.log(JSON.stringify({ calls, cwd, splashText }));
 			};
 			if (failure !== "updates") {
 				expect(run.splashText).toContain(
-					pendingInstall ? "Finishing update to 0.0.2…" : "Starting RailDesign…",
+					pendingInstall ? "Finishing update to 0.0.2…" : "Starting DesignRail…",
 				);
 			}
 			expect(run.calls).toEqual([

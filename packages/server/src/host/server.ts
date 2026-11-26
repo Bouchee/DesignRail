@@ -813,7 +813,7 @@ async function createOwnedServer(options: CreateServerOptions): Promise<RunningS
 	interruptWorkspaceCreations();
 	setProjectPathGuard((path) => {
 		if (creationOwnsPath(path))
-			throw new Error("This folder belongs to a workspace RailDesign is still creating");
+			throw new Error("This folder belongs to a workspace DesignRail is still creating");
 	});
 	setWorkspaceCreationHandoff(workspaceCreationHandoff);
 	void replayPendingHandoffs().catch((err) => log.warn("replaying workspace handoffs failed", err));

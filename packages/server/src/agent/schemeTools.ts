@@ -497,7 +497,7 @@ export function createSchemeTools(options: Options) {
 		if (!ref.success) return { value, raw: undefined };
 		const { path, sha256: hash, bytes } = ref.data;
 		if (bytes > 4 * 1024 * 1024)
-			throw new Error("The scheme view exceeds the RailDesign runner output limit.");
+			throw new Error("The scheme view exceeds the DesignRail runner output limit.");
 		if (path !== `.generation/${sid}/${kind}/${hash.slice(0, 32)}.json`)
 			throw new Error("The scheme view is outside the current workflow and stage.");
 		const content: string[] = [];

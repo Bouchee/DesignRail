@@ -11,7 +11,7 @@ tags: [testing, playwright, e2e]
 
 ## Responsibility
 
-The real-browser system gate for RailDesign's host/UI integration: build the shipped web client, boot an
+The real-browser system gate for DesignRail's host/UI integration: build the shipped web client, boot an
 isolated host, seed real git and persistence fixtures, drive Chromium (and WebKit for the questionnaire
 specs) through the wire, and clean up every machine-global resource it used. The default suite excludes provider-backed `@agent` tests; those remain
 explicit, authenticated, on-demand runs.

@@ -163,7 +163,7 @@ test("declared transfers run root -> analyst -> builder -> root with each defini
 	const model = new ScriptedModel([
 		transfer("analyst", "h1"),
 		transfer("builder", "h2"),
-		transfer("RailDesign", "h3"),
+		transfer("DesignRail", "h3"),
 		done("ROOT_AGAIN"),
 	]);
 	const sessionId = await session(model);
@@ -176,14 +176,14 @@ test("declared transfers run root -> analyst -> builder -> root with each defini
 	expect(analyst?.handoffs.map((item) => item.toolName)).toEqual(["transfer_to_builder"]);
 	expect(analyst?.tools.map((item) => item.name).sort()).toEqual(["read", "search"]);
 	expect(analyst?.systemInstructions).not.toContain("Subagent protocol");
-	expect(builder?.handoffs.map((item) => item.toolName)).toEqual(["transfer_to_RailDesign"]);
+	expect(builder?.handoffs.map((item) => item.toolName)).toEqual(["transfer_to_DesignRail"]);
 	expect(builder?.tools.map((item) => item.name)).toEqual(["bash"]);
 	const record = readSessionRecord(sessionId);
 	expect(record?.handoffs?.activeNode).toBe("$root");
 	expect(record?.handoffs?.transfers.map(({ from, to, reason }) => [from, to, reason])).toEqual([
 		["$root", "analyst", "to analyst"],
 		["analyst", "builder", "to builder"],
-		["builder", "$root", "to RailDesign"],
+		["builder", "$root", "to DesignRail"],
 	]);
 	model.assertComplete();
 });
@@ -257,7 +257,7 @@ test("an owner write failure stops target work and keeps the previous owner", as
 	expect(record?.state.completion).toMatchObject({ outcome: "failed" });
 	expect(lastError(sessionId)).toContain("disk full");
 	expect(record?.messages.findLast((item) => item.role === "assistant")).toMatchObject({
-		agent: "RailDesign",
+		agent: "DesignRail",
 	});
 	expect(record?.handoffs).toMatchObject({ activeNode: "$root", transfers: [] });
 });
@@ -474,7 +474,7 @@ test("without_tools hides inherited tool records but keeps the target's own exch
 		bash("printf r > root.txt", "r1"),
 		transfer("builder", "h1"),
 		bash("printf b > builder.txt", "b1"),
-		transfer("RailDesign", "h2"),
+		transfer("DesignRail", "h2"),
 		done("ROOT_SEES_ALL"),
 		transfer("builder", "h3"),
 		done("BUILDER_NEXT"),
@@ -688,7 +688,7 @@ test("transfer rows, authorship and the active agent agree live and after reopen
 		done("ANALYST_ANSWER"),
 	]);
 	const sessionId = await session(model);
-	expect(getSessionState(sessionId).activeAgent).toBe("RailDesign");
+	expect(getSessionState(sessionId).activeAgent).toBe("DesignRail");
 	await promptSession(sessionId, "Analyse");
 	expect(getSessionState(sessionId).activeAgent).toBe("analyst");
 	expect(active).toContain("analyst");
@@ -707,7 +707,7 @@ test("transfer rows, authorship and the active agent agree live and after reopen
 	);
 	expect(transfer).toHaveLength(1);
 	expect(transfer[0]).toMatchObject({
-		details: { from: "RailDesign", to: "analyst", reason: "needs analysis" },
+		details: { from: "DesignRail", to: "analyst", reason: "needs analysis" },
 	});
 	const id = transfer[0]?.id ?? "";
 	expect(live.get(id)).toEqual(transfer[0]);
@@ -721,7 +721,7 @@ test("transfer rows, authorship and the active agent agree live and after reopen
 			: [],
 	);
 	expect(authors).toEqual([
-		["RailDesign", "ROOT_ROUTES"],
+		["DesignRail", "ROOT_ROUTES"],
 		["analyst", "ANALYST_ANSWER"],
 	]);
 	for (const message of reopened.messages)
@@ -794,5 +794,5 @@ test("Stop after onHandoff and before the target commit publishes no switch", as
 		),
 	).toBe(false);
 	expect(active).not.toContain("builder");
-	expect(getSessionState(sessionId).activeAgent).toBe("RailDesign");
+	expect(getSessionState(sessionId).activeAgent).toBe("DesignRail");
 });

@@ -72,7 +72,7 @@ test("Skills renders existing controls as explicit switches without making rows 
 	expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
-test("a chat's Skills dialog names the project's RailDesign resources and grants them with its trust", async ({
+test("a chat's Skills dialog names the project's DesignRail resources and grants them with its trust", async ({
 	page,
 }) => {
 	const trustRequests: Array<Record<string, unknown>> = [];
@@ -98,7 +98,7 @@ test("a chat's Skills dialog names the project's RailDesign resources and grants
 		await page.getByTestId("open-skills").click();
 
 		const banner = page.getByTestId("skills-trust-all");
-		await expect(banner).toContainText("1 skill and its own RailDesign resources");
+		await expect(banner).toContainText("1 skill and its own DesignRail resources");
 		await expect(banner).toContainText("Trust allows reading its prompts.");
 		await banner.getByRole("button", { name: "Trust project" }).click();
 		await expect(banner).toHaveCount(0);

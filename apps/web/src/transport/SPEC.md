@@ -7,9 +7,9 @@ parent: module-web
 depends-on: [module-contracts]
 ---
 
-## RailDesign stage 1
+## DesignRail stage 1
 
-The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Basic confirmations carry session, run, interaction and revision ownership, and remain visible on reply failure. Stage 1 exposes read/search/command/edit, approval and Stop; durable continuous input and compaction are available in stage 2; advanced execution controls remain assigned to stage 3. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
+The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Basic confirmations carry session, run, interaction and revision ownership, and remain visible on reply failure. Stage 1 exposes read/search/command/edit, approval and Stop; durable continuous input and compaction are available in stage 2; advanced execution controls remain assigned to stage 3. DesignRail does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## Responsibility
 

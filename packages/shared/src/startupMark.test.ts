@@ -21,13 +21,13 @@ function stripAnsi(value: string): string {
 	return value.replace(new RegExp(`${escapeCharacter}\\[[0-9;]*m`, "g"), "");
 }
 
-test("wide plain output pins the RailDesign host lockup", () => {
+test("wide plain output pins the DesignRail host lockup", () => {
 	const output = renderStartupMark({ ...HOST_READY, columns: 80 });
 	const lines = contentLines(output);
 
 	expect(lines).toHaveLength(20);
-	expect(lines[0]).toBe("RAILDESIGN·RAILD      RAILDESIGN·RA");
-	expect(lines[6]).toEndWith("RAILDESIGN");
+	expect(lines[0]).toBe("DESIGNRAIL·DESIG      DESIGNRAIL·DE");
+	expect(lines[6]).toEndWith("DESIGNRAIL");
 	expect(lines[7]).toEndWith("agentic workbench");
 	expect(lines[10]).toEndWith("● host ready");
 	expect(lines[11]).toEndWith("  localhost:24242");
@@ -40,10 +40,10 @@ test("medium terminals stack the identity below the complete mark", () => {
 	);
 
 	expect(lines).toHaveLength(26);
-	expect(lines[19]).toBe("GN·R                SIGN·RAILDESIG");
+	expect(lines[19]).toBe("IL·D                RAIL·DESIGNRAI");
 	expect(lines[20]).toBe("");
 	expect(lines.slice(21)).toEqual([
-		"RAILDESIGN",
+		"DESIGNRAIL",
 		"agentic workbench",
 		"",
 		"● starting",
@@ -62,7 +62,7 @@ test("very narrow terminals use the identity without wrapping the artwork", () =
 	);
 
 	expect(lines).toEqual([
-		"RAILDESIGN",
+		"DESIGNRAIL",
 		"agentic workbench",
 		"",
 		"● starting",

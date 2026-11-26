@@ -138,7 +138,7 @@ function runInstaller(
 ): ScriptResult {
 	const fakeBin = shellPath(fixture.fakeBin);
 	const home = shellPath(fixture.home);
-	const assetName = overrides.FAKE_ASSET_NAME ?? "raildesign-linux-x64";
+	const assetName = overrides.FAKE_ASSET_NAME ?? "DesignRail-linux-x64";
 	const child = Bun.spawnSync(
 		[
 			"bash",
@@ -201,8 +201,8 @@ function global:Invoke-WebRequest {
     Add-Content -LiteralPath $env:FAKE_NETWORK_LOG -Value ("artifact:" + $Uri)
     if (-not $env:FAKE_BINARY_HASH) { throw "controlled artifact stop" }
     if ($Uri -like "*/SHA256SUMS") {
-        Set-Content -LiteralPath $OutFile -Encoding ASCII -Value "$env:FAKE_BINARY_HASH  raildesign-windows-x64.exe"
-    } elseif ($Uri -like "*/raildesign-windows-x64.exe") {
+        Set-Content -LiteralPath $OutFile -Encoding ASCII -Value "$env:FAKE_BINARY_HASH  DesignRail-windows-x64.exe"
+    } elseif ($Uri -like "*/DesignRail-windows-x64.exe") {
         [System.IO.File]::WriteAllText($OutFile, $env:FAKE_BINARY_BODY)
     } else {
         throw "unexpected artifact URL"
@@ -298,7 +298,7 @@ describe("install.sh validation", () => {
 			"--no-modify-path",
 		]);
 		expect(installed.exitCode).toBe(0);
-		expect(readFileSync(join(expanded.home, "tools", "bin", "raildesign"), "utf8")).toBe(
+		expect(readFileSync(join(expanded.home, "tools", "bin", "DesignRail"), "utf8")).toBe(
 			binaryBody,
 		);
 	});
@@ -319,21 +319,21 @@ describe.skipIf(process.platform !== "win32" || !powershell)("install.ps1 valida
 		() => {
 			if (!powershell) throw new Error("PowerShell is unavailable");
 			const fixture = makeFixture();
-			const definition = /^function Test-RailDesignOnPath \{[\s\S]*?^\}/m.exec(
+			const definition = /^function Test-DesignRailOnPath \{[\s\S]*?^\}/m.exec(
 				readFileSync(powershellInstaller, "utf8"),
 			)?.[0];
-			if (!definition) throw new Error("install.ps1 defines no Test-RailDesignOnPath");
+			if (!definition) throw new Error("install.ps1 defines no Test-DesignRailOnPath");
 			const script = join(fixture.root, "on-path.ps1");
 			writeFileSync(
 				script,
 				[
 					definition,
 					"$dir = 'C:\\Users\\me\\.raildesign\\bin'",
-					"Write-Output (Test-RailDesignOnPath -Dir $dir -PathEntries @('C:/Users/me/.raildesign/bin'))",
-					"Write-Output (Test-RailDesignOnPath -Dir $dir -PathEntries @('c:/users/ME/.raildesign/bin/'))",
-					"Write-Output (Test-RailDesignOnPath -Dir $dir -PathEntries @('C:\\Users\\me\\.raildesign\\bin\\'))",
-					"Write-Output (Test-RailDesignOnPath -Dir 'C:/Users/me/.raildesign/bin' -PathEntries @('C:\\Users\\me\\.raildesign\\bin'))",
-					"Write-Output (Test-RailDesignOnPath -Dir $dir -PathEntries @('C:/Other/bin'))",
+					"Write-Output (Test-DesignRailOnPath -Dir $dir -PathEntries @('C:/Users/me/.raildesign/bin'))",
+					"Write-Output (Test-DesignRailOnPath -Dir $dir -PathEntries @('c:/users/ME/.raildesign/bin/'))",
+					"Write-Output (Test-DesignRailOnPath -Dir $dir -PathEntries @('C:\\Users\\me\\.raildesign\\bin\\'))",
+					"Write-Output (Test-DesignRailOnPath -Dir 'C:/Users/me/.raildesign/bin' -PathEntries @('C:\\Users\\me\\.raildesign\\bin'))",
+					"Write-Output (Test-DesignRailOnPath -Dir $dir -PathEntries @('C:/Other/bin'))",
 				].join("\n"),
 			);
 			const child = Bun.spawnSync(
@@ -415,12 +415,12 @@ describe.skipIf(process.platform !== "win32" || !powershell)("install.ps1 valida
 				.trim()
 				.split(/\r?\n/);
 			expect(requests).toHaveLength(1);
-			expect(requests[0]).toContain(`/releases/download/${tag}/raildesign-windows-x64.exe`);
+			expect(requests[0]).toContain(`/releases/download/${tag}/DesignRail-windows-x64.exe`);
 		},
 		POWERSHELL_TEST_TIMEOUT_MS,
 	);
 	test(
-		"replaces RailDesign metadata on reinstall and keeps unrelated profile files",
+		"replaces DesignRail metadata on reinstall and keeps unrelated profile files",
 		() => {
 			const fixture = makeFixture();
 			const config = join(fixture.home, ".config", "raildesign");
@@ -440,7 +440,7 @@ describe.skipIf(process.platform !== "win32" || !powershell)("install.ps1 valida
 				);
 				expect(result.stderr).toBe("");
 				expect(result.exitCode).toBe(0);
-				expect(readFileSync(join(fixture.prefix, "bin", "raildesign.exe"), "utf8")).toBe(
+				expect(readFileSync(join(fixture.prefix, "bin", "DesignRail.exe"), "utf8")).toBe(
 					binaryBody,
 				);
 				expect(JSON.parse(readFileSync(meta, "utf8"))).toMatchObject({
@@ -458,28 +458,28 @@ describe.skipIf(process.platform !== "win32" || !powershell)("install.ps1 valida
 
 describe("install.sh controlled installation", () => {
 	test.each([
-		["stable", "1.2.3", "v1.2.3", "Linux", "x86_64", "raildesign-linux-x64"],
-		["nightly", "1.2.3-nightly.7", "v1.2.3-nightly.7", "Linux", "x86_64", "raildesign-linux-x64"],
-		["stable", "1.2.3", "v1.2.3", "Linux", "aarch64", "raildesign-linux-arm64"],
+		["stable", "1.2.3", "v1.2.3", "Linux", "x86_64", "DesignRail-linux-x64"],
+		["nightly", "1.2.3-nightly.7", "v1.2.3-nightly.7", "Linux", "x86_64", "DesignRail-linux-x64"],
+		["stable", "1.2.3", "v1.2.3", "Linux", "aarch64", "DesignRail-linux-arm64"],
 		[
 			"nightly",
 			"1.2.3-nightly.7",
 			"v1.2.3-nightly.7",
 			"Linux",
 			"aarch64",
-			"raildesign-linux-arm64",
+			"DesignRail-linux-arm64",
 		],
-		["stable", "1.2.3", "v1.2.3", "Darwin", "arm64", "raildesign-darwin-arm64"],
+		["stable", "1.2.3", "v1.2.3", "Darwin", "arm64", "DesignRail-darwin-arm64"],
 		[
 			"nightly",
 			"1.2.3-nightly.7",
 			"v1.2.3-nightly.7",
 			"Darwin",
 			"arm64",
-			"raildesign-darwin-arm64",
+			"DesignRail-darwin-arm64",
 		],
-		["stable", "1.2.3", "v1.2.3", "Darwin", "x86_64", "raildesign-darwin-x64"],
-		["nightly", "1.2.3-nightly.7", "v1.2.3-nightly.7", "Darwin", "x86_64", "raildesign-darwin-x64"],
+		["stable", "1.2.3", "v1.2.3", "Darwin", "x86_64", "DesignRail-darwin-x64"],
+		["nightly", "1.2.3-nightly.7", "v1.2.3-nightly.7", "Darwin", "x86_64", "DesignRail-darwin-x64"],
 	])(
 		"selects the exact %s %s target (%s, %s/%s, %s)",
 		(channel, version, tag, unameS, unameM, assetName) => {
@@ -523,11 +523,11 @@ describe("install.sh controlled installation", () => {
 				FAKE_UNAME_S: "Darwin",
 				FAKE_UNAME_M: "x86_64",
 				FAKE_PROC_TRANSLATED: "1",
-				FAKE_ASSET_NAME: "raildesign-darwin-arm64",
+				FAKE_ASSET_NAME: "DesignRail-darwin-arm64",
 			},
 		);
 		expect(result.exitCode).toBe(0);
-		expect(curlRequests(fixture)[0]).toContain("/releases/download/v1.2.3/raildesign-darwin-arm64");
+		expect(curlRequests(fixture)[0]).toContain("/releases/download/v1.2.3/DesignRail-darwin-arm64");
 	});
 
 	test("installs under a Unix prefix containing Unicode and safe punctuation", () => {
@@ -541,7 +541,7 @@ describe("install.sh controlled installation", () => {
 			"--no-modify-path",
 		]);
 		expect(result.exitCode).toBe(0);
-		expect(readFileSync(join(prefix, "bin", "raildesign"), "utf8")).toBe(binaryBody);
+		expect(readFileSync(join(prefix, "bin", "DesignRail"), "utf8")).toBe(binaryBody);
 	});
 
 	test("records Git Bash installs with a native Unicode prefix", () => {
@@ -554,14 +554,14 @@ describe("install.sh controlled installation", () => {
 			["--version", "1.2.3", "--prefix", shellPath(prefix), "--no-modify-path"],
 			{
 				FAKE_UNAME_S: "MINGW64_NT-10.0",
-				FAKE_ASSET_NAME: "raildesign-windows-x64.exe",
+				FAKE_ASSET_NAME: "DesignRail-windows-x64.exe",
 				USERPROFILE: "C:/isolated/profile",
 				FAKE_USERPROFILE_POSIX: shellPath(profile),
 				FAKE_NATIVE_PREFIX: "C:/Users/José+dev@example/raildesign",
 			},
 		);
 		expect(result.exitCode).toBe(0);
-		expect(existsSync(join(prefix, "bin", "raildesign.exe"))).toBe(true);
+		expect(existsSync(join(prefix, "bin", "DesignRail.exe"))).toBe(true);
 		const metadata = JSON.parse(
 			readFileSync(join(profile, ".config", "raildesign", "install.json"), "utf8"),
 		);
@@ -588,14 +588,14 @@ describe("install.sh controlled installation", () => {
 		]);
 		expect(result.exitCode).toBe(0);
 		expect(readFileSync(rcFile, "utf8")).toBe(profileBody);
-		expect(result.stderr).toContain("malformed RailDesign PATH markers");
+		expect(result.stderr).toContain("malformed DesignRail PATH markers");
 		expect(result.stdout).toContain("Add to PATH:");
 	});
 
 	test("final rename failure preserves the old binary and removes the destination temp", () => {
 		const fixture = makeFixture();
 		const binDir = join(fixture.prefix, "bin");
-		const destination = join(binDir, "raildesign");
+		const destination = join(binDir, "DesignRail");
 		mkdirSync(binDir, { recursive: true });
 		writeFileSync(destination, "old binary\n");
 		writeTool(

@@ -99,8 +99,8 @@ for (const [label, executable] of [
 		const [version] = ResEdit.Resource.VersionInfo.fromEntries(entries);
 		expect(version?.getStringValues({ lang: 1033, codepage: 1200 })).toEqual({
 			CompanyName: "Bouchee",
-			FileDescription: "RailDesign Nightly",
-			ProductName: "RailDesign Nightly",
+			FileDescription: "DesignRail Nightly",
+			ProductName: "DesignRail Nightly",
 			LegalCopyright: "Copyright © 2026 Bouchee",
 			FileVersion: "0.3.0.6",
 			ProductVersion: "0.3.0.6",

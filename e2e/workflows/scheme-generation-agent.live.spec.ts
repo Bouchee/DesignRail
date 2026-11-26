@@ -28,9 +28,9 @@ const BRIEF = [
 ].join("\n");
 const REQUIREMENTS_CONFIRM = "我确认当前展示的需求。";
 const START =
-	"请基于当前已确认的需求基线，生成一个正式概念方案：在 RailDesign 的方案工作流内先用整体式固定把手，给出可审阅的最简构型和装载、推行、转向、卸载的功能链。纸箱长宽高、单箱质量范围及路线原样保留在使用工况中，候选参数只列本方案的设计选择。逐项对照基线检查 80 kg 额定载荷和 600 mm 整车宽度上限。尺寸实测、载荷试验和详细计算留到后续，标明当前尚待验证的事项。";
+	"请基于当前已确认的需求基线，生成一个正式概念方案：在 DesignRail 的方案工作流内先用整体式固定把手，给出可审阅的最简构型和装载、推行、转向、卸载的功能链。纸箱长宽高、单箱质量范围及路线原样保留在使用工况中，候选参数只列本方案的设计选择。逐项对照基线检查 80 kg 额定载荷和 600 mm 整车宽度上限。尺寸实测、载荷试验和详细计算留到后续，标明当前尚待验证的事项。";
 const REVISE =
-	"请修订当前方案：在 RailDesign 的方案工作流内把整体式固定把手改为可拆卸结构。继续以原任务书和已确认基线为依据，保留 80 kg 额定载荷、600 mm 整车宽度上限、已知使用条件及其余方案内容。重新核对把手改动影响的概念判断和待验证项，并逐项说明两项整车约束是否受影响。尺寸实测、载荷试验和详细计算留到后续。";
+	"请修订当前方案：在 DesignRail 的方案工作流内把整体式固定把手改为可拆卸结构。继续以原任务书和已确认基线为依据，保留 80 kg 额定载荷、600 mm 整车宽度上限、已知使用条件及其余方案内容。重新核对把手改动影响的概念判断和待验证项，并逐项说明两项整车约束是否受影响。尺寸实测、载荷试验和详细计算留到后续。";
 const REVIEW = "我确认当前展示的方案用于审阅。";
 const EXPORT = "请导出当前已审阅方案集的 JSON。";
 const SKILLS = [
@@ -296,7 +296,7 @@ function checkerRuns(cwd: string, id: string) {
 }
 
 test(
-	"RailDesign reviews and separately exports a revised formal scheme from the same chat's baseline",
+	"DesignRail reviews and separately exports a revised formal scheme from the same chat's baseline",
 	{ tag: "@agent" },
 	async ({ page }, testInfo) => {
 		const dist = process.env.RAILDESIGN_E2E_DESIGN_AGENT_DIST;

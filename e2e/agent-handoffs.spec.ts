@@ -22,7 +22,7 @@ function seedHandoffChat() {
 				display: true,
 				details: {
 					transferId: "transfer-1",
-					from: "RailDesign",
+					from: "DesignRail",
 					to: "analyst",
 					reason: "needs a focused analysis",
 				},
@@ -32,7 +32,7 @@ function seedHandoffChat() {
 		],
 	});
 	const record = JSON.parse(readFileSync(chat.path, "utf8")) as SessionRecord;
-	const authors = ["RailDesign", "analyst"];
+	const authors = ["DesignRail", "analyst"];
 	for (const message of record.messages)
 		if (message.role === "assistant") message.agent = authors.shift() ?? "";
 	record.handoffs = {
@@ -84,10 +84,10 @@ test("a stored agent transfer shows its row, the current handler and authorship 
 		if (pass === "refresh") await page.reload();
 		const transfer = page.getByTestId("agent-transfer");
 		await expect(transfer).toHaveCount(1);
-		await expect(transfer).toContainText("RailDesign handed the conversation to analyst");
+		await expect(transfer).toContainText("DesignRail handed the conversation to analyst");
 		await expect(transfer).toContainText("needs a focused analysis");
 		await expect(page.getByTestId("handoff-card")).toHaveCount(0);
 		await expect(page.getByTestId("active-agent")).toHaveText("Handled by analyst");
-		await expect(page.getByTestId("assistant-agent")).toHaveText(["RailDesign", "analyst"]);
+		await expect(page.getByTestId("assistant-agent")).toHaveText(["DesignRail", "analyst"]);
 	}
 });

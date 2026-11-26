@@ -1372,8 +1372,8 @@ test("SDK stream projects stable IDs, persists history once and settles with its
 	await promptSession(created.sessionId, "continue the same conversation");
 	expect(conversationIds).toEqual([created.sessionId, created.sessionId]);
 	expect(model.calls.map((call) => call.request.modelSettings.providerData)).toEqual([
-		{ extra_headers: { "User-Agent": "RailDesign/0.1" } },
-		{ extra_headers: { "User-Agent": "RailDesign/0.1" } },
+		{ extra_headers: { "User-Agent": "DesignRail/0.1" } },
+		{ extra_headers: { "User-Agent": "DesignRail/0.1" } },
 	]);
 	model.assertComplete();
 });

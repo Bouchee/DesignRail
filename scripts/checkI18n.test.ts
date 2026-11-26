@@ -36,7 +36,7 @@ test("flags prose in text-named properties, toasts, and errorText fallbacks", as
 });
 
 test("ignores symbols, the bare brand, and translated calls", async () => {
-	expect(await texts('const A = () => <span title="⌘K">{t("a.b")} · RailDesign</span>;')).toEqual(
+	expect(await texts('const A = () => <span title="⌘K">{t("a.b")} · DesignRail</span>;')).toEqual(
 		[],
 	);
 });

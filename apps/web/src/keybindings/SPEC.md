@@ -224,8 +224,8 @@ binding does.
   when it is not overridden); malformed chords, plain chords on a non-plain command and duplicates are
   dropped; an override for an unknown id is ignored (the host keeps it — the extension may be off or
   missing). An extension default outside the grammar is dropped and a duplicate command id ignored.
-- **Priority** for a shared chord: a user override beats RailDesign defaults, which beat extension
-  defaults; within a rank, RailDesign commands in table order, then extensions in registry order (the
+- **Priority** for a shared chord: a user override beats DesignRail defaults, which beat extension
+  defaults; within a rank, DesignRail commands in table order, then extensions in registry order (the
   Settings → Extensions order). **The losing chord is inactive for its loser only** — its other chords
   still work — and is reported as a conflict.
   An override onto another command's default leaves that command losing the chord; an editor that wants

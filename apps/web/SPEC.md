@@ -8,9 +8,9 @@ depends-on: [module-contracts, module-locales, module-ui, module-extension-api, 
 tags: [ui]
 ---
 
-## RailDesign SDK execution
+## DesignRail SDK execution
 
-The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction and revision ownership and remain visible on reply failure. The chat composes the existing resource catalogue, inspector, command logs and child transcripts over owned host routes. Skills support manual commands and idle-session reload; trust and disable rules still control their admission. Subagent settings expose their existing global/workspace switches and concurrency limits. MCP settings retain configuration, validation, OAuth and consent. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
+The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Confirmations carry session, run, interaction and revision ownership and remain visible on reply failure. The chat composes the existing resource catalogue, inspector, command logs and child transcripts over owned host routes. Skills support manual commands and idle-session reload; trust and disable rules still control their admission. Subagent settings expose their existing global/workspace switches and concurrency limits. MCP settings retain configuration, validation, OAuth and consent. DesignRail does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 MCP tool cards receive full-output reads and Settings actions from `ChatView`. SDK MCP consent uses
 the retained choice UI with owned session, run, call and interaction identities. Settings no longer

@@ -26,7 +26,7 @@ export async function completeOnce(request: OneShotRequest): Promise<OneShotResu
 	const model = await pickModel();
 	if (!model) throw new Error("no-model");
 	const agent = new Agent({
-		name: "RailDesign assistant",
+		name: "DesignRail assistant",
 		...(request.system ? { instructions: request.system } : {}),
 		model: createConfiguredModel(model, randomUUID()),
 		modelSettings: {

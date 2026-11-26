@@ -13,7 +13,7 @@ test("first-run setup opens the SDK endpoint form without telemetry or upstream 
 		await wire.request("settings.update", { config: { onboardingDismissed: false } });
 		await page.goto("/");
 		await expect(page.getByTestId("onboarding-wizard")).toHaveAttribute("data-step", "intro");
-		await expect(page.getByTestId("onboarding-intro")).toContainText("RailDesign");
+		await expect(page.getByTestId("onboarding-intro")).toContainText("DesignRail");
 		await page.getByTestId("onboarding-start").click();
 		await expect(page.getByTestId("connect-provider-options")).toBeVisible();
 		await expect(page.getByTestId("custom-endpoints-add")).toBeVisible();

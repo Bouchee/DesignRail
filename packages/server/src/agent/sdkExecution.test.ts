@@ -1406,7 +1406,7 @@ test("root and detached context are separate while foreground children share par
 						record.childRun.status === "completed",
 				),
 			);
-			const root = contexts.find((item) => item.name === "RailDesign")?.context;
+			const root = contexts.find((item) => item.name === "DesignRail")?.context;
 			const delegated = contexts.find((item) => item.name === "worker")?.context;
 			if (!root || !delegated) throw new Error("Missing SDK context consumer");
 			expect(root.context).toEqual({ workspaceId: "workspace" });

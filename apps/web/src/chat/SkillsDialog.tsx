@@ -43,7 +43,7 @@ const TIER_META: Record<string, { label: MessageKey | null; hint: MessageKey; ra
 	project: { label: "chat.skills.tier.project", hint: "chat.skills.tier.projectHint", rank: 4 },
 };
 
-const TIER_BRAND: Record<string, string> = { bundled: "RailDesign" };
+const TIER_BRAND: Record<string, string> = { bundled: "DesignRail" };
 
 interface Group {
 	key: string;

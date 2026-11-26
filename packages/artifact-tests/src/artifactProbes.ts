@@ -94,7 +94,7 @@ export async function runArtifactHostProbes(adapter: ArtifactHostAdapter): Promi
 		["add", "seed.txt"],
 		[
 			"-c",
-			"user.name=RailDesign Smoke",
+			"user.name=DesignRail Smoke",
 			"-c",
 			"user.email=smoke@raildesign.invalid",
 			"commit",
@@ -130,7 +130,7 @@ export async function runArtifactHostProbes(adapter: ArtifactHostAdapter): Promi
 		const health = await within(fetch(`${host.origin}/health`), 10000, "GET /health");
 		assert(health.ok && (await health.text()) === "ok", `/health answered ${health.status}`);
 		const index = await within(fetch(host.origin), 10000, "GET /");
-		assert(index.ok && (await index.text()).includes("RailDesign"), "RailDesign UI was not served");
+		assert(index.ok && (await index.text()).includes("DesignRail"), "DesignRail UI was not served");
 		socket = await within(connectRpc(host.origin), 10000, "host WebSocket");
 		const call = (method: string, params: unknown) => {
 			assert(socket, "artifact WebSocket is not connected");

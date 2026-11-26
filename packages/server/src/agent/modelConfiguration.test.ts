@@ -139,7 +139,7 @@ test("obsolete and corrupt configuration is rejected instead of read or imported
 	]) {
 		writeFileSync(join(directory, "models.json"), content);
 		await expect(listAvailableModels()).rejects.toThrow(
-			"RailDesign model configuration is unreadable",
+			"DesignRail model configuration is unreadable",
 		);
 	}
 });
@@ -233,7 +233,7 @@ test("retry-after hints are capped and do not make other statuses retryable", as
 	expect(await policy(context(400))).toBe(false);
 });
 
-test("outbound SDK requests identify RailDesign and retain the application conversation independently of credentials", async () => {
+test("outbound SDK requests identify DesignRail and retain the application conversation independently of credentials", async () => {
 	await saveCustomEndpoint(draft());
 	const model = (await listAvailableModels())[0];
 	if (!model) throw new Error("No model fixture");
@@ -290,7 +290,7 @@ test("outbound SDK requests identify RailDesign and retain the application conve
 		for (const id of oneShotIds) expect(id).toMatch(/^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/);
 		for (const request of requests) {
 			expect(request.url).toBe("https://opencode.ai/inference/go/openai/v1/responses");
-			expect(request.headers.get("User-Agent")).toBe("RailDesign/0.1");
+			expect(request.headers.get("User-Agent")).toBe("DesignRail/0.1");
 			expect(request.headers.get("authorization")).toBe("Bearer key-sentinel");
 			expect(request.headers.get("x-opencode-session")).not.toBe("key-sentinel");
 		}
@@ -301,7 +301,7 @@ test("outbound SDK requests identify RailDesign and retain the application conve
 	}
 });
 
-test("model discovery identifies RailDesign without inventing a model conversation", async () => {
+test("model discovery identifies DesignRail without inventing a model conversation", async () => {
 	const requests: Request[] = [];
 	const mockedFetch = spyOn(globalThis, "fetch").mockImplementation(
 		offlineFetch((request) => {
@@ -316,7 +316,7 @@ test("model discovery identifies RailDesign without inventing a model conversati
 		const request = requests[0];
 		if (!request) throw new Error("No discovery request");
 		expect(request.url).toBe("https://opencode.ai/inference/go/openai/v1/models");
-		expect(request.headers.get("User-Agent")).toBe("RailDesign/0.1");
+		expect(request.headers.get("User-Agent")).toBe("DesignRail/0.1");
 		expect(request.headers.get("x-opencode-session")).toBeNull();
 	} finally {
 		mockedFetch.mockRestore();
@@ -402,7 +402,7 @@ test("public Responses adapter preserves existing output caps and headers throug
 			expect(effects).toBe(1);
 			expect(requests).toHaveLength(2);
 			for (const request of requests) {
-				expect(request.headers.get("User-Agent")).toBe("RailDesign/0.1");
+				expect(request.headers.get("User-Agent")).toBe("DesignRail/0.1");
 				expect(request.headers.get("x-opencode-session")).toBe("cap-conversation");
 				const body = (await request.json()) as Record<string, unknown>;
 				expect(body.max_output_tokens).toBe(expected);

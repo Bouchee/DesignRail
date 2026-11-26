@@ -13,11 +13,11 @@ The Artifacts toolbar switches between a newest-first list and a compact folder 
 Both views use the same host snapshot and filters. The view and per-workspace folder expansion
 are local preferences. Both views preserve file attribution, restore and file actions.
 
-## RailDesign execution controls
+## DesignRail execution controls
 
 Active panels retain Plan rendering and expose independent SDK Plan review through the existing Check it and Check all controls. Continue-to-workspace execution and streaming plan send remain unavailable. A prompt directed to an existing busy chat is restored to its draft instead of being queued. New Workspace preserves Skills catalog management and project-trust actions alongside templates, models and normal creation. MCP configuration, validation, trust and OAuth remain available through Settings. Configured tools execute through the SDK graph with per-call consent; the panel shows no execution-unavailable notice. Subagent settings expose inheritance, limits and real persistence callbacks for SDK child execution.
 
-The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Basic confirmations carry session, run, interaction and revision ownership, and remain visible on reply failure. Stage 3 connects the retained Skills, MCP, child, resource and review controls to the SDK host. RailDesign does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
+The application owns message, tool, usage and event types in `sessionProtocol.ts`. `session.event` carries `{sessionId,runId,seq,event}` with increasing per-session sequence numbers. Initial transcript hydration buffers events and applies only events above `SessionSummary.eventSeq`. Stable IDs join streamed and final messages. SDK details, routing credentials and checkpoints stay on the host. Basic confirmations carry session, run, interaction and revision ownership, and remain visible on reply failure. Stage 3 connects the retained Skills, MCP, child, resource and review controls to the SDK host. DesignRail does not offer upstream analytics consent, surveys, Central or old Pi configuration folders.
 
 ## DeepSeek web access
 
@@ -163,7 +163,7 @@ treatment.
   `workspace.openIn`, while terminal-kind Vim activates the workspace and runs through `addTerminal`'s
   one-shot `initialCommand`. Copy writes `worktreePath`; Reveal calls `workspace.reveal`. These requests,
   `editor.list`, the project workspace-list load, the remove confirm (`RemoveWorkspaceDialog`, which for a
-  workspace RailDesign made also says how many artifacts go with it, from the loaded artifacts snapshot), and the
+  workspace DesignRail made also says how many artifacts go with it, from the loaded artifacts snapshot), and the
   inline-rename controller below (`createRenameController` / `useInlineRename`, shared with project rename) live once in
   `workspaceActions.ts` so the shell's topbar workspace menu ([[submodule-web-shell-location-bar]]) offers
   the same actions — including the capability-aware pending rename — without a second implementation. The
@@ -696,7 +696,7 @@ a project picker, the prompt hero, and the reused
   `settingsNav.ts` owns sections, their order, and availability by Host protocol and injected content.
   Interface includes Artifacts when supported by the Host. Integrations has section id `github`. Search and the command palette share the localized row catalog
   in `settingsCatalog.ts`. Give each indexed row a stable `data-setting-id` and apply the same
-  availability conditions in both the catalog and the page. The catalog includes only active RailDesign
+  availability conditions in both the catalog and the page. The catalog includes only active DesignRail
   controls. Search matches labels, descriptions, keywords and section names. Selecting a result opens
   its section, focuses the row's control when available and briefly highlights the target. A
   search jump can open an existing disclosure marked for its target. It does not change the
@@ -1985,7 +1985,7 @@ menu has closed, because a closing menu returns focus to its row; disabled
   showing panel advances the watermark, rows newer than the watermark it opened with stay highlighted while
   it shows, and `selectArtifactsUnseen` drives the rail dot. While the eye toggle hides ignored outputs,
   their changes neither advance the watermark nor light the dot. The watermarks and the ignored toggle persist
-  per client (`shell/artifactsPreference.ts`). "Update the RailDesign host" shows only once a welcome reports
+  per client (`shell/artifactsPreference.ts`). "Update the DesignRail host" shows only once a welcome reports
   a host older than v125; between sockets the panel keeps its last snapshot.
 - **Chat deep-links remain arrangement-agnostic.** A shell-owned **`LayoutIntent`** names the singleton tool;
   the shell resolves its current side/group, reveals it in place, and selects it locally. `changesRequest`

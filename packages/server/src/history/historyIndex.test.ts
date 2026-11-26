@@ -271,7 +271,7 @@ describe("HistoryIndex.search", () => {
 		expect(result.prompts[0]?.text).toBe(big);
 	});
 
-	test("(j) default layout: a no-arg index discovers the flat RailDesign sessions directory", async () => {
+	test("(j) default layout: a no-arg index discovers the flat DesignRail sessions directory", async () => {
 		const prev = process.env.THINKRAIL_DATA_DIR;
 		process.env.THINKRAIL_DATA_DIR = dir;
 		try {

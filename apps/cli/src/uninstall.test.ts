@@ -66,10 +66,10 @@ describe("resolveUninstallTargets", () => {
 				platform: "linux",
 				installMeta: { prefix: "/opt/tools" },
 			}).binaries,
-		).toEqual([posix.join("/opt/tools", "bin", "raildesign")]);
+		).toEqual([posix.join("/opt/tools", "bin", "DesignRail")]);
 		expect(
 			resolveUninstallTargets({ ...base, platform: "linux", installMeta: {} }).binaries,
-		).toEqual([posix.join("/home/u/.local", "bin", "raildesign")]);
+		).toEqual([posix.join("/home/u/.local", "bin", "DesignRail")]);
 	});
 
 	test("ignores a relative or non-string prefix instead of trusting it", () => {
@@ -87,18 +87,18 @@ describe("resolveUninstallTargets", () => {
 		const targets = resolveUninstallTargets({
 			...base,
 			platform: "linux",
-			execPath: "/opt/elsewhere/bin/raildesign",
+			execPath: "/opt/elsewhere/bin/DesignRail",
 			installMeta: {},
 		});
 		expect(targets.binaries).toEqual([
-			posix.join("/home/u/.local", "bin", "raildesign"),
-			"/opt/elsewhere/bin/raildesign",
+			posix.join("/home/u/.local", "bin", "DesignRail"),
+			"/opt/elsewhere/bin/DesignRail",
 		]);
 		expect(
 			resolveUninstallTargets({
 				...base,
 				platform: "linux",
-				execPath: posix.join("/home/u/.local", "bin", "raildesign"),
+				execPath: posix.join("/home/u/.local", "bin", "DesignRail"),
 				installMeta: {},
 			}).binaries,
 		).toHaveLength(1);
@@ -109,18 +109,18 @@ describe("resolveUninstallTargets", () => {
 			...base,
 			platform: "win32",
 			home: "C:\\Users\\u",
-			execPath: "D:\\tools\\bin\\raildesign.exe",
+			execPath: "D:\\tools\\bin\\DesignRail.exe",
 			installMeta: { prefix: "D:\\tools" },
 		});
-		expect(targets.binaries).toEqual([win32.join("D:/tools", "bin", "raildesign.exe")]);
+		expect(targets.binaries).toEqual([win32.join("D:/tools", "bin", "DesignRail.exe")]);
 		expect(targets.rcFiles).toEqual([]);
 		expect(targets.fishFile).toBe("");
 	});
 
 	test.each([
-		["/c/tools/raildesign", "C:\\tools\\raildesign\\bin\\raildesign.exe"],
-		["/cygdrive/d/tools/raildesign", "D:\\tools\\raildesign\\bin\\raildesign.exe"],
-		["//nas/share/raildesign", "\\\\nas\\share\\raildesign\\bin\\raildesign.exe"],
+		["/c/tools/raildesign", "C:\\tools\\raildesign\\bin\\DesignRail.exe"],
+		["/cygdrive/d/tools/raildesign", "D:\\tools\\raildesign\\bin\\DesignRail.exe"],
+		["//nas/share/raildesign", "\\\\nas\\share\\raildesign\\bin\\DesignRail.exe"],
 	])("normalizes a legacy Windows metadata prefix %s", (prefix, expectedBinary) => {
 		const targets = resolveUninstallTargets({
 			...base,

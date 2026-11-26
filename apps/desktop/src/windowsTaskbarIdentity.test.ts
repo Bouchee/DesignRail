@@ -45,21 +45,21 @@ test("collects Electrobun's Start-menu shortcut and every taskbar pin, but not t
 			join(channelRoot, ".electrobun-uninstall.json"),
 			JSON.stringify({
 				schema_version: 1,
-				desktop_shortcut: "C:\\Users\\me\\Desktop\\RailDesign (Canary).lnk",
-				start_menu_shortcut: "C:\\Users\\me\\Start Menu\\Programs\\RailDesign (Canary).lnk",
+				desktop_shortcut: "C:\\Users\\me\\Desktop\\DesignRail (Canary).lnk",
+				start_menu_shortcut: "C:\\Users\\me\\Start Menu\\Programs\\DesignRail (Canary).lnk",
 			}),
 		);
 		const appData = join(root, "roaming");
 		const { taskbar, implicit } = pinnedFolders(appData);
-		writeFileSync(join(taskbar, "RailDesign (Canary).lnk"), "");
+		writeFileSync(join(taskbar, "DesignRail (Canary).lnk"), "");
 		writeFileSync(join(taskbar, "desktop.ini"), "");
-		writeFileSync(join(implicit, "RailDesign (Canary).lnk"), "");
+		writeFileSync(join(implicit, "DesignRail (Canary).lnk"), "");
 
 		expect(taskbarShortcutCandidates(join(channelRoot, "app"), appData)).toEqual({
 			paths: [
-				"C:\\Users\\me\\Start Menu\\Programs\\RailDesign (Canary).lnk",
-				join(taskbar, "RailDesign (Canary).lnk"),
-				join(implicit, "RailDesign (Canary).lnk"),
+				"C:\\Users\\me\\Start Menu\\Programs\\DesignRail (Canary).lnk",
+				join(taskbar, "DesignRail (Canary).lnk"),
+				join(implicit, "DesignRail (Canary).lnk"),
 			],
 			failures: [],
 		});
@@ -68,7 +68,7 @@ test("collects Electrobun's Start-menu shortcut and every taskbar pin, but not t
 
 test("finds nothing for an unmanaged build or an unknown manifest schema", () => {
 	withTemp((root) => {
-		const appDir = join(root, "build", "RailDesign-dev");
+		const appDir = join(root, "build", "DesignRail-dev");
 		mkdirSync(appDir, { recursive: true });
 		expect(taskbarShortcutCandidates(appDir, undefined)).toEqual({ paths: [], failures: [] });
 		writeFileSync(
@@ -89,11 +89,11 @@ test("a corrupt manifest is reported without hiding the taskbar pins", () => {
 		writeFileSync(join(root, "channel", ".electrobun-uninstall.json"), "");
 		const appData = join(root, "roaming");
 		const { taskbar } = pinnedFolders(appData);
-		writeFileSync(join(taskbar, "RailDesign.lnk"), "");
+		writeFileSync(join(taskbar, "DesignRail.lnk"), "");
 
 		const { paths, failures } = taskbarShortcutCandidates(appDir, appData);
 
-		expect(paths).toEqual([join(taskbar, "RailDesign.lnk")]);
+		expect(paths).toEqual([join(taskbar, "DesignRail.lnk")]);
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toBeInstanceOf(SyntaxError);
 	});
@@ -186,7 +186,7 @@ test.skipIf(process.platform !== "win32")(
 			mkdirSync(join(root, "app", "bin"), { recursive: true });
 			writeFileSync(launcher, "");
 			writeFileSync(other, "");
-			const ours = join(root, "RailDesign.lnk");
+			const ours = join(root, "DesignRail.lnk");
 			const foreign = join(root, "Other.lnk");
 			for (const [path, target] of [
 				[ours, launcher],

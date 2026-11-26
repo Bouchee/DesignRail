@@ -111,7 +111,7 @@ describe("notice copy", () => {
 
 	test("names what is gated", () => {
 		expect(untrustedNoticeText(t, untrusted(1, ["prompts"]))).toBe(
-			"This project ships 1 skill and its own RailDesign resources — off until you trust it.",
+			"This project ships 1 skill and its own DesignRail resources — off until you trust it.",
 		);
 		expect(untrustedNoticeText(t, untrusted(3, []))).toBe(
 			"This project ships 3 skills — off until you trust it.",
@@ -186,7 +186,7 @@ test("a grant asks for application resources only when the notice named them", (
 test("the stop-trusting confirmation names application resources and the actual revocation scope", () => {
 	const granted = { trusted: true, resourceTrust: "granted" } as const;
 	expect(stopTrustingText(t, granted, true)).toBe(
-		"Permission to read its project skills and RailDesign resources is revoked, and its project MCP servers are stopped.",
+		"Permission to read its project skills and DesignRail resources is revoked, and its project MCP servers are stopped.",
 	);
 	expect(stopTrustingText(t, { ...granted, resourceTrust: "untrusted" }, true)).toBe(
 		"Permission to read its project skills is revoked.",

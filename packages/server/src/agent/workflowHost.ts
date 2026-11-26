@@ -25,7 +25,7 @@ export function applicationWorkflowSkill(options: SkillToolOptions, name: string
 		options.assertActive();
 		options.signal.throwIfAborted();
 	}
-	throw new Error(`Install and enable ${name} in the RailDesign application skills directory.`);
+	throw new Error(`Install and enable ${name} in the DesignRail application skills directory.`);
 }
 
 export function createWorkflowHost(grant: ToolGrant, skills: SkillToolOptions) {
@@ -71,7 +71,7 @@ export function createWorkflowHost(grant: ToolGrant, skills: SkillToolOptions) {
 		const python =
 			path && Bun.which(process.platform === "win32" ? "python" : "python3", { PATH: path });
 		if (!python)
-			throw new Error("Install Python 3.11 or later and add it to the RailDesign host PATH");
+			throw new Error("Install Python 3.11 or later and add it to the DesignRail host PATH");
 		const output = await runBounded(
 			[python, "-E", "-s", "-B", "-X", "utf8", script(skill, name), ...args],
 			{

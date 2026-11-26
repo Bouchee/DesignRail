@@ -10,12 +10,12 @@ import {
 import { psQuote, runPowerShellScript } from "./powershell";
 
 const DEFAULT_INSTALL_SCRIPT_URL =
-	"https://raw.githubusercontent.com/Bouchee/raildesign/main/install.sh";
+	"https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.sh";
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/Bouchee/raildesign/releases";
 const RELEASE_CHECK_TIMEOUT_MS = 5_000;
 const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const RELEASE_CHECK_ERROR = "Unable to check for RailDesign updates.";
-const UPDATE_RUN_ERROR = "Unable to update RailDesign.";
+const RELEASE_CHECK_ERROR = "Unable to check for DesignRail updates.";
+const UPDATE_RUN_ERROR = "Unable to update DesignRail.";
 const STABLE_RELEASE_TAG_RE = /^v(\d+\.\d+\.\d+)$/;
 const NIGHTLY_RELEASE_TAG_RE = /^v(\d+\.\d+\.\d+-nightly\.\d+)$/;
 const SEMVER_RE =
@@ -39,7 +39,7 @@ function hasForbiddenUnixInstallPrefixCharacter(value: string): boolean {
 }
 
 export const MANUAL_LAYOUT_UPDATE_ERROR =
-	"This RailDesign executable is outside the supported <prefix>/bin layout and cannot self-update safely. Reinstall it with the published installer, or replace it manually from https://github.com/Bouchee/raildesign/releases";
+	"This DesignRail executable is outside the supported <prefix>/bin layout and cannot self-update safely. Reinstall it with the published installer, or replace it manually from https://github.com/Bouchee/raildesign/releases";
 
 export type ReleaseChannel = "stable" | "nightly";
 
@@ -153,9 +153,9 @@ export function createCliHostUpdate(
 	};
 }
 
-export const UPDATE_USAGE = `Usage: raildesign update [options]
+export const UPDATE_USAGE = `Usage: DesignRail update [options]
 
-Re-download and install the latest RailDesign for the current channel.
+Re-download and install the latest DesignRail for the current channel.
 
 Options:
   --channel stable|nightly   Override the channel (default: the installed channel).
@@ -235,9 +235,9 @@ function validateVersionChannel(version: string, channel: ReleaseChannel): void 
 function inferRunningPrefix(input: UpdateRuntime & { build: string }): string | undefined {
 	const windows = input.platform === "win32";
 	const path = windows ? win32 : posix;
-	const exeName = windows ? "raildesign.exe" : "raildesign";
+	const exeName = windows ? "DesignRail.exe" : "DesignRail";
 	const runningName = path.basename(input.execPath);
-	if ((windows ? runningName.toLowerCase() : runningName) !== exeName) {
+	if (windows ? runningName.toLowerCase() !== exeName.toLowerCase() : runningName !== exeName) {
 		if (input.build === "binary") throw new Error(MANUAL_LAYOUT_UPDATE_ERROR);
 		return undefined;
 	}
@@ -298,7 +298,7 @@ export function resolveUpdatePlan(input: ResolveUpdateInput): UpdatePlan {
 }
 
 const DEFAULT_INSTALL_PS1_URL =
-	"https://raw.githubusercontent.com/Bouchee/raildesign/main/install.ps1";
+	"https://raw.githubusercontent.com/Bouchee/raildesign/DesignRail/install.ps1";
 
 export function resolveWindowsInstallPrefix(metaPrefix: unknown, home: string): string {
 	const rawPrefix =
@@ -370,7 +370,7 @@ export function windowsManualUpdateMessage(
 	const psPrefix = vars.map(([k, v]) => `$env:${k}=${psQuote(v)}; `).join("");
 	const cmdPrefix = vars.map(([k, v]) => `set "${k}=${v}" && `).join("");
 	const what =
-		version === "latest" ? `the latest ${channel} build` : `RailDesign ${version} (${channel})`;
+		version === "latest" ? `the latest ${channel} build` : `DesignRail ${version} (${channel})`;
 	return [
 		`Re-run the installer by hand to get ${what}. Pick the line for your shell:`,
 		`  PowerShell:  ${psPrefix}irm ${DEFAULT_INSTALL_PS1_URL} | iex`,
@@ -449,7 +449,7 @@ export async function runUpdate(
 		return 1;
 	}
 
-	console.log(`Updating RailDesign (current: ${version}, channel: ${plan.channel}) …`);
+	console.log(`Updating DesignRail (current: ${version}, channel: ${plan.channel}) …`);
 
 	if ("psArgs" in plan) return await runWindowsUpdate(plan, env);
 

@@ -9,9 +9,9 @@ tags: [host]
 references: [module-artifact-tests]
 ---
 
-## RailDesign identity and execution
+## DesignRail identity and execution
 
-RailDesign uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `raildesign`
+DesignRail uses `io.github.bouchee.raildesign`, new state under `~/.raildesign`, the `DesignRail`
 CLI, and updates from `https://github.com/Bouchee/raildesign/releases/download/desktop-updates`.
 The SDK execution path belongs to the shared host. Launchers contain native startup and packaging only.
 No JetBrains service, PostHog key, attribution or survey integration ships in development builds.
@@ -19,29 +19,29 @@ The fork does not import the official application's records or configuration.
 
 ## Responsibility
 
-The retained browser launcher and standalone rollback artifact: the `raildesign` bin. It boots the engine
+The retained browser launcher and standalone rollback artifact: the `DesignRail` bin. It boots the engine
 host in-process and opens the browser UI at its URL. It is a thin sibling of `apps/desktop`; all engine
 and process-boot logic lives in `packages/server`.
 
 ## Flow and interface
 
 Parse flags and environment, resolve web assets, then call the shared `bootHost`. Normal launch opens
-that host URL unless `--no-open`. Only interactive output prints the RailDesign startup mark; every
-launch retains `raildesign → <url>`. Shutdown belongs to the host. A second writer to the same data
+that host URL unless `--no-open`. Only interactive output prints the DesignRail startup mark; every
+launch retains `DesignRail → <url>`. Shutdown belongs to the host. A second writer to the same data
 directory is rejected by the host's ownership policy.
 
-The executable is `raildesign`; internal workspace package names stay `@thinkrail/*`.
+The executable is `DesignRail`; internal workspace package names stay `@thinkrail/*`.
 Options are `--port`, `--host`, `--no-open`, `--verbose`, `--version`, `--help` and one optional project
 directory. `THINKRAIL_PORT`, `THINKRAIL_HOST`, `THINKRAIL_STATIC_DIR` and `THINKRAIL_LOG_LEVEL` retain
 the developer configuration namespace. Telemetry flags and callbacks are removed.
 
 `update` and `uninstall` are exit-only subcommands; neither boots the host or re-creates staged assets.
-CLI install records are under `~/.config/raildesign`, caches under the OS cache root's `raildesign`,
+CLI install records are under `~/.config/raildesign`, caches under the OS cache root's `DesignRail`,
 and user application state under `~/.raildesign`. They never touch official ThinkRail installations.
 
 ## Update advisory
 
-A compiled `stable`/`nightly` binary in the supported `<prefix>/bin/raildesign[.exe]` layout supplies `bootHost`
+A compiled `stable`/`nightly` binary in the supported `<prefix>/bin/DesignRail[.exe]` layout supplies `bootHost`
 with one optional periodic update-notice producer; source and `dev` identities and manually placed binaries do
 not expose the capability. After the host is ready it performs a bounded lookup
 immediately and every six hours on the baked channel with the same GitHub rules as the installers: stable reads
@@ -50,16 +50,16 @@ strictly newer version produces `{ currentVersion, availableVersion, channel }` 
 no-update are silent. A different newer release may replace available or failed state, but successful execution
 latches until host restart so the still-running old process can neither rediscover nor install another release.
 
-The shared update surface offers **Run Update** for a compiled host and retains fixed `raildesign update`
+The shared update surface offers **Run Update** for a compiled host and retains fixed `DesignRail update`
 guidance for older clients/hosts or a failed run. The action invokes this same installed binary's parameterless
 update subcommand asynchronously; the browser cannot select a command, path, channel, version, or URL. Bounded
 running/succeeded/failed state converges every client, and success requires the user to restart the unsupervised
 host manually rather than aborting active work. Discovery and execution remain absent from
 `update`/`uninstall`/help/version exits and all source/dev launches.
 
-## Self-update (`raildesign update`)
+## Self-update (`DesignRail update`)
 
-`src/update.ts` ports the old repo's `raildesign upgrade` (renamed): it re-invokes the **published
+`src/update.ts` ports the old repo's `DesignRail upgrade` (renamed): it re-invokes the **published
 installer** for the binary's channel — `install.sh` on macOS/Linux, `install.ps1` on Windows — so the
 installer stays the single source of the download → checksum → replace → PATH logic. For an installed binary,
 the running `<prefix>/bin` layout is authoritative; an explicit channel flag wins, then metadata from that same
@@ -74,25 +74,25 @@ installation, then its baked channel. A source invocation without a running bina
   minefield) hands the installer's own params through argv. All three params are passed **always**,
   including `-Version latest`: install.ps1's params *default from the `THINKRAIL_*` env vars*, which the
   child would inherit, so being explicit is what makes an update deterministic for a user who has one
-  set. Replacing the *running* exe works because install.ps1's `Install-RailDesignBinary` renames a locked
-  `raildesign.exe` aside to `raildesign.exe.<rand>.old` (Windows refuses to *delete* a running image but
+  set. Replacing the *running* exe works because install.ps1's `Install-DesignRailBinary` renames a locked
+  `DesignRail.exe` aside to `DesignRail.exe.<rand>.old` (Windows refuses to *delete* a running image but
   permits *renaming* it) and drops the fresh one in; the next install sweeps the leftover.
 
 Any Windows failure (fetch, no PowerShell host, installer non-zero) falls back to *printing* the manual
 per-shell command (`windowsManualUpdateMessage`) with the releases page under it: cmd's `set "X=v" &&`
 and PowerShell's `$env:X='v';` are not interchangeable. Update planning binds metadata to the running
-`<prefix>/bin/raildesign[.exe]` before trusting its prefix or channel; stale/unrelated metadata cannot update a
+`<prefix>/bin/DesignRail[.exe]` before trusting its prefix or channel; stale/unrelated metadata cannot update a
 different copy. Missing metadata falls back to that running layout, including normalized legacy Git-Bash
 `/c/...` and `/cygdrive/c/...` prefixes. Prefix representability follows [[module-ci-release]] rather than an
 ASCII-only path policy: Unicode and benign punctuation remain valid. A manual binary outside the representable
-layout—including a directly run release asset such as `raildesign-linux-x64`—fails closed with manual guidance
+layout—including a directly run release asset such as `DesignRail-linux-x64`—fails closed with manual guidance
 rather than installing under `.local`; that preflight also withholds the host update capability. Version/channel
 combinations are validated after resolution. The planning functions remain pure and unit-tested; only installer
 fetch and execution touch IO.
 `THINKRAIL_INSTALL_SCRIPT_URL` / `THINKRAIL_INSTALL_PS1_URL` override the installer URLs (testing /
 forks). See `module-ci-release` for the installers themselves.
 
-## Uninstall (`raildesign uninstall`)
+## Uninstall (`DesignRail uninstall`)
 
 `src/uninstall.ts` is the inverse of the installers, and only of them: it removes **the executable, the
 PATH edit the installer made, `install.json`, and the binary's staging cache** — then *asks* about the
@@ -106,8 +106,8 @@ worktrees and any uncommitted work in them. pi's own state (`~/.pi`) is never to
 - **Prompts** (`node:readline/promises`): the data-dir question (default *keep*), then a final confirm.
   `-y`/`--yes` skips both and `--keep-data`/`--remove-data` answers the first one non-interactively; with
   no TTY and no `--yes` the command refuses rather than guessing.
-- **Which executables:** `<prefix>/bin/raildesign[.exe]` from the install metadata (else the installers'
-  `~/.local` default) **plus `process.execPath` when it is itself a `raildesign` binary** — that covers a
+- **Which executables:** `<prefix>/bin/DesignRail[.exe]` from the install metadata (else the installers'
+  `~/.local` default) **plus `process.execPath` when it is itself a `DesignRail` binary** — that covers a
   custom prefix whose `install.json` is gone. Nothing else is ever deleted, whatever the metadata says.
 - **The PATH edit, per platform seam:** on Unix the installer's block is *self-identifying*
   (`# >>> raildesign PATH >>>` … `# <<< raildesign PATH <<<`), so `stripRcPathBlock` removes it from every
@@ -124,12 +124,12 @@ worktrees and any uncommitted work in them. pi's own state (`~/.pi`) is never to
   user's own `C:/…/bin` entry counts as already present: install never appends a duplicate it would then
   record as its own, which the uninstaller would remove together with the user's entry. The edit itself runs
   as an embedded PowerShell script —
-  the exact inverse of install.ps1's `Add-RailDesignToUserPath` (same `HKCU\Environment` handling,
+  the exact inverse of install.ps1's `Add-DesignRailToUserPath` (same `HKCU\Environment` handling,
   preserving the value's `REG_EXPAND_SZ` kind, comparing entries raw *and* `%VAR%`-expanded, then
   broadcasting `WM_SETTINGCHANGE`) — because round-tripping a raw PATH value through a pipe would risk
   mangling non-ASCII entries in the console code page.
 - **Deleting the running program:** Unix unlinks a running binary happily. Windows cannot, so the exe is
-  renamed to the same `raildesign.exe.<rand>.old` name install.ps1's cleanup already recognizes, and a
+  renamed to the same `DesignRail.exe.<rand>.old` name install.ps1's cleanup already recognizes, and a
   detached PowerShell retries the delete for a few seconds after we exit; the report says which happened.
   Stale `.old`/`.new` leftovers in the bin dir are swept too.
 - `src/powershell.ts` is the shared seam for both Windows paths (find a host, run a script text through
@@ -192,7 +192,7 @@ stage 4 smoke gates.
 - The agent runs in this process — a fatal fault takes the app down (the accepted in-process tradeoff).
 - `resolveShellEnv()` runs once, before any `AgentSession`.
 - The startup mark is a presentation of the resolved launch result, never a second readiness signal:
-  `bootHost` must return first, and the parse-stable `raildesign → <url>` line remains unchanged beneath it.
+  `bootHost` must return first, and the parse-stable `DesignRail → <url>` line remains unchanged beneath it.
 
 ## Later
 

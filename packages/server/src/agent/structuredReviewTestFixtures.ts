@@ -345,7 +345,7 @@ export async function runReviewCompatibility(options: {
 					const body = await request.clone().json();
 					assert.equal(request.url, "https://opencode.ai/inference/go/openai/v1/responses");
 					assert.equal(request.method, "POST");
-					assert.equal(request.headers.get("user-agent"), "RailDesign/0.1");
+					assert.equal(request.headers.get("user-agent"), "DesignRail/0.1");
 					assert.equal(request.headers.get("x-opencode-session"), sessionId);
 					assert.equal(body.model, "deepseek-v4.1-flash");
 					assert.deepEqual(body.input, [{ role: "user", content: REVIEW_COMPATIBILITY_INPUT }]);
@@ -679,7 +679,7 @@ export async function installHostReviewAdmission(options: {
 				assert.equal(body.max_output_tokens, 512);
 				assert.deepEqual(body.text, { format: frozen.wire_format });
 				assert.deepEqual(body.include, []);
-				assert.equal(request.headers.get("user-agent"), "RailDesign/0.1");
+				assert.equal(request.headers.get("user-agent"), "DesignRail/0.1");
 				const currentSession = request.headers.get("x-opencode-session");
 				assert(currentSession);
 				if (sessionId) assert.equal(currentSession, sessionId, "Unexpected helper model call");

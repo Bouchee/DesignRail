@@ -228,7 +228,7 @@ if (process.env.RAILDESIGN_DIAGNOSTICS_CASES === "1") {
 			expect.objectContaining({
 				event: "lifecycle",
 				lifecycle: "handoff",
-				from: "RailDesign",
+				from: "DesignRail",
 				to: "analyst",
 			}),
 		);

@@ -3,15 +3,15 @@ name: managing-mcp-servers
 description: Use when the user asks to add, change, remove, enable or disable an MCP server, or when an MCP tool is missing, needs sign-in, fails, or was blocked.
 ---
 
-# Managing MCP servers in RailDesign
+# Managing MCP servers in DesignRail
 
-RailDesign connects MCP tools through the OpenAI Agents SDK. Use **Settings › MCP servers** to
+DesignRail connects MCP tools through the OpenAI Agents SDK. Use **Settings › MCP servers** to
 configure personal servers, approve repository servers and sign in. Repository configuration can
 also be edited within the worktree.
 
 ## Where servers are configured
 
-- **User level** — `mcp.json` in RailDesign's data directory, normally `~/.raildesign/mcp.json`:
+- **User level** — `mcp.json` in DesignRail's data directory, normally `~/.raildesign/mcp.json`:
   available in every project. A custom `THINKRAIL_DATA_DIR` changes this directory.
 - **This repository** — `.raildesign/mcp.json` in the worktree, tracked in git. A server defined here does not
   run until the user approves it in Settings, and any later change to its entry needs approval again.
@@ -63,11 +63,11 @@ Add it to the user-level file (Settings › MCP servers offers the same entry un
 
 The host reloads idle chats on its own and a busy chat picks the change up when it is idle. Tell the user
 when a step is theirs: approving a repository server, or **Sign in** for a server that uses OAuth (both in
-Settings › MCP servers). Do not ask them to restart RailDesign.
+Settings › MCP servers). Do not ask them to restart DesignRail.
 
 ## Using MCP tools
 
 - Tools are named `mcp__<server>__<tool>`. For a `deferred` server, call `tool_search` to load them.
 - Subagents cannot call MCP tools: call them yourself and put what the subagent needs in its task.
-- RailDesign asks the user before a call that may change data. A denied or cancelled call is final for that
+- DesignRail asks the user before a call that may change data. A denied or cancelled call is final for that
   call; do not retry it without asking the user first.

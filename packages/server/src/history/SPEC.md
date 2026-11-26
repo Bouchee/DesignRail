@@ -10,7 +10,7 @@ tags: [history]
 
 ## Responsibility
 
-Incremental prompt and transcript search over RailDesign's own JSON session records. The index is a
+Incremental prompt and transcript search over DesignRail's own JSON session records. The index is a
 search projection; the agent module owns execution and canonical session persistence.
 
 ## Boundary
@@ -29,7 +29,7 @@ transcript message has a stable ID. Extract only user/assistant text, skip contr
 prompts and preserve indices from the renderable transcript, including non-text/tool rows. Host-only
 model history, checkpoints and credentials are never returned by this projection.
 
-The default discovery root is the RailDesign persistence directory. Tests can supply an explicit
+The default discovery root is the DesignRail persistence directory. Tests can supply an explicit
 session directory. Read direct `.json` files only; nested directories and legacy JSONL are not indexed.
 Malformed and other-version records are excluded without rewriting them. No older schema is imported.
 Track mtime and size, revalidate every two seconds, drop removed files,

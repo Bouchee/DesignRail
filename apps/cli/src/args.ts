@@ -22,13 +22,13 @@ export function parseSubcommand(argv: readonly string[]): Subcommand | undefined
 	return SUBCOMMANDS.find((name) => name === argv[0]);
 }
 
-export const USAGE = `Usage: raildesign [options] [project-dir]
-       raildesign update [--channel stable|nightly] [--version X.Y.Z|X.Y.Z-nightly.N|latest]
-       raildesign uninstall [--remove-data|--keep-data] [-y]
+export const USAGE = `Usage: DesignRail [options] [project-dir]
+       DesignRail update [--channel stable|nightly] [--version X.Y.Z|X.Y.Z-nightly.N|latest]
+       DesignRail uninstall [--remove-data|--keep-data] [-y]
 
-Boots the RailDesign engine host in-process and opens the browser to the app.
+Boots the DesignRail engine host in-process and opens the browser to the app.
 The \`update\` subcommand re-downloads + installs the latest build for your channel;
-\`uninstall\` removes RailDesign from this machine (your ~/.raildesign app state is kept
+\`uninstall\` removes DesignRail from this machine (your ~/.raildesign app state is kept
 unless you ask for it to go). Both take \`--help\`.
 
 Options:

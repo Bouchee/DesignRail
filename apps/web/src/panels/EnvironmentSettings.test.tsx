@@ -71,7 +71,7 @@ test("issues render under their field and row", () => {
 	const markup = render(STATUS, draft, {
 		vars: { [draft.vars[1]?.id ?? ""]: "reserved" },
 	});
-	expect(markup).toContain("RailDesign manages this variable, so it can&#x27;t be set here.");
+	expect(markup).toContain("DesignRail manages this variable, so it can&#x27;t be set here.");
 });
 
 test("the whole form is locked while a save is in flight, so no edit can be overwritten by its response", () => {

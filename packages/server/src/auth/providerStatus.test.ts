@@ -89,5 +89,5 @@ test("host environment configuration uses the same status path", async () => {
 
 test("malformed own configuration fails instead of reporting an empty provider list", async () => {
 	writeFileSync(join(directory, "models.json"), "broken");
-	await expect(getProviderStatus()).rejects.toThrow("RailDesign model configuration is unreadable");
+	await expect(getProviderStatus()).rejects.toThrow("DesignRail model configuration is unreadable");
 });

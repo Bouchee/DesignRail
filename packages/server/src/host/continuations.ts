@@ -102,7 +102,7 @@ function projectWorkspace(workspaceId: string | undefined, projectId: string): W
 
 function requestText(project: Project): string {
 	return [
-		`RailDesign: the user asked to continue this conversation in a new workspace of the project "${project.name}".`,
+		`DesignRail: the user asked to continue this conversation in a new workspace of the project "${project.name}".`,
 		"Write a short handoff summary for the agent that will pick it up there — what was asked, what was decided, what is still open, anything it must know — then call `continue_in_workspace` with that summary. Do not do anything else in this turn.",
 	].join("\n\n");
 }

@@ -266,7 +266,7 @@ async function initializeLogging(
 		log.warn("THINKRAIL_LOG_LEVEL is not a level (debug|info|warn|error); using info");
 	}
 	log.info(
-		`logging initialized (thinkrail ${appVersion ?? "source"}, pid ${process.pid}, level ${currentLevel})`,
+		`logging initialized (DesignRail ${appVersion ?? "source"}, pid ${process.pid}, level ${currentLevel})`,
 	);
 }
 

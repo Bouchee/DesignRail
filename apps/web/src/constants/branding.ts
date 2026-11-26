@@ -1,4 +1,4 @@
-export const PRODUCT_NAME = "RailDesign";
+export const PRODUCT_NAME = "DesignRail";
 export const APP_SLUG = "raildesign";
 export const REPO_URL = "https://github.com/Bouchee/raildesign";
 export const STORAGE_PREFIX = `${APP_SLUG}-`;

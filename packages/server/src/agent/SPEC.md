@@ -10,7 +10,7 @@ tags: [agents-sdk]
 
 ## Responsibility
 
-Own RailDesign sessions, application transcript projection and one active OpenAI Agents SDK Runner per session. The SDK owns the model loop and tool dispatch. The host owns identity, workspace grants, durable records, interaction ownership and completion. There is one execution path for every launcher.
+Own DesignRail sessions, application transcript projection and one active OpenAI Agents SDK Runner per session. The SDK owns the model loop and tool dispatch. The host owns identity, workspace grants, durable records, interaction ownership and completion. There is one execution path for every launcher.
 
 Root runs use the SDK's public `maxTurns: 50` bound so complete ordinary workflows can exceed the
 initial twenty-round implementation limit. Child runs retain their definition's explicit bound or
@@ -208,7 +208,7 @@ follow-up before writes, retain a generic-child queue positive control and file 
 Wrong: treat every `message_output_item` as terminal, or admit input that fails only during queue drain.
 Correct: bind final correction to an action-free response and reject unsupported input at admission.
 
-Only the configured, verified stage-1 Responses target is offered. API keys are host-side and saved with mode 0600 in the RailDesign data directory. Ordinary FunctionTools are used for files and commands; native provider shell/patch/compact endpoints are not required.
+Only the configured, verified stage-1 Responses target is offered. API keys are host-side and saved with mode 0600 in the DesignRail data directory. Ordinary FunctionTools are used for files and commands; native provider shell/patch/compact endpoints are not required.
 
 `localTracing.ts` owns SDK diagnostics through the existing `sdk-trace` host logger; tracing starts
 disabled. Its one processor replaces the SDK exporter and never exports over the network. Enabled
@@ -243,7 +243,7 @@ SDK guardrails, while a tripwire remains identifiable after `asTool` converts th
 its default tool result. Responses spans expose no model/usage fields with sensitive data off;
 their IDs/duration remain available, and SDK task/turn spans carry numeric usage when supplied.
 
-Go requests identify the client as `RailDesign/0.1`. `createConfiguredModel(model, sessionId)` requires the application conversation ID and sends it as `x-opencode-session` through the public OpenAI client's `defaultHeaders`. Every run and approval continuation in that conversation uses the stored session ID, independent of run IDs and credentials. One-shot assistance allocates one UUID for its logical invocation. The fixed `responsesClientSettings` uses public `ModelSettings.providerData.extra_headers` for the user agent because Agents SDK 0.21.0 replaces the client default with its own per-request header. Model discovery sends the same client identity without inventing a conversation. This follows the [Go client requirements](https://opencode.ai/docs/console/go/#where-can-i-use-it), checked 2026-11-11 with Agents SDK 0.21.0 and OpenAI 7.55.0; generic SDK identification or a missing session header can reject a request before inference.
+Go requests identify the client as `DesignRail/0.1`. `createConfiguredModel(model, sessionId)` requires the application conversation ID and sends it as `x-opencode-session` through the public OpenAI client's `defaultHeaders`. Every run and approval continuation in that conversation uses the stored session ID, independent of run IDs and credentials. One-shot assistance allocates one UUID for its logical invocation. The fixed `responsesClientSettings` uses public `ModelSettings.providerData.extra_headers` for the user agent because Agents SDK 0.21.0 replaces the client default with its own per-request header. Model discovery sends the same client identity without inventing a conversation. This follows the [Go client requirements](https://opencode.ai/docs/console/go/#where-can-i-use-it), checked 2026-11-11 with Agents SDK 0.21.0 and OpenAI 7.55.0; generic SDK identification or a missing session header can reject a request before inference.
 
 ## Scenario: the first SDK workflow
 
@@ -405,7 +405,7 @@ Its retained tests validate those rules; the current verified text-only model do
 ## Requirements understanding tools
 
 An ordinary chat in a resource-trusted worktree can call the requirements tools when
-`requirements-workflow-host` (3.0.3 or later) is admitted from the user's RailDesign application Skill directory.
+`requirements-workflow-host` (3.0.3 or later) is admitted from the user's DesignRail application Skill directory.
 The tool launches the installed Python workflow and uses the admitted companion `json-exporter`.
 Project instructions and manual Skill aliases do not authorize execution of Python code.
 Sandbox, specialist and child agents do not receive these host tools.
@@ -415,12 +415,12 @@ tools pass caller-local paths and no model-supplied session IDs to the workflow.
 source records, the current presentation, and the final document/receipt and delivery. The host
 owns the source of current user text. A decision applies to the last assistant message with visible
 text in the immediately preceding turn. Trailing thinking or tool rows do not supersede a display.
-When apply returns `required_user`, the SDK ends the turn with the frozen review from RailDesign
+When apply returns `required_user`, the SDK ends the turn with the frozen review from DesignRail
 instead of making a further model request. The host publishes the review through the normal
 guarded assistant transcript and records its message ID only on successful settlement. A rejected
 draft returns its error to the model for repair. The draft's question targets must be exact eligible
 requirement IDs or zero-based operations that produce a requirement. For an explicit re-display
-after resume or a partial decision, the assistant refers to the frozen ID and RailDesign appends
+after resume or a partial decision, the assistant refers to the frozen ID and DesignRail appends
 the same review to its reply. Cancellation, failed output, ambiguous replies, stale references,
 and other chats cannot create a decision. Resume reads runner state. The SDK worktree grant
 bounds the subprocess and excludes provider secrets. Apply, decide and export each supply the
@@ -434,17 +434,17 @@ requirements tools. The current requirements binding supplies the exact committe
 receipt. Only actual user messages authorize start, revision, review or delivery. New baseline
 versions require explicit rebinding and same-identity validation by the scheme runner. The native
 tools preserve the full runner view and verify any paged reference before use.
-For first drafts, RailDesign asks the model to call `scheme_stage` immediately with only the
+For first drafts, DesignRail asks the model to call `scheme_stage` immediately with only the
 functions supported by the confirmed baseline. Each receipt suggests one missing shared field,
 then one missing candidate field, and supplies guidance for that field. Explicitly requesting
 continuation can include a colon and drafting instructions. Review and delivery require
 their own exact authorization.
 The author can discard an unpublished candidate saved under a mistaken key. Each stage returns
-the current content digest and missing fields. RailDesign retains this progress with the bound
+the current content digest and missing fields. DesignRail retains this progress with the bound
 session. `scheme_apply` takes the draft binding and exact staged digest to validate and publish the
 assembled design. After a validation error, the model can replace the affected fields and submit
 the new digest. With a current design, the runner supplies a revision template. The model sends only replacements against its bound revision, using stable
-candidate and item IDs. RailDesign forwards the submitted bytes. The shared runner applies the
+candidate and item IDs. DesignRail forwards the submitted bytes. The shared runner applies the
 changes to the frozen design, records their impact and validates the complete result before publishing.
 The full draft view is accompanied by a read-only projection of confirmed hard constraints, with
 the exact statement for direct constraints, the distinct baseline target criterion (including null),
@@ -458,7 +458,7 @@ to that candidate. A rejected parameter fact returns targeted repair guidance fo
 while preserving the runner's error and the draft's operating context and checks. The host's
 frozen review supplies the user-facing presentation.
 
-RailDesign persists the scheme session, run and revision with the current state fingerprint,
+DesignRail persists the scheme session, run and revision with the current state fingerprint,
 upstream identity and active draft, pending or committed boundary. A finished apply publishes
 the frozen presentation through the guarded assistant transcript. Review binds a real user
 decision to the preceding visible message, presentation digest and candidate version. Only
@@ -609,7 +609,7 @@ default graph. Example:
 ```
 
 Each node names an existing agent definition and declares its outgoing edges and history policy.
-`$root` is the reserved chat agent (`RailDesign`); it is not a definition. The resolver rejects unknown
+`$root` is the reserved chat agent (`DesignRail`); it is not a definition. The resolver rejects unknown
 keys/versions/policies, duplicate or reserved nodes, the chat agent's name, self or repeated edges,
 undeclared targets, missing definitions and nodes unreachable from root. Cycles are allowed and share
 the root run's `maxTurns`. Composition rejects generated transfer tool names that collide with
@@ -657,7 +657,7 @@ remains the owner; Stop does not change it. The next prompt and drained queue in
 The same write appends the transcript row `custom/agent-transfer` (`AgentTransferDetails`: transfer ID,
 from/to agent names, reason) and advances `eventSeq`; its `message_end` and the new state are published only
 after that write. Record validation rejects a transfer row without its receipt. `visibleState` derives
-`SessionState.activeAgent` from `activeNode` (root is `RailDesign`), so live state, summaries and reopen
+`SessionState.activeAgent` from `activeNode` (root is `DesignRail`), so live state, summaries and reopen
 agree. Assistant text, reasoning and tool-call messages carry `agent` from the SDK item or the
 `agent_updated_stream_event` author; ordinary chats carry neither field. Handoff call/output items are
 shown only through the transfer row. A target's approval title starts with its node name.

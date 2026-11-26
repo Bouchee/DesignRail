@@ -30,7 +30,7 @@ export interface NotificationSpec {
 }
 
 const BODY_MAX = 100;
-const APP_NAME = "RailDesign";
+const APP_NAME = "DesignRail";
 const AGGREGATE_TAG = "raildesign-attention";
 
 export function reasonLabel(reason: AttentionReason): string {
@@ -63,7 +63,7 @@ export function formatNotification(events: readonly AttentionEvent[]): Notificat
 	if (!event) return null;
 	if (events.length === 1) {
 		const name = event.worktreeName.trim();
-		// Title is always the bold RailDesign mark; the worktree is the subtitle, the reason the body.
+		// Title is always the bold DesignRail mark; the worktree is the subtitle, the reason the body.
 		return {
 			title: APP_NAME,
 			...(name ? { subtitle: name } : {}),

@@ -37,7 +37,7 @@ export class LoggedStdioMcpServer implements MCPServerWithResources {
 		this.signal = options.signal;
 		this.transport = new OwnedStdioTransport(options, (chunk) => this.readStderr(chunk));
 		this.client = new Client(
-			{ name: "RailDesign", version: "1.0.0" },
+			{ name: "DesignRail", version: "1.0.0" },
 			{ listMaxPages: 64, responseCacheStore: this.cache },
 		);
 	}
